@@ -1,0 +1,31 @@
+{
+  "id": "/",
+  "name": "GlucoMeal AI — Estimation des glucides",
+  "short_name": "GlucoMeal",
+  "description": "Estimation des glucides pour diabétiques de type 1 avec base d'aliments tunisiens et calcul de bolus d'insuline.",
+  "theme_color": "#047857",
+  "background_color": "#064e3b",
+  "display": "standalone",
+  "start_url": "/",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

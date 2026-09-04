@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#047857" />
+      <stop offset="100%" stop-color="#064e3b" />
+    </linearGradient>
+    <linearGradient id="dropGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.25" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded rect -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGrad)" />
+
+  <!-- Glucose blood drop with fork and pulse -->
+  <g filter="url(#shadow)">
+    <!-- Drop outline / fill -->
+    <path d="M256 96 C256 96 160 220 160 310 C160 365 203 410 256 410 C309 410 352 365 352 310 C352 220 256 96 256 96 Z" fill="url(#dropGrad)" />
+
+    <!-- Fork symbol in center of drop (stylized white) -->
+    <path d="M246 230 L246 295 C246 300 250 304 256 304 C262 304 266 300 266 295 L266 230" stroke="#ffffff" stroke-width="8" stroke-linecap="round" fill="none" />
+    <path d="M232 230 L232 275 C232 285 240 293 250 293" stroke="#ffffff" stroke-width="8" stroke-linecap="round" fill="none" />
+    <path d="M280 230 L280 275 C280 285 272 293 262 293" stroke="#ffffff" stroke-width="8" stroke-linecap="round" fill="none" />
+    <path d="M256 304 L256 360" stroke="#ffffff" stroke-width="10" stroke-linecap="round" />
+
+    <!-- Pulse wave accent -->
+    <path d="M190 320 L215 320 L225 300 L240 345 L255 290 L270 330 L280 320 L322 320" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.9" />
+  </g>
+</svg>

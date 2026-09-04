@@ -1,0 +1,11 @@
+{
+  "name": "GlucoMeal AI",
+  "description": "Estimation des glucides pour diabétiques de type 1 par photo, voix, texte et code-barres avec moteur déterministe et base tunisienne.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
