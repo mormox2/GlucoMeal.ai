@@ -1,0 +1,67 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Fonctions globales de sécurité ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    // --- Validation du profil utilisateur ---
+    function isValidUserProfile(data, userId) {
+      return data.userId == userId
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && (data.glucoseUnit == 'g/L' || data.glucoseUnit == 'mg/dL')
+        && data.targetGlucose is number && data.targetGlucose > 0
+        && data.isf is number && data.isf > 0;
+    }
+
+    // --- Validation d'un enregistrement repas ---
+    function isValidMeal(data, userId) {
+      return data.userId == userId
+        && data.meal_name is string && data.meal_name.size() > 0 && data.meal_name.size() <= 250
+        && data.total_carbs is number && data.total_carbs >= 0 && data.total_carbs <= 1000
+        && data.created_at is string;
+    }
+
+    // Profil utilisateur patient
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow list: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming(), userId);
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming(), userId);
+      allow delete: if isOwner(userId) && isValidId(userId);
+
+      // Repas et calculs de bolus
+      match /meals/{mealId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && isValidId(mealId) && isValidMeal(incoming(), userId);
+        allow update: if isOwner(userId) && isValidId(mealId) && isValidMeal(incoming(), userId);
+        allow delete: if isOwner(userId) && isValidId(mealId);
+      }
+
+      // Configuration et snapshots CGM
+      match /cgm/{cgmDocId} {
+        allow get, list: if isOwner(userId);
+        allow create, update, delete: if isOwner(userId) && isValidId(cgmDocId);
+      }
+    }
+
+    // Interdiction stricte de toute autre collection non déclarée
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

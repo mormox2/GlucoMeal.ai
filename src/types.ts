@@ -27,6 +27,7 @@ export interface FoodItem {
   serving_unit_description: string;
   glycemic_index?: number; // Index Glycémique (0 - 100)
   glycemic_load?: number; // Charge Glycémique par portion standard
+  aliases?: string[];
 }
 
 export interface MealComponentItem {
@@ -150,6 +151,20 @@ export interface ActiveReminderH2 {
   isDismissed?: boolean;
 }
 
+export type AccountType = 'parent' | 'patient' | 'doctor';
+
+export interface ChildProfileInfo {
+  childName: string;
+  birthYear?: number;
+  age?: number;
+  schoolName?: string;
+  schoolGrade?: string;
+  insulinDeliveryType: 'pen_half_unit' | 'standard_pen' | 'pump';
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  cgmSharingActive?: boolean;
+}
+
 export interface UserProfileDT1 {
   name: string;
   glucoseUnit: 'g/L' | 'mg/dL';
@@ -165,6 +180,9 @@ export interface UserProfileDT1 {
     shor?: number; // Shor (Dernier repas aube) : ex: 12 g / 1 UI
   };
   roundingStep: 0.5 | 1 | 0.1;
+  accountType?: AccountType;
+  childProfile?: ChildProfileInfo;
+  parentEmail?: string;
   cgmConfig?: CGMConfig;
   customPortions?: PatientCustomPortion[];
   ramadanMode?: boolean;

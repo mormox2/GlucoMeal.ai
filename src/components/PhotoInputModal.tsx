@@ -134,7 +134,7 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="bg-white rounded-3xl max-w-xl w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
+      <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
           <div className="flex items-center gap-2.5">
@@ -209,7 +209,7 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
               <p className="text-xs text-slate-600 mb-3">
                 Sélectionnez un repas tunisien typique pour tester immédiatement l’analyse d’image et le calcul déterministe :
               </p>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
                 {SAMPLE_MEAL_PRESETS.map((preset) => {
                   const isSelected = selectedPreset?.id === preset.id;
                   return (

@@ -712,24 +712,40 @@ export const TUNISIAN_FOOD_DATABASE: FoodItem[] = [
   },
   {
     id: 'div-07',
-    name_fr: 'Boga Cidre (soda tunisien au caroube/cola)',
-    name_ar: 'بوغة سيدر تونسية',
-    name_tn: 'Boga Cidre',
+    name_fr: 'Boisson gazeuse sucrée / Soda (Gazouza, Boga, Coca, Fanta)',
+    name_ar: 'ڤازوزة / قازوزة / غازوزة / مشروب غازي سكري',
+    name_tn: 'Gazouza / Gazouz / Boga / Coca',
+    aliases: [
+      'gazouza', 'gazouz', 'gazouza sghira', 'gazouzet', 'gazouz sghir',
+      'ڤازوزة', 'قازوزة', 'غازوزة', 'ڤازوز', 'قازوز', 'غازوز',
+      'ڤازوزة صغيرة', 'قازوزة صغيرة', 'غازوزة صغيرة', 'ڤازوزة ص', 'قازوزة ص',
+      'دبوزة قازوز', 'دبوزة ڤازوز', 'دبوزة غازوز', 'دبوزة صغيرة',
+      'soda', 'coca', 'coca cola', 'coca-cola', 'boga', 'boga cidre', 'boga lim', 'fanta', 'apla', 'viva',
+      'canette', 'canette soda', 'boisson gazeuse'
+    ],
     category: 'boissons',
     carbs_per_100g: 10.5,
     protein_per_100g: 0,
     fat_per_100g: 0,
     fiber_per_100g: 0,
     default_portion_g: 250,
-    source: 'Étiquette produit SFBT',
+    source: 'Étiquette produit SFBT / INNT',
     confidence_base: 'high',
-    serving_unit_description: '1 canette (250 ml = 26 g glucides)',
+    serving_unit_description: '1 canette ou petite bouteille (250 ml = 26 g glucides rapides)',
+    glycemic_index: 75,
+    glycemic_load: 20,
   },
   {
     id: 'div-08',
-    name_fr: 'Boga Light (sans sucre)',
-    name_ar: 'بوغة لايت بدون سكر',
-    name_tn: 'Boga Light',
+    name_fr: 'Boisson gazeuse sans sucre (Gazouza Light / Zéro, Boga Light, Coca Zéro)',
+    name_ar: 'ڤازوزة لايت / قازوزة بدون سكر / غازوزة زيرو',
+    name_tn: 'Gazouza Light / Zero',
+    aliases: [
+      'gazouza light', 'gazouza zero', 'gazouzet light',
+      'ڤازوزة لايت', 'قازوزة لايت', 'غازوزة لايت', 'ڤازوزة زيرو', 'قازوزة زيرو', 'غازوزة زيرو',
+      'قازوزة بدون سكر', 'ڤازوزة بدون سكر',
+      'soda light', 'coca zero', 'coca light', 'boga light', 'boisson gazeuse sans sucre'
+    ],
     category: 'boissons',
     carbs_per_100g: 0.1,
     protein_per_100g: 0,
@@ -739,6 +755,44 @@ export const TUNISIAN_FOOD_DATABASE: FoodItem[] = [
     source: 'Étiquette produit',
     confidence_base: 'high',
     serving_unit_description: '1 canette (250 ml ≈ 0 g glucides)',
+    glycemic_index: 0,
+    glycemic_load: 0,
+  },
+  {
+    id: 'div-16',
+    name_fr: 'Poulet mijoté (viande de poulet / cuisse)',
+    name_ar: 'لحم دجاجة / دجاج مسموط في المرقة',
+    name_tn: 'Lham djej / djeja',
+    aliases: ['poulet', 'viande de poulet', 'cuisse de poulet', 'blanc de poulet', 'دجاج', 'دجاجة', 'لحم دجاج', 'لحم دجاجة', 'djej', 'djeja'],
+    category: 'plats',
+    carbs_per_100g: 0,
+    protein_per_100g: 27,
+    fat_per_100g: 6,
+    fiber_per_100g: 0,
+    default_portion_g: 120,
+    source: 'INNT Tunis',
+    confidence_base: 'high',
+    serving_unit_description: '1 morceau ou cuisse de poulet (120 g = 0 g glucides, 32 g protéines)',
+    glycemic_index: 0,
+    glycemic_load: 0,
+  },
+  {
+    id: 'div-17',
+    name_fr: 'Légumes de couscous (carottes, navets, courgettes)',
+    name_ar: 'خضرة الكسكسي (سفنارية، لفت، قرع)',
+    name_tn: 'Khodhra kousksi',
+    aliases: ['legumes', 'légumes', 'legumes couscous', 'خضرة', 'خضار', 'خضرة كسكسي', 'خضرة الكسكسي', 'khodhra'],
+    category: 'plats',
+    carbs_per_100g: 4.5,
+    protein_per_100g: 1.2,
+    fat_per_100g: 1.5,
+    fiber_per_100g: 2.5,
+    default_portion_g: 100,
+    source: 'INNT Tunis',
+    confidence_base: 'high',
+    serving_unit_description: 'Portion de légumes cuits (100 g ≈ 4.5 g glucides)',
+    glycemic_index: 40,
+    glycemic_load: 2,
   },
   {
     id: 'div-09',
@@ -1594,16 +1648,118 @@ export function evaluateDualWaveBolus(
 }
 
 /**
- * Deterministic helper to lookup food by French or Tunisian name
+ * Arabic and Derja phonetic normalizer for resilient culinary matching
+ */
+export function normalizeCulinaryTerm(str: string): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .replace(/[\u064B-\u065F\u0670]/g, '') // remove Arabic tashkeel / harakat
+    .replace(/[ڤ]/g, 'ق') // map Tunisian 'ڤ' to 'ق' (ڤازوزة -> قازوزة)
+    .replace(/(?:غ|ك)ازوز/g, 'قازوز') // map غازوزة / كازوزة -> قازوزة
+    .replace(/[إأآا]/g, 'ا')
+    .replace(/[ةه]/g, 'ة')
+    .replace(/[ىي]/g, 'ي')
+    .replace(/[_\-+/]/g, ' ')
+    .trim();
+}
+
+/**
+ * Deterministic helper to lookup food by French, Arabic, Derja or alias
  */
 export function findFoodInDatabase(query: string): FoodItem | undefined {
-  const q = query.toLowerCase().trim();
+  if (!query) return undefined;
+  const rawQ = query.toLowerCase().trim();
+  const normQ = normalizeCulinaryTerm(query);
+
+  // 1. Specific High-Priority Tunisian Food & Beverage Matches
+  // Gazouza / Soda detection (Crucial for T1D fast-sugar bolus calculation)
+  const isSoda =
+    normQ.includes('قازوز') || // catches ڤازوزة, قازوزة, غازوزة, ڤازوز, قازوز, غازوز
+    rawQ.includes('gazouz') ||
+    rawQ.includes('gazouza') ||
+    rawQ.includes('soda') ||
+    rawQ.includes('coca') ||
+    rawQ.includes('boga') ||
+    rawQ.includes('boisson gazeuse') ||
+    rawQ.includes('canette');
+
+  if (isSoda) {
+    const isLight =
+      normQ.includes('لايت') ||
+      normQ.includes('زيرو') ||
+      normQ.includes('بدون سكر') ||
+      normQ.includes('بلا سكر') ||
+      rawQ.includes('light') ||
+      rawQ.includes('zero') ||
+      rawQ.includes('zéro') ||
+      rawQ.includes('sans sucre');
+
+    const found = TUNISIAN_FOOD_DATABASE.find((i) => i.id === (isLight ? 'div-08' : 'div-07'));
+    if (found) return found;
+  }
+
+  // Poulet / Viande de poulet
+  if (normQ.includes('دجاج') || rawQ.includes('poulet') || rawQ.includes('djej')) {
+    const found = TUNISIAN_FOOD_DATABASE.find((i) => i.id === 'div-16');
+    if (found) return found;
+  }
+
+  // Couscous (Semoule de couscous)
+  const isCouscous =
+    normQ.includes('كسكسي') ||
+    rawQ.includes('couscous') ||
+    rawQ.includes('kousksi');
+
+  const isStrictlyVegetables =
+    normQ.startsWith('خضرة') ||
+    normQ.startsWith('خضار') ||
+    rawQ.startsWith('legume') ||
+    rawQ.startsWith('légume') ||
+    rawQ.includes('légumes de') ||
+    rawQ.includes('legumes de');
+
+  if (isCouscous && !isStrictlyVegetables) {
+    const found = TUNISIAN_FOOD_DATABASE.find((i) => i.id === 'fec-07' || i.id === 'plat-01');
+    if (found) return found;
+  }
+
+  // Légumes mijotés de couscous
+  if (
+    normQ.includes('خضرة') ||
+    normQ.includes('خضار') ||
+    rawQ.includes('legume') ||
+    rawQ.includes('légume') ||
+    rawQ.includes('khodhra')
+  ) {
+    const found = TUNISIAN_FOOD_DATABASE.find((i) => i.id === 'div-17');
+    if (found) return found;
+  }
+
+  // 2. Direct Aliases Match
+  for (const item of TUNISIAN_FOOD_DATABASE) {
+    if (item.aliases && item.aliases.length > 0) {
+      for (const alias of item.aliases) {
+        const normAlias = normalizeCulinaryTerm(alias);
+        if (normQ === normAlias || normQ.includes(normAlias) || normAlias.includes(normQ)) {
+          return item;
+        }
+      }
+    }
+  }
+
+  // 3. Name Match in Arabic, French, Tunisian Derja
   return TUNISIAN_FOOD_DATABASE.find((item) => {
+    const itemNormAr = normalizeCulinaryTerm(item.name_ar || '');
+    const itemNormFr = item.name_fr.toLowerCase();
+    const itemNormTn = item.name_tn.toLowerCase();
+
     return (
-      item.name_fr.toLowerCase().includes(q) ||
-      item.name_tn.toLowerCase().includes(q) ||
-      q.includes(item.name_fr.toLowerCase()) ||
-      q.includes(item.name_tn.toLowerCase())
+      itemNormFr.includes(rawQ) ||
+      itemNormTn.includes(rawQ) ||
+      rawQ.includes(itemNormFr) ||
+      rawQ.includes(itemNormTn) ||
+      (itemNormAr && (normQ.includes(itemNormAr) || itemNormAr.includes(normQ)))
     );
   });
 }

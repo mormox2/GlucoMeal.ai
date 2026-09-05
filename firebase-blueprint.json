@@ -1,0 +1,64 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Données médicales et ratios d'insulinothérapie fonctionnelle du patient",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "glucoseUnit": { "type": "string", "enum": ["g/L", "mg/dL"] },
+        "targetGlucose": { "type": "number" },
+        "isf": { "type": "number" },
+        "icRatios": { "type": "object" },
+        "roundingStep": { "type": "number" },
+        "ramadanMode": { "type": "boolean" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "name", "glucoseUnit", "targetGlucose", "isf"]
+    },
+    "MealRecord": {
+      "title": "MealRecord",
+      "description": "Repas analysé par IA, calcul de bolus d'insuline et suivi post-prandial",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "meal_name": { "type": "string" },
+        "total_carbs": { "type": "number" },
+        "created_at": { "type": "string" },
+        "input_type": { "type": "string" },
+        "is_validated": { "type": "boolean" }
+      },
+      "required": ["id", "userId", "meal_name", "total_carbs", "created_at"]
+    },
+    "CGMSnapshot": {
+      "title": "CGMSnapshot",
+      "description": "Dernier état et relevé du capteur de glycémie continue (LinX, Syai, Dexcom, etc.)",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "deviceType": { "type": "string" },
+        "lastGlucose": { "type": "number" },
+        "trend": { "type": "string" },
+        "sensorExpiryDays": { "type": "number" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["userId", "deviceType", "lastGlucose", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Profil médical patient et paramètres d'insuline"
+    },
+    "/users/{userId}/meals/{mealId}": {
+      "schema": "MealRecord",
+      "description": "Historique des repas analysés et bolus d'insuline calculés"
+    },
+    "/users/{userId}/cgm/{cgmDocId}": {
+      "schema": "CGMSnapshot",
+      "description": "État et configuration des capteurs de glycémie continue"
+    }
+  }
+}

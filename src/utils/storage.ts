@@ -1,4 +1,5 @@
 import { AnalyzedMeal, UserProfileDT1, MealSlot, PhysicalActivityLevel, CalculatedBolusSummary } from '../types';
+import { syncMealToFirestore, syncProfileToFirestore, deleteMealFromFirestore } from '../services/firebase';
 
 const STORAGE_KEYS = {
   MEALS: 'glucomal_meals_history_v1',
@@ -363,6 +364,8 @@ export function saveSingleMeal(meal: AnalyzedMeal): AnalyzedMeal[] {
   const current = loadSavedMeals();
   const updated = [meal, ...current.filter((m) => m.id !== meal.id)];
   saveMeals(updated);
+  // Synchronisation asynchrone non-bloquante avec Firebase Firestore
+  syncMealToFirestore(meal).catch(() => {});
   return updated;
 }
 
@@ -375,6 +378,10 @@ export function toggleFavoriteMeal(mealId: string): AnalyzedMeal[] {
     m.id === mealId ? { ...m, is_favorite: !m.is_favorite } : m
   );
   saveMeals(updated);
+  const target = updated.find((m) => m.id === mealId);
+  if (target) {
+    syncMealToFirestore(target).catch(() => {});
+  }
   return updated;
 }
 
@@ -385,6 +392,8 @@ export function deleteMealFromHistory(mealId: string): AnalyzedMeal[] {
   const current = loadSavedMeals();
   const updated = current.filter((m) => m.id !== mealId);
   saveMeals(updated);
+  // Suppression synchrone dans Firestore
+  deleteMealFromFirestore(mealId).catch(() => {});
   return updated;
 }
 
@@ -457,6 +466,8 @@ export function saveUserProfile(profile: UserProfileDT1): void {
   try {
     const sanitized = sanitizeUserProfile(profile);
     localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(sanitized));
+    // Synchronisation asynchrone avec Firestore
+    syncProfileToFirestore(sanitized).catch(() => {});
   } catch (err) {
     console.error('Erreur sauvegarde profil DT1:', err);
   }

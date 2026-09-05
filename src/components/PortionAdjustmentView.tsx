@@ -40,6 +40,7 @@ import {
   calculateCarbsDeterministically,
   calculateMealGlycemicMetrics,
   evaluateDualWaveBolus,
+  normalizeCulinaryTerm,
 } from '../data/tunisianFoodDatabase';
 import { getCurrentMealSlot, calculatePersonalizedBolus } from '../utils/storage';
 import { recordPatientPortionCorrection, getLearnedPortionForFood } from '../utils/activeLearning';
@@ -280,11 +281,26 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
     setAppliedHabitPreset(true);
   };
 
-  const filteredFoodsToAdd = TUNISIAN_FOOD_DATABASE.filter(
-    (f) =>
-      f.name_fr.toLowerCase().includes(foodSearchQuery.toLowerCase()) ||
-      f.name_tn.toLowerCase().includes(foodSearchQuery.toLowerCase())
-  ).slice(0, 8);
+  const rawSearch = foodSearchQuery.toLowerCase().trim();
+  const normSearch = normalizeCulinaryTerm(foodSearchQuery);
+
+  const filteredFoodsToAdd = TUNISIAN_FOOD_DATABASE.filter((f) => {
+    if (!rawSearch) return true;
+    const nameFr = f.name_fr.toLowerCase();
+    const nameTn = f.name_tn.toLowerCase();
+    const nameAr = normalizeCulinaryTerm(f.name_ar || '');
+    const inAliases = f.aliases?.some((a) => {
+      const na = normalizeCulinaryTerm(a);
+      return na.includes(normSearch) || normSearch.includes(na);
+    });
+
+    return (
+      nameFr.includes(rawSearch) ||
+      nameTn.includes(rawSearch) ||
+      (nameAr && (nameAr.includes(normSearch) || normSearch.includes(nameAr))) ||
+      inAliases
+    );
+  }).slice(0, 8);
 
   const confidenceBadge = () => {
     if (meal.overall_confidence === 'high') {
@@ -312,7 +328,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
   };
 
   return (
-    <div className={`max-w-2xl mx-auto py-6 sm:py-8 px-4 sm:px-6 pb-32 sm:pb-36 ${isHighContrastMode ? 'contrast-125' : ''}`}>
+    <div className={`max-w-6xl 2xl:max-w-7xl mx-auto py-8 sm:py-10 px-4 sm:px-6 lg:px-8 pb-32 sm:pb-36 ${isHighContrastMode ? 'contrast-125' : ''}`}>
       {/* Top back action & Accessibility controls */}
       <div className="flex items-center justify-between mb-5">
         <button
@@ -342,8 +358,12 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         </div>
       </div>
 
-      {/* Main Result Card (Prominent display ≈ 87 g) */}
-      <div className="p-6 rounded-3xl bg-white border-2 border-emerald-500/30 shadow-md mb-6 relative overflow-hidden">
+      {/* Responsive 2-Column Clinical Layout for Tablet (md: 768px+) & Desktop */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Meal Overview, Detected Items with Steppers, Substitutions */}
+        <div className="md:col-span-7 space-y-6">
+          {/* Main Result Card (Prominent display ≈ 87 g) */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-white border-2 border-emerald-500/30 shadow-md relative overflow-hidden">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <span className="text-xs font-bold tracking-wider uppercase text-slate-500 block mb-1">
@@ -561,7 +581,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
       </div>
 
       {/* Recommandations de substitutions saines et index glycémique (Cuisine tunisienne) */}
-      <div className="mb-6">
+      <div>
         <HealthySubstitutionsCard
           meal={meal}
           onApplyOptimizedRecipe={(newCarbs) => {
@@ -572,9 +592,12 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           }}
         />
       </div>
+    </div>
 
+    {/* Right Column: Sticky Bolus Calculator & Clinical Alerts on Tablet/Desktop */}
+    <div className="md:col-span-5 space-y-5 md:sticky md:top-20">
       {/* Therapeutic Bolus Calculator (Ratio I:C & Correction) */}
-      <div className="mb-6 p-5 rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-lg border border-slate-700/60">
+      <div className="p-5 rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 text-white shadow-lg border border-slate-700/60">
         <div className="flex items-center justify-between pb-3 border-b border-white/10 mb-4">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
@@ -882,10 +905,12 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           </span>
         </button>
       </div>
+    </div>
+  </div>
 
-      {/* P0 - Sticky Mobile Confirmation Bar (Floating action footer) */}
-      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-3 sm:px-4 py-2.5 sm:py-3 shadow-[0_-4px_25px_rgba(0,0,0,0.1)]">
-        <div className="max-w-2xl mx-auto flex items-center justify-between gap-2.5">
+      {/* P0 - Sticky Confirmation Bar (Floating action footer, responsive max-w-6xl) */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-3 sm:px-6 py-2.5 sm:py-3 shadow-[0_-4px_25px_rgba(0,0,0,0.1)]">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
             <div className="bg-emerald-50/90 border border-emerald-200/80 px-2.5 py-1 rounded-xl">
               <span className="text-[9px] uppercase font-extrabold text-emerald-800 block leading-tight">Glucides</span>

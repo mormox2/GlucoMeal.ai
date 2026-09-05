@@ -100,6 +100,132 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
         {/* Modal Form Content */}
         <form onSubmit={handleSave} className="p-5 sm:p-6 space-y-6 text-xs text-slate-700 max-h-[75vh] overflow-y-auto">
+          {/* PARENT / CHILD PROFILE CARD */}
+          <div className="p-4 rounded-2xl bg-rose-50/80 border border-rose-200/90 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base">👨‍👩‍👧</span>
+                <div>
+                  <span className="font-extrabold text-sm text-rose-950 block">
+                    Mode Utilisateur : {formData.accountType === 'parent' ? "Parent d'un enfant DT1" : 'Patient Autonome'}
+                  </span>
+                  <p className="text-[11px] text-rose-900/80">
+                    {formData.accountType === 'parent'
+                      ? "Vous gérez les repas et les doses d'insuline pour votre enfant"
+                      : "Vous calculez vos propres repas et doses d'insuline"}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setFormData({
+                      ...formData,
+                      accountType: formData.accountType === 'parent' ? 'patient' : 'parent',
+                      roundingStep: formData.accountType === 'parent' ? 1.0 : 0.5,
+                      childProfile:
+                        formData.childProfile || {
+                          childName: 'Sarah',
+                          age: 8,
+                          insulinDeliveryType: 'pen_half_unit',
+                          cgmSharingActive: true,
+                        },
+                    })
+                  }
+                  className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white border border-rose-300 text-rose-800 hover:bg-rose-100 transition-colors cursor-pointer"
+                >
+                  {formData.accountType === 'parent' ? 'Basculer en Patient Adulte' : "Activer Profil Enfant"}
+                </button>
+              </div>
+            </div>
+
+            {formData.accountType === 'parent' && (
+              <div className="pt-2 border-t border-rose-200/70 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-rose-900 block mb-1">
+                    Prénom de l'enfant
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.childProfile?.childName || ''}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        childProfile: {
+                          ...(formData.childProfile || {
+                            age: 8,
+                            insulinDeliveryType: 'pen_half_unit',
+                            cgmSharingActive: true,
+                          }),
+                          childName: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder="Ex: Sarah"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-rose-200 font-bold text-rose-950 text-xs outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-rose-900 block mb-1">
+                    Âge de l'enfant
+                  </label>
+                  <input
+                    type="number"
+                    min="2"
+                    max="18"
+                    value={formData.childProfile?.age || 8}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        childProfile: {
+                          ...(formData.childProfile || {
+                            childName: 'Enfant',
+                            insulinDeliveryType: 'pen_half_unit',
+                            cgmSharingActive: true,
+                          }),
+                          age: Number(e.target.value) || 8,
+                        },
+                      })
+                    }
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-rose-200 font-bold text-rose-950 text-xs outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold uppercase text-rose-900 block mb-1">
+                    Injection Enfant
+                  </label>
+                  <select
+                    value={formData.childProfile?.insulinDeliveryType || 'pen_half_unit'}
+                    onChange={(e) => {
+                      const val = e.target.value as any;
+                      setFormData({
+                        ...formData,
+                        roundingStep: val === 'pen_half_unit' ? 0.5 : val === 'pump' ? 0.1 : 1.0,
+                        childProfile: {
+                          ...(formData.childProfile || {
+                            childName: 'Enfant',
+                            age: 8,
+                            cgmSharingActive: true,
+                          }),
+                          insulinDeliveryType: val,
+                        },
+                      });
+                    }}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-rose-200 font-bold text-rose-950 text-xs outline-none"
+                  >
+                    <option value="pen_half_unit">Stylo 0.5 U (NovoPen Echo)</option>
+                    <option value="pump">Pompe à insuline pédiatrique</option>
+                    <option value="standard_pen">Stylo standard 1.0 U</option>
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Unit selection */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>

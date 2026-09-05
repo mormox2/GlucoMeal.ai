@@ -278,7 +278,7 @@ Synthèse clinique: ${step2Report.clinical_summary}`;
   const successRate100 = tested100Count > 0 ? Math.round((passed100Count / tested100Count) * 100) : 96;
 
   return (
-    <div className="max-w-5xl mx-auto py-8 px-4 sm:px-6">
+    <div className="max-w-6xl 2xl:max-w-7xl mx-auto py-8 sm:py-10 px-4 sm:px-6 lg:px-8">
       {/* Top Banner & Mode Toggle */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>

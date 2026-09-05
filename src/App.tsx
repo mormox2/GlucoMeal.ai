@@ -21,6 +21,8 @@ import { DoctorPortalView } from './components/DoctorPortalView';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { PostPrandialReminderBanner } from './components/PostPrandialReminderBanner';
 import { BottomNav } from './components/BottomNav';
+import { LandingPageView } from './components/LandingPageView';
+import { AuthScreen } from './components/AuthScreen';
 import { AnalyzedMeal, InputMode, UserProfileDT1 } from './types';
 import {
   loadSavedMeals,
@@ -39,6 +41,14 @@ import {
 import { Sparkles, RefreshCw } from 'lucide-react';
 
 export default function App() {
+  // Screen views: 'landing' (SaaS marketing & parental reassurance) | 'auth' (Login/Signup parent or patient) | 'app' (Main meal & bolus tool)
+  const [viewScreen, setViewScreen] = useState<'landing' | 'auth' | 'app'>(() => {
+    const pref = localStorage.getItem('glucomal_screen_preference_v1');
+    if (pref === 'app') return 'app';
+    return 'landing'; // Default to landing page
+  });
+  const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('signup');
+
   const [currentTab, setCurrentTab] = useState<'app' | 'history' | 'database' | 'benchmark' | 'specs' | 'doctor'>('app');
   const [activeInputModal, setActiveInputModal] = useState<InputMode | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -278,6 +288,48 @@ export default function App() {
     setCurrentTab('app');
   };
 
+  if (viewScreen === 'landing') {
+    return (
+      <LandingPageView
+        onStartSignUp={() => {
+          setAuthInitialMode('signup');
+          setViewScreen('auth');
+        }}
+        onStartLogin={() => {
+          setAuthInitialMode('login');
+          setViewScreen('auth');
+        }}
+        onEnterAppDirectly={() => {
+          localStorage.setItem('glucomal_screen_preference_v1', 'app');
+          setViewScreen('app');
+        }}
+        onOpenDoctorPortal={() => {
+          localStorage.setItem('glucomal_screen_preference_v1', 'app');
+          setCurrentTab('doctor');
+          setViewScreen('app');
+        }}
+      />
+    );
+  }
+
+  if (viewScreen === 'auth') {
+    return (
+      <AuthScreen
+        initialMode={authInitialMode}
+        onSuccess={(updatedProfile) => {
+          setUserProfile(updatedProfile);
+          localStorage.setItem('glucomal_screen_preference_v1', 'app');
+          setViewScreen('app');
+        }}
+        onCancel={() => {
+          localStorage.setItem('glucomal_screen_preference_v1', 'app');
+          setViewScreen('app');
+        }}
+        onBackToLanding={() => setViewScreen('landing')}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-50/50 text-slate-900 flex flex-col font-sans selection:bg-emerald-100 selection:text-emerald-900">
       {/* PWA offline alert & install banner */}
@@ -292,6 +344,12 @@ export default function App() {
         onOpenMedicalReport={() => setIsReportModalOpen(true)}
         onOpenCGM={() => setIsCGMModalOpen(true)}
         onOpenCloudSync={() => setIsCloudSyncOpen(true)}
+        onOpenLanding={() => setViewScreen('landing')}
+        onOpenAuth={() => {
+          setAuthInitialMode('login');
+          setViewScreen('auth');
+        }}
+        userProfile={userProfile}
       />
 
       {/* Main App Body */}
