@@ -9,6 +9,9 @@ import {
   Lock,
   HeartPulse,
   Scale,
+  Download,
+  Smartphone,
+  WifiOff,
 } from 'lucide-react';
 import { useLanguage } from '../i18n/LanguageContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
@@ -18,6 +21,8 @@ interface LandingPageViewProps {
   onStartLogin: () => void;
   onEnterAppDirectly: () => void;
   onOpenDoctorPortal?: () => void;
+  onOpenInstallModal?: () => void;
+  deferredPrompt?: any;
 }
 
 export const LandingPageView: React.FC<LandingPageViewProps> = ({
@@ -25,8 +30,16 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
   onStartLogin,
   onEnterAppDirectly,
   onOpenDoctorPortal,
+  onOpenInstallModal,
+  deferredPrompt,
 }) => {
   const { t, isRtl } = useLanguage();
+
+  const handleInstall = () => {
+    if (onOpenInstallModal) {
+      onOpenInstallModal();
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 antialiased font-sans">
@@ -90,6 +103,16 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
             <LanguageSwitcher variant="header" />
             <button
               type="button"
+              id="btn-landing-header-install"
+              onClick={handleInstall}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-3 py-1.5 rounded-lg transition-colors cursor-pointer whitespace-nowrap shadow-2xs"
+              title="Installer GlucoMeal sur votre téléphone ou ordinateur"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-700" />
+              <span className="hidden sm:inline">{t('landing_nav_install')}</span>
+            </button>
+            <button
+              type="button"
               onClick={onStartLogin}
               className="text-xs font-semibold text-slate-700 hover:text-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer whitespace-nowrap"
             >
@@ -134,6 +157,16 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                 >
                   <span>{t('landing_cta_signup')}</span>
                   <ArrowRight className={`w-4 h-4 shrink-0 transition-transform ${isRtl ? 'rotate-180' : ''}`} />
+                </button>
+
+                <button
+                  type="button"
+                  id="btn-landing-hero-install"
+                  onClick={handleInstall}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300 transition-colors cursor-pointer shadow-xs"
+                >
+                  <Download className="w-4 h-4 text-emerald-700 shrink-0" />
+                  <span>{t('landing_install_hero_cta')}</span>
                 </button>
 
                 <button
@@ -229,6 +262,48 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
                   </p>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION INSTALLATION PWA IMMEDIATE */}
+      <section className="py-8 bg-slate-900 text-white border-b border-slate-800">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="bg-gradient-to-br from-slate-900 via-emerald-950 to-slate-900 rounded-2xl p-6 sm:p-8 border border-emerald-500/30 shadow-xl flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 flex items-center justify-center shrink-0 shadow-inner">
+                <Smartphone className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="px-2 py-0.5 rounded-full bg-emerald-500/30 text-emerald-300 text-[10px] font-extrabold uppercase tracking-wider border border-emerald-400/40">
+                    {t('landing_install_badge')}
+                  </span>
+                  <span className="text-xs text-emerald-300 font-medium flex items-center gap-1">
+                    <WifiOff className="w-3.5 h-3.5" />
+                    {t('pwa_offline_badge')}
+                  </span>
+                </div>
+                <h3 className="text-base sm:text-lg font-bold text-white tracking-tight">
+                  {t('landing_install_banner_title')}
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
+                  {t('landing_install_banner_desc')}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full md:w-auto">
+              <button
+                type="button"
+                id="btn-landing-spotlight-install"
+                onClick={handleInstall}
+                className="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-105 active:scale-95"
+              >
+                <Download className="w-4 h-4 text-slate-950" />
+                <span>{t('landing_install_btn_now')}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -435,6 +510,16 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
               className="w-full sm:w-auto px-6 py-3 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-xs transition-colors cursor-pointer"
             >
               {t('landing_cta_btn_signup')}
+            </button>
+
+            <button
+              type="button"
+              id="btn-landing-footer-install"
+              onClick={handleInstall}
+              className="w-full sm:w-auto px-5 py-3 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300 transition-colors cursor-pointer flex items-center justify-center gap-2 shadow-xs"
+            >
+              <Download className="w-4 h-4 text-emerald-700" />
+              <span>{t('landing_install_hero_cta')}</span>
             </button>
 
             <button

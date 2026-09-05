@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Download, WifiOff, X, Smartphone, HelpCircle } from 'lucide-react';
 import { PWAInstallModal } from './PWAInstallModal';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -12,6 +13,7 @@ interface PWAInstallBannerProps {
 }
 
 export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({ onOpenInstallModal }) => {
+  const { t } = useLanguage();
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
@@ -69,7 +71,11 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({ onOpenInstal
       }
     }
     // If no direct prompt (e.g. iOS Safari, inside iframe, or browser awaiting gesture), open guide modal
-    setIsModalOpen(true);
+    if (onOpenInstallModal) {
+      onOpenInstallModal();
+    } else {
+      setIsModalOpen(true);
+    }
   };
 
   return (
@@ -94,13 +100,13 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({ onOpenInstal
               </div>
               <div>
                 <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
-                  <span>Installer GlucoMeal sur votre téléphone</span>
+                  <span>{t('pwa_banner_title')}</span>
                   <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/30 text-emerald-300 font-extrabold uppercase">
                     PWA
                   </span>
                 </h4>
                 <p className="text-[11px] text-slate-300 mt-0.5">
-                  Accédez à votre base alimentaire et calculez vos bolus instantanément, même sans réseau.
+                  {t('pwa_banner_desc')}
                 </p>
               </div>
             </div>
@@ -119,7 +125,7 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({ onOpenInstal
               onClick={() => setIsDismissed(true)}
               className="px-3 py-1.5 rounded-xl text-xs text-slate-300 hover:text-white cursor-pointer"
             >
-              Plus tard
+              {t('pwa_later')}
             </button>
             <button
               id="btn-pwa-install-banner"
@@ -127,19 +133,21 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({ onOpenInstal
               className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 cursor-pointer transition-colors"
             >
               <Download className="w-3.5 h-3.5" />
-              <span>Installer l'application</span>
+              <span>{t('pwa_install_now')}</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* Guide Modal */}
-      <PWAInstallModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        deferredPrompt={deferredPrompt}
-        onInstalledSuccess={() => setIsInstalled(true)}
-      />
+      {/* Guide Modal (fallback if onOpenInstallModal not provided) */}
+      {!onOpenInstallModal && (
+        <PWAInstallModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          deferredPrompt={deferredPrompt}
+          onInstalledSuccess={() => setIsInstalled(true)}
+        />
+      )}
     </>
   );
 };

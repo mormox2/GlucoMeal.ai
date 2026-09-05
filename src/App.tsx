@@ -339,25 +339,38 @@ export default function App() {
 
   if (viewScreen === 'landing') {
     return (
-      <LandingPageView
-        onStartSignUp={() => {
-          setAuthInitialMode('signup');
-          setViewScreen('auth');
-        }}
-        onStartLogin={() => {
-          setAuthInitialMode('login');
-          setViewScreen('auth');
-        }}
-        onEnterAppDirectly={() => {
-          localStorage.setItem('glucomal_screen_preference_v1', 'app');
-          setViewScreen('app');
-        }}
-        onOpenDoctorPortal={() => {
-          localStorage.setItem('glucomal_screen_preference_v1', 'app');
-          setCurrentTab('doctor');
-          setViewScreen('app');
-        }}
-      />
+      <>
+        <LandingPageView
+          onStartSignUp={() => {
+            setAuthInitialMode('signup');
+            setViewScreen('auth');
+          }}
+          onStartLogin={() => {
+            setAuthInitialMode('login');
+            setViewScreen('auth');
+          }}
+          onEnterAppDirectly={() => {
+            localStorage.setItem('glucomal_screen_preference_v1', 'app');
+            setViewScreen('app');
+          }}
+          onOpenDoctorPortal={() => {
+            localStorage.setItem('glucomal_screen_preference_v1', 'app');
+            setCurrentTab('doctor');
+            setViewScreen('app');
+          }}
+          onOpenInstallModal={() => setIsPWAInstallModalOpen(true)}
+          deferredPrompt={deferredPrompt}
+        />
+        <PWAInstallBanner onOpenInstallModal={() => setIsPWAInstallModalOpen(true)} />
+        <PWAInstallModal
+          isOpen={isPWAInstallModalOpen}
+          onClose={() => setIsPWAInstallModalOpen(false)}
+          deferredPrompt={deferredPrompt}
+          onInstalledSuccess={() => {
+            setIsPWAInstallModalOpen(false);
+          }}
+        />
+      </>
     );
   }
 
@@ -382,7 +395,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50/50 text-slate-900 flex flex-col font-sans selection:bg-emerald-100 selection:text-emerald-900">
       {/* PWA offline alert & install banner */}
-      <PWAInstallBanner />
+      <PWAInstallBanner onOpenInstallModal={() => setIsPWAInstallModalOpen(true)} />
 
       {/* Clinically Styled Header */}
       <Header
