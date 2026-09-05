@@ -1,6 +1,7 @@
 import React from 'react';
-import { Camera, Mic, Keyboard, Barcode, Clock, ArrowRight, Sparkles, AlertCircle } from 'lucide-react';
+import { Camera, Mic, Keyboard, Barcode, Clock, ArrowRight, ArrowLeft, Sparkles, AlertCircle } from 'lucide-react';
 import { AnalyzedMeal, InputMode } from '../types';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface HomeMealEntryProps {
   onSelectMode: (mode: InputMode) => void;
@@ -15,19 +16,22 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
   onSelectRecentMeal,
   onOpenBenchmark,
 }) => {
+  const { t, isRtl, language } = useLanguage();
+  const ArrowIcon = isRtl ? ArrowLeft : ArrowRight;
+
   return (
     <div className="max-w-6xl 2xl:max-w-7xl mx-auto py-8 sm:py-12 px-4 sm:px-6 lg:px-8">
       {/* Title & Slogan */}
       <div className="text-center mb-8 sm:mb-12">
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold mb-3.5">
           <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-          <span>Moteur déterministe • Zéro hallucination</span>
+          <span>{t('banner_engine')}</span>
         </div>
         <h1 className="text-3xl sm:text-4xl md:text-5xl font-black text-slate-900 tracking-tight">
-          Qu’avez-vous mangé ?
+          {t('home_title')}
         </h1>
         <p className="mt-2.5 text-sm sm:text-base text-slate-600 max-w-xl mx-auto">
-          Photographiez ou décrivez votre assiette. Estimez vos glucides et votre bolus en quelques secondes.
+          {t('home_subtitle')}
         </p>
       </div>
 
@@ -37,7 +41,7 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
         <button
           id="btn-mode-photo"
           onClick={() => onSelectMode('photo')}
-          className="group relative flex flex-col justify-between p-5 xl:p-6 rounded-3xl bg-white border-2 border-emerald-500/30 hover:border-emerald-500 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all text-left cursor-pointer"
+          className="group relative flex flex-col justify-between p-5 xl:p-6 rounded-3xl bg-white border-2 border-emerald-500/30 hover:border-emerald-500 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all text-left rtl:text-right cursor-pointer"
         >
           <div>
             <div className="flex items-center justify-between w-full mb-4">
@@ -45,19 +49,19 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
                 <Camera className="w-6 h-6 xl:w-7 xl:h-7" />
               </div>
               <span className="text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-2.5 py-1 rounded-full whitespace-nowrap">
-                Principal
+                {t('mode_photo_badge')}
               </span>
             </div>
             <h3 className="font-extrabold text-slate-900 text-base xl:text-lg group-hover:text-emerald-700 transition-colors leading-snug">
-              Photographier
+              {t('mode_photo_title')}
             </h3>
             <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-              Photo assiette ou sélection parmi les repas types
+              {t('mode_photo_desc')}
             </p>
           </div>
-          <div className="mt-5 pt-3 border-t border-slate-100 flex items-center text-xs font-bold text-emerald-700 group-hover:translate-x-1 transition-transform">
-            <span>Analyser l'assiette</span>
-            <ArrowRight className="w-3.5 h-3.5 ml-1" />
+          <div className="mt-5 pt-3 border-t border-slate-100 flex items-center text-xs font-bold text-emerald-700 group-hover:translate-x-1 rtl:group-hover:-translate-x-1 transition-transform">
+            <span>{t('mode_photo_action')}</span>
+            <ArrowIcon className="w-3.5 h-3.5 mx-1" />
           </div>
         </button>
 
@@ -65,7 +69,7 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
         <button
           id="btn-mode-voice"
           onClick={() => onSelectMode('voice')}
-          className="group relative flex flex-col justify-between p-5 xl:p-6 rounded-3xl bg-white border-2 border-slate-200 hover:border-teal-500 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all text-left cursor-pointer"
+          className="group relative flex flex-col justify-between p-5 xl:p-6 rounded-3xl bg-white border-2 border-slate-200 hover:border-teal-500 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all text-left rtl:text-right cursor-pointer"
         >
           <div>
             <div className="flex items-center justify-between w-full mb-4">
@@ -73,19 +77,19 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
                 <Mic className="w-6 h-6 xl:w-7 xl:h-7" />
               </div>
               <span className="text-[11px] font-bold text-teal-800 bg-teal-50 border border-teal-200/80 px-2.5 py-1 rounded-full whitespace-nowrap">
-                FR / Derja
+                {t('mode_voice_badge')}
               </span>
             </div>
             <h3 className="font-extrabold text-slate-900 text-base xl:text-lg group-hover:text-teal-700 transition-colors leading-snug">
-              Décrire à la voix
+              {t('mode_voice_title')}
             </h3>
             <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-              « صحن مقرونة و زوز خبيزات »
+              {t('mode_voice_desc')}
             </p>
           </div>
-          <div className="mt-5 pt-3 border-t border-slate-100 flex items-center text-xs font-bold text-teal-700 group-hover:translate-x-1 transition-transform">
-            <span>Dicter le repas</span>
-            <ArrowRight className="w-3.5 h-3.5 ml-1" />
+          <div className="mt-5 pt-3 border-t border-slate-100 flex items-center text-xs font-bold text-teal-700 group-hover:translate-x-1 rtl:group-hover:-translate-x-1 transition-transform">
+            <span>{t('mode_voice_action')}</span>
+            <ArrowIcon className="w-3.5 h-3.5 mx-1" />
           </div>
         </button>
 
@@ -93,7 +97,7 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
         <button
           id="btn-mode-text"
           onClick={() => onSelectMode('text')}
-          className="group relative flex flex-col justify-between p-5 xl:p-6 rounded-3xl bg-white border-2 border-slate-200 hover:border-indigo-500 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all text-left cursor-pointer"
+          className="group relative flex flex-col justify-between p-5 xl:p-6 rounded-3xl bg-white border-2 border-slate-200 hover:border-indigo-500 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all text-left rtl:text-right cursor-pointer"
         >
           <div>
             <div className="flex items-center justify-between w-full mb-4">
@@ -101,19 +105,19 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
                 <Keyboard className="w-6 h-6 xl:w-7 xl:h-7" />
               </div>
               <span className="text-[11px] font-bold text-indigo-800 bg-indigo-50 border border-indigo-200/80 px-2.5 py-1 rounded-full whitespace-nowrap">
-                Clavier
+                {t('mode_text_badge')}
               </span>
             </div>
             <h3 className="font-extrabold text-slate-900 text-base xl:text-lg group-hover:text-indigo-700 transition-colors leading-snug">
-              Écrire mon repas
+              {t('mode_text_title')}
             </h3>
             <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-              « 2 tranches pain + omelette »
+              {t('mode_text_desc')}
             </p>
           </div>
-          <div className="mt-5 pt-3 border-t border-slate-100 flex items-center text-xs font-bold text-indigo-700 group-hover:translate-x-1 transition-transform">
-            <span>Saisie guidée</span>
-            <ArrowRight className="w-3.5 h-3.5 ml-1" />
+          <div className="mt-5 pt-3 border-t border-slate-100 flex items-center text-xs font-bold text-indigo-700 group-hover:translate-x-1 rtl:group-hover:-translate-x-1 transition-transform">
+            <span>{t('mode_text_action')}</span>
+            <ArrowIcon className="w-3.5 h-3.5 mx-1" />
           </div>
         </button>
 
@@ -121,7 +125,7 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
         <button
           id="btn-mode-barcode"
           onClick={() => onSelectMode('barcode')}
-          className="group relative flex flex-col justify-between p-5 xl:p-6 rounded-3xl bg-white border-2 border-slate-200 hover:border-amber-500 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all text-left cursor-pointer"
+          className="group relative flex flex-col justify-between p-5 xl:p-6 rounded-3xl bg-white border-2 border-slate-200 hover:border-amber-500 shadow-xs hover:shadow-lg hover:-translate-y-1 transition-all text-left rtl:text-right cursor-pointer"
         >
           <div>
             <div className="flex items-center justify-between w-full mb-4">
@@ -129,19 +133,19 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
                 <Barcode className="w-6 h-6 xl:w-7 xl:h-7" />
               </div>
               <span className="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-full whitespace-nowrap">
-                EAN
+                {t('mode_barcode_badge')}
               </span>
             </div>
             <h3 className="font-extrabold text-slate-900 text-base xl:text-lg group-hover:text-amber-700 transition-colors leading-snug">
-              Scanner produit
+              {t('mode_barcode_title')}
             </h3>
             <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-              Code-barres ou étiquette nutritionnelle
+              {t('mode_barcode_desc')}
             </p>
           </div>
-          <div className="mt-5 pt-3 border-t border-slate-100 flex items-center text-xs font-bold text-amber-700 group-hover:translate-x-1 transition-transform">
-            <span>Scanner code EAN</span>
-            <ArrowRight className="w-3.5 h-3.5 ml-1" />
+          <div className="mt-5 pt-3 border-t border-slate-100 flex items-center text-xs font-bold text-amber-700 group-hover:translate-x-1 rtl:group-hover:-translate-x-1 transition-transform">
+            <span>{t('mode_barcode_action')}</span>
+            <ArrowIcon className="w-3.5 h-3.5 mx-1" />
           </div>
         </button>
       </div>
@@ -153,13 +157,9 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
         </div>
         <div className="text-xs sm:text-sm text-slate-700 leading-relaxed">
           <strong className="text-emerald-900 font-bold block mb-0.5">
-            Règle fondamentale GlucoMeal
+            {t('rule_banner_title')}
           </strong>
-          L’application affiche toujours une estimation prudente (ex :{' '}
-          <span className="font-bold text-emerald-800 bg-emerald-100/80 px-1.5 py-0.5 rounded">
-            ≈ 85 g
-          </span>
-          ) et jamais de fausse précision clinique trompeuse (comme 85,37 g). Vous gardez toujours le contrôle pour ajuster chaque portion.
+          {t('rule_banner_desc')}
         </div>
       </div>
 
@@ -169,11 +169,11 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-slate-400" />
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-700">
-              Derniers repas enregistrés
+              {t('recent_meals_title')}
             </h2>
           </div>
           <span className="text-xs text-slate-500 font-medium">
-            Historique personnel
+            {t('recent_meals_subtitle')}
           </span>
         </div>
 
@@ -199,21 +199,21 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
                       {meal.meal_name}
                     </h3>
                     <p className="text-xs text-slate-500 truncate mt-0.5">
-                      {meal.items.map((i) => i.name_fr.split(' ')[0]).join(' + ')}
+                      {meal.items.map((i) => (language === 'ar' && i.name_ar ? i.name_ar : i.name_fr).split(' ')[0]).join(' + ')}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2.5 shrink-0 ml-3">
-                  <div className="text-right">
+                <div className="flex items-center gap-2.5 shrink-0 ml-3 rtl:mr-3 rtl:ml-0">
+                  <div className="text-right rtl:text-left">
                     <span className="text-sm font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200/60 block">
-                      ≈ {meal.total_carbs} g
+                      ≈ {meal.total_carbs} {language === 'ar' ? 'غ' : 'g'}
                     </span>
                     <div className="text-[10px] text-slate-400 mt-0.5">
-                      {meal.overall_confidence === 'high' ? '🟢 Élevée' : meal.overall_confidence === 'medium' ? '🟡 Moyenne' : '🔴 Faible'}
+                      {meal.overall_confidence === 'high' ? (language === 'ar' ? '🟢 دقة عالية' : '🟢 Élevée') : meal.overall_confidence === 'medium' ? (language === 'ar' ? '🟡 متوسطة' : '🟡 Moyenne') : (language === 'ar' ? '🔴 منخفضة' : '🔴 Faible')}
                     </div>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 transition-colors" />
+                  <ArrowIcon className="w-4 h-4 text-slate-300 group-hover:text-emerald-600 transition-colors" />
                 </div>
               </div>
             ))}
@@ -221,7 +221,7 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
         ) : (
           <div className="p-8 rounded-3xl bg-slate-50 border border-slate-200/60 text-center">
             <p className="text-xs text-slate-500">
-              Aucun repas encore validé aujourd’hui. Choisissez un mode d’entrée ci-dessus pour estimer votre première assiette !
+              {t('empty_meals')}
             </p>
           </div>
         )}
@@ -231,19 +231,20 @@ export const HomeMealEntry: React.FC<HomeMealEntryProps> = ({
       <div className="mt-8 p-4 rounded-2xl bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200/80 flex items-center justify-between">
         <div>
           <h4 className="text-xs font-bold text-amber-900">
-            🔬 Dataset de validation tunisien (100 repas)
+            {t('benchmark_cta_title')}
           </h4>
           <p className="text-xs text-amber-700/90 mt-0.5">
-            Testez la précision de reconnaissance sur le benchmark officiel de plats tunisiens.
+            {t('benchmark_cta_desc')}
           </p>
         </div>
         <button
           onClick={onOpenBenchmark}
           className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold shadow-xs shrink-0 transition-colors cursor-pointer"
         >
-          Ouvrir le benchmark
+          {t('benchmark_cta_btn')}
         </button>
       </div>
     </div>
   );
 };
+

@@ -1,1 +1,9 @@
 @import "tailwindcss";
+
+@layer base {
+  [dir="rtl"],
+  .font-arabic {
+    font-family: 'Cairo', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    letter-spacing: 0;
+  }
+}

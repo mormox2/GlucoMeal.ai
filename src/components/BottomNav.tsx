@@ -12,7 +12,10 @@ import {
   Sparkles,
   BookOpen,
   X,
+  Download,
 } from 'lucide-react';
+import { useLanguage } from '../i18n/LanguageContext';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface BottomNavProps {
   currentTab: 'app' | 'history' | 'database' | 'benchmark' | 'specs' | 'doctor';
@@ -23,6 +26,7 @@ interface BottomNavProps {
   onOpenCGM?: () => void;
   onOpenCloudSync?: () => void;
   onOpenAutoTitration?: () => void;
+  onOpenInstallModal?: () => void;
 }
 
 export const BottomNav: React.FC<BottomNavProps> = ({
@@ -34,7 +38,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   onOpenCGM,
   onOpenCloudSync,
   onOpenAutoTitration,
+  onOpenInstallModal,
 }) => {
+  const { t, isRtl, language } = useLanguage();
   const [isToolsOpen, setIsToolsOpen] = useState(false);
 
   const isMedicalTab = currentTab === 'doctor';
@@ -53,7 +59,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
               <div className="flex items-center gap-2">
                 <Sliders className="w-5 h-5 text-emerald-600" />
-                <h3 className="font-extrabold text-slate-900 text-sm">Profil & Outils DT1</h3>
+                <h3 className="font-extrabold text-slate-900 text-sm">
+                  {language === 'ar' ? 'الملف الشخصي والأدوات' : 'Profil & Outils DT1'}
+                </h3>
               </div>
               <button
                 onClick={() => setIsToolsOpen(false)}
@@ -62,6 +70,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 <X className="w-4 h-4" />
               </button>
             </div>
+
+            {/* Language Selector for Mobile */}
+            <LanguageSwitcher variant="mobile" />
 
             <div className="grid grid-cols-2 gap-2.5 text-left">
               <button
@@ -73,9 +84,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               >
                 <div className="flex items-center gap-1.5 text-emerald-700 font-extrabold text-xs">
                   <Syringe className="w-4 h-4" />
-                  <span>Profil DT1</span>
+                  <span>{t('profile_btn')}</span>
                 </div>
-                <span className="text-[11px] text-slate-500">Ratios I:C & Cible</span>
+                <span className="text-[11px] text-slate-500">
+                  {language === 'ar' ? 'المعاملات والهدف' : 'Ratios I:C & Cible'}
+                </span>
               </button>
 
               {onOpenCGM && (
@@ -88,7 +101,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 >
                   <div className="flex items-center gap-1.5 text-blue-700 font-extrabold text-xs">
                     <Wifi className="w-4 h-4" />
-                    <span>Capteur CGM</span>
+                    <span>{t('cgm_btn')}</span>
                   </div>
                   <span className="text-[11px] text-slate-500">Dexcom / FreeStyle</span>
                 </button>
@@ -109,10 +122,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   currentTab === 'database' ? 'text-white' : 'text-slate-800'
                 }`}>
                   <Database className="w-4 h-4" />
-                  <span>Base tunisienne</span>
+                  <span>{t('nav_database')}</span>
                 </div>
                 <span className={`text-[11px] ${currentTab === 'database' ? 'text-emerald-100' : 'text-slate-500'}`}>
-                  200+ plats certifiés
+                  {language === 'ar' ? 'أكثر من 200 طبق' : '200+ plats certifiés'}
                 </span>
               </button>
 
@@ -126,9 +139,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 >
                   <div className="flex items-center gap-1.5 text-sky-700 font-extrabold text-xs">
                     <Cloud className="w-4 h-4" />
-                    <span>Cloud Sync</span>
+                    <span>{language === 'ar' ? 'مزامنة سحابية' : 'Cloud Sync'}</span>
                   </div>
-                  <span className="text-[11px] text-slate-500">Multi-appareils</span>
+                  <span className="text-[11px] text-slate-500">
+                    {language === 'ar' ? 'مزامنة الأجهزة' : 'Multi-appareils'}
+                  </span>
                 </button>
               )}
 
@@ -142,9 +157,11 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 >
                   <div className="flex items-center gap-1.5 text-teal-800 font-extrabold text-xs">
                     <FileText className="w-4 h-4" />
-                    <span>Rapport PDF</span>
+                    <span>{language === 'ar' ? 'تقرير PDF' : 'Rapport PDF'}</span>
                   </div>
-                  <span className="text-[11px] text-slate-500">Synthèse médecin</span>
+                  <span className="text-[11px] text-slate-500">
+                    {language === 'ar' ? 'ملخص للطبيب' : 'Synthèse médecin'}
+                  </span>
                 </button>
               )}
 
@@ -158,9 +175,29 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 >
                   <div className="flex items-center gap-1.5 text-violet-700 font-extrabold text-xs">
                     <Sparkles className="w-4 h-4" />
-                    <span>Auto-Titration</span>
+                    <span>{language === 'ar' ? 'المعايرة الذكية' : 'Auto-Titration'}</span>
                   </div>
-                  <span className="text-[11px] text-slate-500">Ajustement ratios</span>
+                  <span className="text-[11px] text-slate-500">
+                    {language === 'ar' ? 'تعديل النسب' : 'Ajustement ratios'}
+                  </span>
+                </button>
+              )}
+
+              {onOpenInstallModal && (
+                <button
+                  onClick={() => {
+                    setIsToolsOpen(false);
+                    onOpenInstallModal();
+                  }}
+                  className="p-3 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-700 text-white flex flex-col gap-1.5 shadow-md shadow-emerald-600/20 transition-transform active:scale-95 cursor-pointer col-span-2 sm:col-span-1"
+                >
+                  <div className="flex items-center gap-1.5 font-extrabold text-xs text-white">
+                    <Download className="w-4 h-4 text-emerald-200" />
+                    <span>{language === 'ar' ? 'تثبيت التطبيق (PWA)' : 'Installer l\'application (PWA)'}</span>
+                  </div>
+                  <span className="text-[11px] text-emerald-100">
+                    {language === 'ar' ? 'على الشاشة الرئيسية • يعمل دون إنترنت' : 'Sur écran d\'accueil • Hors-ligne'}
+                  </span>
                 </button>
               )}
             </div>
@@ -173,7 +210,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 }}
                 className="hover:text-emerald-700 cursor-pointer"
               >
-                Dataset 100
+                {language === 'ar' ? 'مجموعة التحقق (100 طبق)' : 'Dataset 100'}
               </button>
               <span>•</span>
               <button
@@ -183,7 +220,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 }}
                 className="hover:text-emerald-700 cursor-pointer"
               >
-                Specs Techniques
+                {language === 'ar' ? 'المواصفات الفنية' : 'Specs Techniques'}
               </button>
             </div>
           </div>
@@ -209,7 +246,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <div className={`p-1 rounded-lg ${currentTab === 'app' ? 'bg-emerald-50' : ''}`}>
               <Utensils className="w-5 h-5" />
             </div>
-            <span className="text-[10px] tracking-tight">Repas</span>
+            <span className="text-[10px] tracking-tight">
+              {language === 'ar' ? 'الوجبة' : 'Repas'}
+            </span>
           </button>
 
           {/* 2. Historique */}
@@ -230,7 +269,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                 </span>
               )}
             </div>
-            <span className="text-[10px] tracking-tight">Historique</span>
+            <span className="text-[10px] tracking-tight">
+              {language === 'ar' ? 'السجل' : 'Historique'}
+            </span>
           </button>
 
           {/* 3. Suivi Médical (Diabéto) */}
@@ -246,7 +287,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <div className={`p-1 rounded-lg ${isMedicalTab ? 'bg-teal-50' : ''}`}>
               <Stethoscope className="w-5 h-5" />
             </div>
-            <span className="text-[10px] tracking-tight">Médical</span>
+            <span className="text-[10px] tracking-tight">
+              {language === 'ar' ? 'طبي' : 'Médical'}
+            </span>
           </button>
 
           {/* 4. Profil & Outils */}
@@ -262,7 +305,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({
             <div className={`p-1 rounded-lg ${isToolsActive || isToolsOpen ? 'bg-emerald-50' : ''}`}>
               <Sliders className="w-5 h-5" />
             </div>
-            <span className="text-[10px] tracking-tight">Outils</span>
+            <span className="text-[10px] tracking-tight">
+              {language === 'ar' ? 'أدوات' : 'Outils'}
+            </span>
           </button>
         </div>
       </nav>

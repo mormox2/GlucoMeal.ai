@@ -19,6 +19,7 @@ import { AutoTitrationModal } from './components/AutoTitrationModal';
 import { CloudSyncModal } from './components/CloudSyncModal';
 import { DoctorPortalView } from './components/DoctorPortalView';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
+import { PWAInstallModal } from './components/PWAInstallModal';
 import { PostPrandialReminderBanner } from './components/PostPrandialReminderBanner';
 import { BottomNav } from './components/BottomNav';
 import { LandingPageView } from './components/LandingPageView';
@@ -65,8 +66,19 @@ export default function App() {
   const [isCGMModalOpen, setIsCGMModalOpen] = useState(false);
   const [isAutoTitrationOpen, setIsAutoTitrationOpen] = useState(false);
   const [isCloudSyncOpen, setIsCloudSyncOpen] = useState(false);
+  const [isPWAInstallModalOpen, setIsPWAInstallModalOpen] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [cgmConfig, setCgmConfig] = useState<CGMConfig>(() => loadCGMConfig());
   const [postPrandialMealTarget, setPostPrandialMealTarget] = useState<AnalyzedMeal | null>(null);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
 
   // Saved Meals persistence with LocalStorage & Cloud Sync capability
   const [savedMeals, setSavedMeals] = useState<AnalyzedMeal[]>(() => loadSavedMeals());
@@ -386,6 +398,7 @@ export default function App() {
           setAuthInitialMode('login');
           setViewScreen('auth');
         }}
+        onOpenInstallModal={() => setIsPWAInstallModalOpen(true)}
         userProfile={userProfile}
       />
 
@@ -528,6 +541,7 @@ export default function App() {
           onOpenCGM={() => setIsCGMModalOpen(true)}
           onOpenCloudSync={() => setIsCloudSyncOpen(true)}
           onOpenAutoTitration={() => setIsAutoTitrationOpen(true)}
+          onOpenInstallModal={() => setIsPWAInstallModalOpen(true)}
         />
       )}
 
@@ -610,6 +624,16 @@ export default function App() {
         onAnalyzeBarcode={handleAnalyzeBarcode}
         onAnalyzeNutritionLabel={handleAnalyzeLabel}
         isAnalyzing={isAnalyzing}
+      />
+
+      {/* PWA Install Instructions & 1-Click Action Modal */}
+      <PWAInstallModal
+        isOpen={isPWAInstallModalOpen}
+        onClose={() => setIsPWAInstallModalOpen(false)}
+        deferredPrompt={deferredPrompt}
+        onInstalledSuccess={() => {
+          setIsPWAInstallModalOpen(false);
+        }}
       />
     </div>
   );

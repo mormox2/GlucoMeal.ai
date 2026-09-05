@@ -7,6 +7,7 @@ import {
   Trash2,
   CheckCircle2,
   ArrowLeft,
+  ArrowRight,
   Sparkles,
   Info,
   Lightbulb,
@@ -47,6 +48,7 @@ import { recordPatientPortionCorrection, getLearnedPortionForFood } from '../uti
 import { fetchCurrentCGMReading } from '../utils/cgmService';
 import { scheduleH2Reminder } from '../utils/h2Reminder';
 import { HealthySubstitutionsCard } from './HealthySubstitutionsCard';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface PortionAdjustmentViewProps {
   meal: AnalyzedMeal;
@@ -65,6 +67,9 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
   onCancel,
   onOpenProfileModal,
 }) => {
+  const { t, language, isRtl } = useLanguage();
+  const ArrowIcon = isRtl ? ArrowRight : ArrowLeft;
+
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [foodSearchQuery, setFoodSearchQuery] = useState('');
   const [appliedHabitPreset, setAppliedHabitPreset] = useState(false);
@@ -307,7 +312,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 text-xs font-bold border border-emerald-300">
           <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse" />
-          Confiance élevée (🟢)
+          {t('confidence_high')}
         </span>
       );
     }
@@ -315,14 +320,14 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-bold border border-amber-300">
           <span className="w-2 h-2 rounded-full bg-amber-600" />
-          Confiance moyenne (🟡)
+          {t('confidence_medium')}
         </span>
       );
     }
     return (
       <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-100 text-rose-800 text-xs font-bold border border-rose-300">
         <span className="w-2 h-2 rounded-full bg-rose-600" />
-        Confiance faible (🔴) — Vérifiez les portions
+        {t('confidence_low')}
       </span>
     );
   };
@@ -335,8 +340,8 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           onClick={onCancel}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
         >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Changer de repas</span>
+          <ArrowIcon className="w-4 h-4" />
+          <span>{t('change_meal')}</span>
         </button>
         <div className="flex items-center gap-2.5">
           <button
@@ -350,10 +355,10 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             title="Mode Grand Affichage / Contraste Élevé pour tremblements ou vue troublée"
           >
             {isHighContrastMode ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-            <span>{isHighContrastMode ? 'Contraste Standard' : 'Grand Contraste'}</span>
+            <span>{isHighContrastMode ? t('contrast_toggle_on') : t('contrast_toggle_off')}</span>
           </button>
           <span className="text-xs font-medium text-slate-400 hidden sm:inline">
-            Étape 2 / 2
+            {t('step_indicator')}
           </span>
         </div>
       </div>
@@ -367,18 +372,18 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <span className="text-xs font-bold tracking-wider uppercase text-slate-500 block mb-1">
-              Estimation des glucides du repas
+              {t('carbs_estimation')}
             </span>
             <div className="flex items-baseline gap-2">
               <span className="text-4xl sm:text-5xl font-black text-emerald-800 tracking-tight">
                 ≈ {meal.total_carbs} g
               </span>
               <span className="text-sm font-semibold text-slate-500">
-                de glucides totaux
+                {t('total_carbs_label')}
               </span>
             </div>
             <h2 className="text-base font-bold text-slate-800 mt-1">
-              {meal.meal_name} {meal.meal_name_ar && <span className="text-xs text-slate-500 font-normal">({meal.meal_name_ar})</span>}
+              {language === 'ar' ? (meal.meal_name_ar || meal.meal_name) : meal.meal_name} {language === 'ar' && meal.meal_name_ar ? <span className="text-xs text-slate-500 font-normal">({meal.meal_name})</span> : meal.meal_name_ar ? <span className="text-xs text-slate-500 font-normal">({meal.meal_name_ar})</span> : null}
             </h2>
 
             {/* Index Glycémique et Charge Glycémique du repas */}
@@ -436,7 +441,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-              Aliments détectés ({meal.items.length})
+              {language === 'ar' ? `الأطعمة المكتشفة (${meal.items.length})` : `Aliments détectés (${meal.items.length})`}
             </h3>
             <button
               type="button"
@@ -446,18 +451,18 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               {isIngredientsCompact ? (
                 <>
                   <Maximize2 className="w-3 h-3 text-slate-500" />
-                  <span>Détaillé</span>
+                  <span>{language === 'ar' ? 'مفصل' : 'Détaillé'}</span>
                 </>
               ) : (
                 <>
                   <Minimize2 className="w-3 h-3 text-slate-500" />
-                  <span>Compact</span>
+                  <span>{language === 'ar' ? 'موجز' : 'Compact'}</span>
                 </>
               )}
             </button>
           </div>
           <span className="text-xs text-slate-500">
-            Ajustez les grammes si nécessaire
+            {language === 'ar' ? 'عدّل الغرامات إذا لزم الأمر' : 'Ajustez les grammes si nécessaire'}
           </span>
         </div>
 
@@ -479,34 +484,46 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-slate-900 text-sm">
-                        {item.name_fr}
+                        {language === 'ar' ? (item.name_ar || item.name_fr) : item.name_fr}
                       </span>
-                      {item.name_ar && (
-                        <span className="text-xs text-slate-400 font-medium">
-                          {item.name_ar}
-                        </span>
+                      {language === 'ar' ? (
+                        item.name_ar && item.name_fr ? (
+                          <span className="text-xs text-slate-400 font-medium">
+                            ({item.name_fr})
+                          </span>
+                        ) : null
+                      ) : (
+                        item.name_ar && (
+                          <span className="text-xs text-slate-400 font-medium">
+                            {item.name_ar}
+                          </span>
+                        )
                       )}
                       {item.confidence === 'high' ? (
-                        <span className="w-2 h-2 rounded-full bg-emerald-500" title="Détection visuelle nette" />
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" title={language === 'ar' ? 'تعرف بصري دقيق' : 'Détection visuelle nette'} />
                       ) : item.confidence === 'medium' ? (
-                        <span className="w-2 h-2 rounded-full bg-amber-500" title="Plat composé / sauce" />
+                        <span className="w-2 h-2 rounded-full bg-amber-500" title={language === 'ar' ? 'طبق مركب أو صلصة' : 'Plat composé / sauce'} />
                       ) : (
-                        <span className="w-2 h-2 rounded-full bg-rose-500" title="Élément incertain" />
+                        <span className="w-2 h-2 rounded-full bg-rose-500" title={language === 'ar' ? 'تقدير تقريبي' : 'Élément incertain'} />
                       )}
                     </div>
 
                     <div className="flex items-center gap-2 text-xs text-slate-500 mt-0.5">
-                      <span>{item.carbs_per_100g} g glucides / 100 g</span>
+                      <span>
+                        {language === 'ar' ? `${item.carbs_per_100g} غ كربوهيدرات / 100 غ` : `${item.carbs_per_100g} g glucides / 100 g`}
+                      </span>
                       <span>•</span>
                       <span className="font-bold text-emerald-700">
-                        ≈ {item.calculated_carbs} g apportés
+                        {language === 'ar' ? `≈ ${item.calculated_carbs} غ كربوهيدرات` : `≈ ${item.calculated_carbs} g apportés`}
                       </span>
                     </div>
 
                     {/* Learning feedback chip */}
                     {!isIngredientsCompact && isCorrected && (
                       <div className="mt-1 text-[11px] text-teal-800 font-medium bg-teal-50 px-2 py-0.5 rounded-md inline-block border border-teal-200/60">
-                        ✏️ Ajusté : IA {item.original_ai_weight_g || item.estimated_weight_g} g → Vous {currentWeight} g (Apprentissage enregistré)
+                        {language === 'ar'
+                          ? `✏️ معدل: الذكاء الاصطناعي ${item.original_ai_weight_g || item.estimated_weight_g} غ ← أنت ${currentWeight} غ (حُفظ في التعلم النشط)`
+                          : `✏️ Ajusté : IA ${item.original_ai_weight_g || item.estimated_weight_g} g → Vous ${currentWeight} g (Apprentissage enregistré)`}
                       </div>
                     )}
                   </div>
@@ -516,14 +533,14 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                     <button
                       onClick={() => handleAdjustWeight(item.id, -10)}
                       className="px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer transition-colors"
-                      title="Diminuer de 10 g"
+                      title={language === 'ar' ? 'إنقاص 10 غ' : 'Diminuer de 10 g'}
                     >
-                      −10 g
+                      −10 {language === 'ar' ? 'غ' : 'g'}
                     </button>
                     <button
                       onClick={() => handleAdjustWeight(item.id, -5)}
                       className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center cursor-pointer transition-colors"
-                      title="Diminuer de 5 g"
+                      title={language === 'ar' ? 'إنقاص 5 غ' : 'Diminuer de 5 g'}
                     >
                       −
                     </button>
@@ -536,29 +553,29 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                         onChange={(e) => handleDirectWeightChange(item.id, parseInt(e.target.value, 10))}
                         className="w-12 bg-transparent text-center font-extrabold text-emerald-950 text-sm outline-none"
                       />
-                      <span className="text-xs font-semibold text-emerald-800">g</span>
+                      <span className="text-xs font-semibold text-emerald-800">{language === 'ar' ? 'غ' : 'g'}</span>
                     </div>
 
                     <button
                       onClick={() => handleAdjustWeight(item.id, 5)}
                       className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center cursor-pointer transition-colors"
-                      title="Augmenter de 5 g"
+                      title={language === 'ar' ? 'زيادة 5 غ' : 'Augmenter de 5 g'}
                     >
                       +
                     </button>
                     <button
                       onClick={() => handleAdjustWeight(item.id, 10)}
                       className="px-2 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold cursor-pointer transition-colors"
-                      title="Augmenter de 10 g"
+                      title={language === 'ar' ? 'زيادة 10 غ' : 'Augmenter de 10 g'}
                     >
-                      +10 g
+                      +10 {language === 'ar' ? 'غ' : 'g'}
                     </button>
 
                     {/* Delete item button */}
                     <button
                       onClick={() => handleDeleteItem(item.id)}
                       className="w-8 h-8 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 flex items-center justify-center ml-1 transition-colors cursor-pointer"
-                      title="Supprimer cet aliment"
+                      title={language === 'ar' ? 'حذف هذا الصنف' : 'Supprimer cet aliment'}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -576,7 +593,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           className="mt-3.5 w-full py-3 px-4 rounded-2xl border-2 border-dashed border-slate-300 hover:border-emerald-500 hover:bg-emerald-50/40 text-slate-600 hover:text-emerald-800 text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer"
         >
           <PlusCircle className="w-4 h-4" />
-          <span>Ajouter un aliment manquant (Pain, boisson, fruit, dessert...)</span>
+          <span>{t('add_ingredient')}</span>
         </button>
       </div>
 
@@ -605,10 +622,12 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             </div>
             <div>
               <h3 className="font-extrabold text-sm text-white flex items-center gap-1.5">
-                Calculateur de Bolus Personnalisé (ITF)
+                {t('bolus_calculator_title')}
               </h3>
               <p className="text-[10px] text-slate-400">
-                Profil DT1 actif : 1 UI pour {userProfile?.icRatios?.[selectedSlot] ?? 10} g de glucides
+                {language === 'ar'
+                  ? `الملف العلاجي النشط: 1 وحدة لكل ${userProfile?.icRatios?.[selectedSlot] ?? 10} غ من الكربوهيدرات`
+                  : `Profil DT1 actif : 1 UI pour ${userProfile?.icRatios?.[selectedSlot] ?? 10} g de glucides`}
               </p>
             </div>
           </div>
@@ -620,7 +639,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             title="Modifier mes ratios et sensibilités"
           >
             <Settings className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Mon profil DT1</span>
+            <span>{t('my_profile_btn')}</span>
           </button>
         </div>
 
@@ -631,31 +650,31 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               {userProfile.ramadanMode ? (
                 <>
                   <Moon className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>Créneau de rupture / veille (Mode Ramadan actif) :</span>
+                  <span>{t('ramadan_time_label')}</span>
                 </>
               ) : (
-                <span>Moment du repas :</span>
+                <span>{t('meal_time_label')}</span>
               )}
             </label>
             {userProfile.ramadanMode && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-400/30">
-                🌙 Jeûne
+                {t('ramadan_badge')}
               </span>
             )}
           </div>
           <div className="grid grid-cols-4 gap-1.5 text-xs">
             {(userProfile.ramadanMode
               ? [
-                  { id: 'iftar', label: '🌙 Iftar', desc: 'Rupture', ratio: userProfile?.icRatios?.iftar ?? 8 },
-                  { id: 'sahriya', label: '🍵 Sahriya', desc: 'Soirée', ratio: userProfile?.icRatios?.sahriya ?? 9 },
-                  { id: 'shor', label: '🌅 Shor', desc: 'Aube', ratio: userProfile?.icRatios?.shor ?? 12 },
-                  { id: 'snack', label: 'Collation', desc: 'Nuit', ratio: userProfile?.icRatios?.snack ?? 10 },
+                  { id: 'iftar', label: language === 'ar' ? '🌙 الإفطار' : '🌙 Iftar', desc: language === 'ar' ? 'شق الفطر' : 'Rupture', ratio: userProfile?.icRatios?.iftar ?? 8 },
+                  { id: 'sahriya', label: language === 'ar' ? '🍵 السهرية' : '🍵 Sahriya', desc: language === 'ar' ? 'سهرة' : 'Soirée', ratio: userProfile?.icRatios?.sahriya ?? 9 },
+                  { id: 'shor', label: language === 'ar' ? '🌅 السحور' : '🌅 Shor', desc: language === 'ar' ? 'أذان الفجر' : 'Aube', ratio: userProfile?.icRatios?.shor ?? 12 },
+                  { id: 'snack', label: language === 'ar' ? 'وجبة خفيفة' : 'Collation', desc: language === 'ar' ? 'لمجة' : 'Nuit', ratio: userProfile?.icRatios?.snack ?? 10 },
                 ]
               : [
-                  { id: 'morning', label: 'Matin', desc: 'Petit-déj', ratio: userProfile?.icRatios?.morning ?? 8 },
-                  { id: 'lunch', label: 'Midi', desc: 'Déjeuner', ratio: userProfile?.icRatios?.lunch ?? 10 },
-                  { id: 'dinner', label: 'Soir', desc: 'Dîner', ratio: userProfile?.icRatios?.dinner ?? 12 },
-                  { id: 'snack', label: 'Collation', desc: 'Goûter', ratio: userProfile?.icRatios?.snack ?? 10 },
+                  { id: 'morning', label: language === 'ar' ? 'الصباح' : 'Matin', desc: language === 'ar' ? 'فطور الصباح' : 'Petit-déj', ratio: userProfile?.icRatios?.morning ?? 8 },
+                  { id: 'lunch', label: language === 'ar' ? 'منتصف النهار' : 'Midi', desc: language === 'ar' ? 'الغداء' : 'Déjeuner', ratio: userProfile?.icRatios?.lunch ?? 10 },
+                  { id: 'dinner', label: language === 'ar' ? 'المساء' : 'Soir', desc: language === 'ar' ? 'العشاء' : 'Dîner', ratio: userProfile?.icRatios?.dinner ?? 12 },
+                  { id: 'snack', label: language === 'ar' ? 'وجبة خفيفة' : 'Collation', desc: language === 'ar' ? 'لمجة' : 'Goûter', ratio: userProfile?.icRatios?.snack ?? 10 },
                 ]
             ).map((slot) => (
               <button
@@ -672,7 +691,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               >
                 <span className="block text-xs font-semibold">{slot.label}</span>
                 <span className="text-[10px] text-slate-300/80 block font-normal">
-                  1 UI / {slot.ratio}g
+                  {language === 'ar' ? `1 و / ${slot.ratio}غ` : `1 UI / ${slot.ratio}g`}
                 </span>
               </button>
             ))}
@@ -684,21 +703,21 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
               <Dumbbell className="w-3.5 h-3.5 text-amber-400" />
-              Activité physique prévue post-repas :
+              {t('physical_activity')}
             </span>
             {bolusCalculation.activityReductionPct ? (
               <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-400/30 animate-in fade-in">
-                -{bolusCalculation.activityReductionPct}% sur bolus repas (-{bolusCalculation.activityReductionUnits} UI)
+                -{bolusCalculation.activityReductionPct}% ({bolusCalculation.activityReductionUnits} {language === 'ar' ? 'وحدة' : 'UI'})
               </span>
             ) : null}
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
             {[
-              { id: 'none', label: 'Repos / Sédentaire', sub: '0% de réduction', icon: '🛋️' },
-              { id: 'light_walk', label: 'Marche légère', sub: '15-30 min (-15%)', icon: '🚶' },
-              { id: 'moderate', label: 'Sport modéré', sub: '30-45 min (-30%)', icon: '🏃' },
-              { id: 'intense', label: 'Sport intense', sub: '> 45 min (-50%)', icon: '⚡' },
+              { id: 'none', label: t('activity_none'), sub: t('activity_none_desc'), icon: '🛋️' },
+              { id: 'light_walk', label: t('activity_walk'), sub: t('activity_walk_desc'), icon: '🚶' },
+              { id: 'moderate', label: t('activity_moderate'), sub: t('activity_moderate_desc'), icon: '🏃' },
+              { id: 'intense', label: t('activity_intense'), sub: t('activity_intense_desc'), icon: '⚡' },
             ].map((act) => (
               <button
                 key={act.id}
@@ -724,10 +743,12 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             <div>
               <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
                 <Target className="w-3.5 h-3.5 text-blue-400" />
-                Glycémie pré-prandiale (optionnelle)
+                {t('preprandial_glucose_title')}
               </span>
               <p className="text-[11px] text-slate-400">
-                Cible visée : {userProfile.targetGlucose} {userProfile.glucoseUnit} • ISF : 1 UI pour {userProfile.isf} {userProfile.glucoseUnit}
+                {language === 'ar'
+                  ? `الهدف: ${userProfile.targetGlucose} ${userProfile.glucoseUnit} • معامل الحساسية: 1 وحدة لكل ${userProfile.isf} ${userProfile.glucoseUnit}`
+                  : `Cible visée : ${userProfile.targetGlucose} ${userProfile.glucoseUnit} • ISF : 1 UI pour ${userProfile.isf} ${userProfile.glucoseUnit}`}
               </p>
             </div>
 
@@ -740,7 +761,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                 title="Lire la glycémie actuelle depuis le capteur CGM"
               >
                 <Wifi className={`w-3.5 h-3.5 ${isReadingCGM ? 'animate-spin' : ''}`} />
-                <span>{isReadingCGM ? '...' : 'CGM'}</span>
+                <span>{isReadingCGM ? '...' : t('cgm_quick_read')}</span>
               </button>
               <input
                 type="number"
@@ -800,25 +821,25 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         <div className="grid grid-cols-3 gap-2.5 text-center">
           <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
             <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
-              Bolus Repas
+              {language === 'ar' ? 'جرعة الوجبة' : 'Bolus Repas'}
             </span>
             <span className={`font-black text-white block ${isHighContrastMode ? 'text-xl' : 'text-lg'}`}>
-              {bolusCalculation.mealBolus} UI
+              {bolusCalculation.mealBolus} {language === 'ar' ? 'وحدة' : 'UI'}
             </span>
             <span className="text-[10px] text-slate-400">
-              {meal.total_carbs}g ÷ {bolusCalculation.icRatio}
+              {meal.total_carbs}{language === 'ar' ? 'غ' : 'g'} ÷ {bolusCalculation.icRatio}
             </span>
           </div>
 
           <div className="p-3 rounded-2xl bg-white/5 border border-white/10">
             <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
-              Correction
+              {language === 'ar' ? 'جرعة التصحيح' : 'Correction'}
             </span>
             <span className={`font-black text-blue-300 block ${isHighContrastMode ? 'text-xl' : 'text-lg'}`}>
-              +{bolusCalculation.correctionBolus} UI
+              +{bolusCalculation.correctionBolus} {language === 'ar' ? 'وحدة' : 'UI'}
             </span>
             <span className="text-[10px] text-slate-400">
-              {bolusCalculation.correctionBolus > 0 ? 'ajustement cible' : 'aucune'}
+              {bolusCalculation.correctionBolus > 0 ? (language === 'ar' ? 'تعديل للهدف' : 'ajustement cible') : (language === 'ar' ? 'لا يوجد' : 'aucune')}
             </span>
           </div>
 
@@ -830,17 +851,17 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             <span className={`text-[10px] uppercase font-extrabold block mb-0.5 ${
               isHighContrastMode ? 'text-slate-900' : 'text-emerald-100'
             }`}>
-              Bolus Total
+              {language === 'ar' ? 'الجرعة الإجمالية' : 'Bolus Total'}
             </span>
             <span className={`font-black block tracking-tight ${
               isHighContrastMode ? 'text-2xl text-slate-950 font-black' : 'text-xl'
             }`}>
-              {bolusCalculation.totalBolus} UI
+              {bolusCalculation.totalBolus} {language === 'ar' ? 'وحدة' : 'UI'}
             </span>
             <span className={`text-[10px] ${
               isHighContrastMode ? 'text-slate-800 font-bold' : 'text-emerald-100/90'
             }`}>
-              arrondi {userProfile.roundingStep} UI
+              {language === 'ar' ? `تقريب ${userProfile.roundingStep} وحدة` : `arrondi ${userProfile.roundingStep} UI`}
             </span>
           </div>
         </div>
@@ -850,21 +871,29 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           <div className="mt-4 p-3.5 rounded-2xl bg-indigo-950/70 border border-indigo-500/40 text-left animate-in fade-in">
             <div className="flex items-center gap-2 mb-1 text-indigo-300 font-extrabold text-xs">
               <Waves className="w-4 h-4 text-indigo-400" />
-              <span>Suggestion Bolus Double-Vague (Dual-Wave) :</span>
+              <span>{t('dual_wave_title')}</span>
             </div>
             <p className="text-[11px] text-slate-300 mb-2 leading-relaxed">
               {dualWaveSuggestion.reason}
             </p>
             <div className="grid grid-cols-2 gap-2 text-center text-xs">
               <div className="p-2 rounded-xl bg-white/10 border border-white/10">
-                <span className="text-[10px] text-slate-400 block uppercase font-bold">Immédiat (60%)</span>
-                <span className="text-sm font-black text-white">{dualWaveSuggestion.immediate_units} UI</span>
-                <span className="text-[10px] text-indigo-300 block">au début du repas</span>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">
+                  {language === 'ar' ? 'فوري (60%)' : 'Immédiat (60%)'}
+                </span>
+                <span className="text-sm font-black text-white">{dualWaveSuggestion.immediate_units} {language === 'ar' ? 'وحدة' : 'UI'}</span>
+                <span className="text-[10px] text-indigo-300 block">
+                  {language === 'ar' ? 'في بداية الوجبة' : 'au début du repas'}
+                </span>
               </div>
               <div className="p-2 rounded-xl bg-white/10 border border-white/10">
-                <span className="text-[10px] text-slate-400 block uppercase font-bold">Étalé (40%)</span>
-                <span className="text-sm font-black text-indigo-200">{dualWaveSuggestion.extended_units} UI</span>
-                <span className="text-[10px] text-indigo-300 block">sur {dualWaveSuggestion.duration_hours}h</span>
+                <span className="text-[10px] text-slate-400 block uppercase font-bold">
+                  {language === 'ar' ? 'ممتد (40%)' : 'Étalé (40%)'}
+                </span>
+                <span className="text-sm font-black text-indigo-200">{dualWaveSuggestion.extended_units} {language === 'ar' ? 'وحدة' : 'UI'}</span>
+                <span className="text-[10px] text-indigo-300 block">
+                  {language === 'ar' ? `على مدى ${dualWaveSuggestion.duration_hours} ساعات` : `sur ${dualWaveSuggestion.duration_hours}h`}
+                </span>
               </div>
             </div>
           </div>
@@ -875,7 +904,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
       <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/80 text-xs text-amber-900 mb-6 flex items-start gap-2.5">
         <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
         <div>
-          <strong>Rappel médical important :</strong> Cette proposition de bolus est basée sur vos ratios déclarés. Le patient diabétique reste le décisionnaire final de l'injection en fonction de son activité physique et contexte clinique.
+          <strong>{t('medical_disclaimer_title')}</strong> {t('medical_disclaimer_text')}
         </div>
       </div>
 
@@ -885,7 +914,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           onClick={onCancel}
           className="w-full sm:w-1/3 py-3.5 px-4 rounded-2xl border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
         >
-          ✏️ Modifier le repas
+          {t('modify_meal')}
         </button>
 
         <button
@@ -900,8 +929,12 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           <CheckCircle2 className="w-5 h-5" />
           <span>
             {isHypoglycemia
-              ? `Valider après resucrage (≈ ${meal.total_carbs} g • ${bolusCalculation.totalBolus} UI)`
-              : `Valider le repas (≈ ${meal.total_carbs} g • ${bolusCalculation.totalBolus} UI)`}
+              ? (language === 'ar'
+                  ? `اعتماد بعد تصحيح هبوط السكر (≈ ${meal.total_carbs} غ • ${bolusCalculation.totalBolus} وحدة)`
+                  : `Valider après resucrage (≈ ${meal.total_carbs} g • ${bolusCalculation.totalBolus} UI)`)
+              : (language === 'ar'
+                  ? `اعتماد الوجبة والجرعة (≈ ${meal.total_carbs} غ • ${bolusCalculation.totalBolus} وحدة)`
+                  : `Valider le repas (≈ ${meal.total_carbs} g • ${bolusCalculation.totalBolus} UI)`)}
           </span>
         </button>
       </div>
@@ -913,8 +946,10 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
             <div className="bg-emerald-50/90 border border-emerald-200/80 px-2.5 py-1 rounded-xl">
-              <span className="text-[9px] uppercase font-extrabold text-emerald-800 block leading-tight">Glucides</span>
-              <span className="text-sm font-black text-emerald-950 block">≈ {meal.total_carbs} g</span>
+              <span className="text-[9px] uppercase font-extrabold text-emerald-800 block leading-tight">
+                {language === 'ar' ? 'الكربوهيدرات' : 'Glucides'}
+              </span>
+              <span className="text-sm font-black text-emerald-950 block">≈ {meal.total_carbs} {language === 'ar' ? 'غ' : 'g'}</span>
             </div>
             <div className={`px-2.5 sm:px-3 py-1 rounded-xl border shadow-xs ${
               isHighContrastMode
@@ -924,12 +959,12 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               <span className={`text-[9px] uppercase font-extrabold block leading-tight ${
                 isHighContrastMode ? 'text-slate-900' : 'text-slate-400'
               }`}>
-                Bolus
+                {language === 'ar' ? 'الجرعة' : 'Bolus'}
               </span>
               <span className={`text-sm font-black block ${
                 isHighContrastMode ? 'text-slate-950 text-base font-black' : 'text-emerald-400'
               }`}>
-                {bolusCalculation.totalBolus} UI
+                {bolusCalculation.totalBolus} {language === 'ar' ? 'وحدة' : 'UI'}
               </span>
             </div>
           </div>
@@ -938,7 +973,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             {isHypoglycemia && (
               <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-100 px-2 py-1 rounded-lg">
                 <AlertTriangle className="w-3.5 h-3.5" />
-                Resucrage requis
+                {language === 'ar' ? 'يلزم تصحيح هبوط السكر' : 'Resucrage requis'}
               </span>
             )}
             <button
@@ -951,7 +986,11 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               }`}
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>{isHypoglycemia ? 'Valider (après resucrage)' : 'Valider le repas'}</span>
+              <span>
+                {isHypoglycemia
+                  ? (language === 'ar' ? 'اعتماد (بعد تصحيح الهبوط)' : 'Valider (après resucrage)')
+                  : (language === 'ar' ? 'اعتماد الوجبة' : 'Valider le repas')}
+              </span>
             </button>
           </div>
         </div>
@@ -965,7 +1004,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               <div className="flex items-center gap-2">
                 <PlusCircle className="w-5 h-5 text-emerald-600" />
                 <h3 className="text-sm font-bold text-slate-900">
-                  Ajouter un aliment tunisien certifié
+                  {language === 'ar' ? 'إضافة صنف غذائي تونسي معتمد' : 'Ajouter un aliment tunisien certifié'}
                 </h3>
               </div>
               <button
@@ -978,13 +1017,13 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
 
             <div className="p-4 border-b border-slate-100">
               <div className="relative">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <Search className={`w-4 h-4 text-slate-400 absolute ${isRtl ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2`} />
                 <input
                   type="text"
-                  placeholder="Rechercher : pain, baguette, tabouna, couscous..."
+                  placeholder={language === 'ar' ? 'بحث: خبز، طابونة، كسكسي، بريك، مقرونة...' : 'Rechercher : pain, baguette, tabouna, couscous...'}
                   value={foodSearchQuery}
                   onChange={(e) => setFoodSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-emerald-500"
+                  className={`w-full ${isRtl ? 'pr-9 pl-3' : 'pl-9 pr-3'} py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-emerald-500`}
                   autoFocus
                 />
               </div>
@@ -999,14 +1038,16 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                 >
                   <div>
                     <h4 className="text-xs font-bold text-slate-900">
-                      {food.name_fr} {food.name_ar && <span className="text-slate-500 font-normal">({food.name_ar})</span>}
+                      {language === 'ar' ? (food.name_ar || food.name_fr) : food.name_fr} {language === 'ar' ? (food.name_ar && food.name_fr && <span className="text-slate-500 font-normal">({food.name_fr})</span>) : (food.name_ar && <span className="text-slate-500 font-normal">({food.name_ar})</span>)}
                     </h4>
                     <span className="text-[11px] text-slate-500">
-                      Portion type : {food.default_portion_g} g • {food.carbs_per_100g} g glucides / 100 g
+                      {language === 'ar'
+                        ? `الحصة النمطية: ${food.default_portion_g} غ • ${food.carbs_per_100g} غ كربوهيدرات / 100 غ`
+                        : `Portion type : ${food.default_portion_g} g • ${food.carbs_per_100g} g glucides / 100 g`}
                     </span>
                   </div>
                   <span className="text-xs font-bold text-emerald-700 bg-emerald-100/70 px-2 py-1 rounded-md">
-                    +{Math.round((food.default_portion_g * food.carbs_per_100g) / 100)} g
+                    +{Math.round((food.default_portion_g * food.carbs_per_100g) / 100)} {language === 'ar' ? 'غ' : 'g'}
                   </span>
                 </div>
               ))}

@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, BookOpen, Database, Sparkles, History, ShieldAlert, Settings, Syringe, FileText, Wifi, Cloud, Stethoscope, Heart, User, Home, MoreHorizontal, ChevronDown, Check } from 'lucide-react';
+import { Camera, BookOpen, Database, Sparkles, History, ShieldAlert, Settings, Syringe, FileText, Wifi, Cloud, Stethoscope, Heart, User, Home, MoreHorizontal, ChevronDown, Check, Download, Smartphone } from 'lucide-react';
 import { UserProfileDT1 } from '../types';
+import { useLanguage } from '../i18n/LanguageContext';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface HeaderProps {
   currentTab: 'app' | 'history' | 'database' | 'benchmark' | 'specs' | 'doctor';
@@ -12,6 +14,7 @@ interface HeaderProps {
   onOpenCloudSync?: () => void;
   onOpenLanding?: () => void;
   onOpenAuth?: () => void;
+  onOpenInstallModal?: () => void;
   userProfile?: UserProfileDT1;
 }
 
@@ -25,8 +28,10 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCloudSync,
   onOpenLanding,
   onOpenAuth,
+  onOpenInstallModal,
   userProfile,
 }) => {
+  const { t, isRtl, language } = useLanguage();
   const [isTabletMenuOpen, setIsTabletMenuOpen] = useState(false);
   const tabletMenuRef = useRef<HTMLDivElement>(null);
 
@@ -41,7 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   const isChildProfile = userProfile?.accountType === 'parent' || !!userProfile?.childProfile;
-  const childName = userProfile?.childProfile?.childName || 'Enfant DT1';
+  const childName = userProfile?.childProfile?.childName || (language === 'ar' ? 'الطفل السكري' : 'Enfant DT1');
 
   const isToolTabActive = ['database', 'benchmark', 'specs'].includes(currentTab);
 
@@ -65,11 +70,11 @@ export const Header: React.FC<HeaderProps> = ({
                     GlucoMeal<span className="text-emerald-600">.AI</span>
                   </span>
                   <span className="px-1.5 py-0.2 text-[9px] font-bold rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
-                    Clinique
+                    {t('clinical_badge')}
                   </span>
                 </div>
                 <p className="text-[10px] sm:text-[11px] text-slate-500 font-medium hidden sm:block">
-                  Glucides & Bolus • Diabète Type 1
+                  {t('app_subtitle')}
                 </p>
               </div>
             </div>
@@ -79,12 +84,12 @@ export const Header: React.FC<HeaderProps> = ({
               <div
                 onClick={onOpenProfileModal}
                 className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-900 text-xs font-bold cursor-pointer hover:bg-rose-100 transition-colors shrink-0"
-                title="Profil Enfant DT1 géré par un parent"
+                title={t('parent_badge')}
               >
                 <Heart className="w-3.5 h-3.5 text-rose-600 fill-rose-600" />
                 <span className="max-w-[110px] sm:max-w-none truncate">{childName}</span>
                 <span className="text-[10px] font-mono bg-rose-200/80 px-1.5 py-0.2 rounded text-rose-950">
-                  {userProfile?.roundingStep === 0.5 ? '0.5 U' : 'Pompe'}
+                  {userProfile?.roundingStep === 0.5 ? '0.5 U' : (language === 'ar' ? 'مضخة' : 'Pompe')}
                 </span>
               </div>
             ) : null}
@@ -102,7 +107,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             >
               <Camera className="w-3.5 h-3.5" />
-              <span>Estimer</span>
+              <span>{t('nav_app')}</span>
             </button>
 
             <button
@@ -115,7 +120,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             >
               <History className="w-3.5 h-3.5" />
-              <span>Historique</span>
+              <span>{t('nav_history')}</span>
               {activeMealCount > 0 && (
                 <span className="w-4 h-4 rounded-full bg-emerald-700 text-white text-[10px] flex items-center justify-center font-bold">
                   {activeMealCount}
@@ -133,7 +138,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             >
               <Stethoscope className="w-3.5 h-3.5" />
-              <span>Diabéto</span>
+              <span>{t('nav_doctor')}</span>
             </button>
 
             {/* Tablet "Outils DT1" Dropdown Menu */}
@@ -147,28 +152,28 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                <span>Outils</span>
+                <span>{language === 'ar' ? 'أدوات' : 'Outils'}</span>
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isTabletMenuOpen ? 'rotate-180' : ''}`} />
               </button>
 
               {isTabletMenuOpen && (
-                <div className="absolute left-0 mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in slide-in-from-top-2">
+                <div className={`absolute ${isRtl ? 'right-0' : 'left-0'} mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-50 animate-in fade-in slide-in-from-top-2`}>
                   <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    Bases & Références
+                    {language === 'ar' ? 'القواعد والمراجع' : 'Bases & Références'}
                   </div>
                   <button
                     onClick={() => {
                       setCurrentTab('database');
                       setIsTabletMenuOpen(false);
                     }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left transition-colors ${
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left rtl:text-right transition-colors ${
                       currentTab === 'database' ? 'bg-emerald-50 text-emerald-800 font-bold' : 'hover:bg-slate-50 text-slate-700'
                     }`}
                   >
                     <Database className="w-4 h-4 text-emerald-600 shrink-0" />
                     <div className="flex-1">
-                      <div className="font-semibold">Base Tunisienne</div>
-                      <div className="text-[10px] text-slate-400">200+ plats certifiés INNT</div>
+                      <div className="font-semibold">{language === 'ar' ? 'قاعدة الأطعمة التونسية' : 'Base Tunisienne'}</div>
+                      <div className="text-[10px] text-slate-400">{language === 'ar' ? 'أكثر من 200 طبق معتمد من المعهد الوطني' : '200+ plats certifiés INNT'}</div>
                     </div>
                   </button>
 
@@ -177,14 +182,14 @@ export const Header: React.FC<HeaderProps> = ({
                       setCurrentTab('benchmark');
                       setIsTabletMenuOpen(false);
                     }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left transition-colors ${
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left rtl:text-right transition-colors ${
                       currentTab === 'benchmark' ? 'bg-emerald-50 text-emerald-800 font-bold' : 'hover:bg-slate-50 text-slate-700'
                     }`}
                   >
                     <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
                     <div className="flex-1">
-                      <div className="font-semibold">Dataset 100 Repas</div>
-                      <div className="text-[10px] text-slate-400">Ground Truth métrologique</div>
+                      <div className="font-semibold">{language === 'ar' ? 'مجموعة 100 وجبة مرجعية' : 'Dataset 100 Repas'}</div>
+                      <div className="text-[10px] text-slate-400">{language === 'ar' ? 'معيار القياس الحقيقي' : 'Ground Truth métrologique'}</div>
                     </div>
                   </button>
 
@@ -193,14 +198,14 @@ export const Header: React.FC<HeaderProps> = ({
                       setCurrentTab('specs');
                       setIsTabletMenuOpen(false);
                     }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left transition-colors ${
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left rtl:text-right transition-colors ${
                       currentTab === 'specs' ? 'bg-emerald-50 text-emerald-800 font-bold' : 'hover:bg-slate-50 text-slate-700'
                     }`}
                   >
                     <BookOpen className="w-4 h-4 text-slate-500 shrink-0" />
                     <div className="flex-1">
-                      <div className="font-semibold">Spécifications ITF</div>
-                      <div className="text-[10px] text-slate-400">Formules et algorithmes</div>
+                      <div className="font-semibold">{language === 'ar' ? 'المواصفات وخوارزميات العلاج' : 'Spécifications ITF'}</div>
+                      <div className="text-[10px] text-slate-400">{language === 'ar' ? 'الصيغ الحسابية والمعايير' : 'Formules et algorithmes'}</div>
                     </div>
                   </button>
 
@@ -211,10 +216,10 @@ export const Header: React.FC<HeaderProps> = ({
                           onOpenMedicalReport();
                           setIsTabletMenuOpen(false);
                         }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left hover:bg-slate-50 text-slate-700"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left rtl:text-right hover:bg-slate-50 text-slate-700"
                       >
                         <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Rapport PDF Consultation</span>
+                        <span>{language === 'ar' ? 'تقرير طبي PDF للاستشارة' : 'Rapport PDF Consultation'}</span>
                       </button>
                     )}
                     {onOpenCGM && (
@@ -223,10 +228,10 @@ export const Header: React.FC<HeaderProps> = ({
                           onOpenCGM();
                           setIsTabletMenuOpen(false);
                         }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left hover:bg-slate-50 text-slate-700"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left rtl:text-right hover:bg-slate-50 text-slate-700"
                       >
                         <Wifi className="w-4 h-4 text-blue-600 shrink-0" />
-                        <span>Capteur CGM (Dexcom / Libre)</span>
+                        <span>{language === 'ar' ? 'مستشعر السكر المستمر (Dexcom / Libre)' : 'Capteur CGM (Dexcom / Libre)'}</span>
                       </button>
                     )}
                     {onOpenCloudSync && (
@@ -235,10 +240,10 @@ export const Header: React.FC<HeaderProps> = ({
                           onOpenCloudSync();
                           setIsTabletMenuOpen(false);
                         }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left hover:bg-slate-50 text-slate-700"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left rtl:text-right hover:bg-slate-50 text-slate-700"
                       >
                         <Cloud className="w-4 h-4 text-sky-600 shrink-0" />
-                        <span>Synchronisation Cloud</span>
+                        <span>{language === 'ar' ? 'مزامنة سحابية متعددة الأجهزة' : 'Synchronisation Cloud'}</span>
                       </button>
                     )}
                     {onOpenLanding && (
@@ -247,10 +252,22 @@ export const Header: React.FC<HeaderProps> = ({
                           onOpenLanding();
                           setIsTabletMenuOpen(false);
                         }}
-                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left hover:bg-slate-50 text-slate-700"
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left rtl:text-right hover:bg-slate-50 text-slate-700"
                       >
                         <Home className="w-4 h-4 text-slate-500 shrink-0" />
-                        <span>Présentation & Guide DT1</span>
+                        <span>{language === 'ar' ? 'دليل وشرح التطبيق' : 'Présentation & Guide DT1'}</span>
+                      </button>
+                    )}
+                    {onOpenInstallModal && (
+                      <button
+                        onClick={() => {
+                          onOpenInstallModal();
+                          setIsTabletMenuOpen(false);
+                        }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left rtl:text-right hover:bg-emerald-50 text-emerald-800 font-bold"
+                      >
+                        <Download className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>{language === 'ar' ? 'تثبيت التطبيق (PWA)' : 'Installer l\'application (PWA)'}</span>
                       </button>
                     )}
                   </div>
@@ -271,7 +288,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             >
               <Camera className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Estimer</span>
+              <span>{t('nav_app')}</span>
             </button>
 
             <button
@@ -284,7 +301,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             >
               <History className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Historique</span>
+              <span>{t('nav_history')}</span>
               {activeMealCount > 0 && (
                 <span className="w-4 h-4 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center font-bold">
                   {activeMealCount}
@@ -302,7 +319,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             >
               <Database className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Base Tunisienne</span>
+              <span>{t('nav_database')}</span>
             </button>
 
             <button
@@ -315,7 +332,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Dataset 100</span>
+              <span>{t('nav_benchmark')}</span>
             </button>
 
             <button
@@ -328,7 +345,7 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             >
               <BookOpen className="w-3.5 h-3.5 text-slate-500" />
-              <span>Specs ITF</span>
+              <span>{t('nav_specs')}</span>
             </button>
 
             <button
@@ -341,12 +358,15 @@ export const Header: React.FC<HeaderProps> = ({
               }`}
             >
               <Stethoscope className="w-3.5 h-3.5" />
-              <span>Espace Diabéto</span>
+              <span>{t('nav_doctor')}</span>
             </button>
           </nav>
 
           {/* Right Actions: Responsive for Tablet & Desktop */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Elegant Language Switcher */}
+            <LanguageSwitcher variant="header" />
+
             {onOpenMedicalReport && (
               <button
                 onClick={onOpenMedicalReport}
@@ -354,7 +374,7 @@ export const Header: React.FC<HeaderProps> = ({
                 title="Consulter ou imprimer le rapport médical de consultation"
               >
                 <FileText className="w-3.5 h-3.5 text-emerald-700" />
-                <span>Rapport PDF</span>
+                <span>{t('report_btn')}</span>
               </button>
             )}
 
@@ -365,7 +385,7 @@ export const Header: React.FC<HeaderProps> = ({
                 title="Synchronisation Cloud Multi-Appareils"
               >
                 <Cloud className="w-3.5 h-3.5 text-sky-700" />
-                <span>Cloud</span>
+                <span>{t('cloud_btn')}</span>
               </button>
             )}
 
@@ -376,7 +396,7 @@ export const Header: React.FC<HeaderProps> = ({
                 title="Synchroniser capteur continu de glycémie"
               >
                 <Wifi className="w-3.5 h-3.5 text-blue-700" />
-                <span>CGM</span>
+                <span>{t('cgm_btn')}</span>
               </button>
             )}
 
@@ -387,7 +407,7 @@ export const Header: React.FC<HeaderProps> = ({
                 title="Présentation et guide de GlucoMeal AI"
               >
                 <Home className="w-3.5 h-3.5 text-slate-500" />
-                <span>Présentation</span>
+                <span>{t('presentation_btn')}</span>
               </button>
             )}
 
@@ -399,8 +419,20 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <User className="w-3.5 h-3.5 text-emerald-700" />
                 <span className="hidden sm:inline">
-                  {userProfile?.parentEmail ? 'Mon Compte' : 'Connexion'}
+                  {userProfile?.parentEmail ? t('account_btn') : t('login_btn')}
                 </span>
+              </button>
+            )}
+
+            {onOpenInstallModal && (
+              <button
+                id="btn-header-install-pwa"
+                onClick={onOpenInstallModal}
+                className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors whitespace-nowrap shrink-0"
+                title="Installer GlucoMeal sur votre téléphone ou ordinateur (PWA)"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{t('install_btn')}</span>
               </button>
             )}
 
@@ -411,8 +443,8 @@ export const Header: React.FC<HeaderProps> = ({
               title="Configurer mes ratios d'insuline (I:C) et cible glycémique"
             >
               <Syringe className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="hidden md:inline">Profil DT1 (Ratios)</span>
-              <span className="md:hidden">Profil DT1</span>
+              <span className="hidden md:inline">{t('profile_btn_desktop')}</span>
+              <span className="md:hidden">{t('profile_btn')}</span>
             </button>
           </div>
         </div>

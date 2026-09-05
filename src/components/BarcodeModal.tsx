@@ -17,6 +17,7 @@ import {
   ScanLine,
 } from 'lucide-react';
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface BarcodeModalProps {
   isOpen: boolean;
@@ -33,6 +34,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
   onAnalyzeNutritionLabel,
   isAnalyzing,
 }) => {
+  const { language, t } = useLanguage();
   const [activeTab, setActiveTab] = useState<'barcode' | 'label'>('barcode');
   const [barcodeInput, setBarcodeInput] = useState('');
   const [labelValue, setLabelValue] = useState('');
@@ -55,12 +57,12 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
   const isScanningRef = useRef<boolean>(false);
 
   const quickTunisianBarcodes = [
-    { code: '6191234567890', name: 'Boga Cidre (Canette 250 ml)', carbs: '26 g glucides' },
-    { code: '6191234567891', name: 'Boga Lim (Canette 250 ml)', carbs: '25 g glucides' },
-    { code: '6194000123456', name: 'Biscuits Saïda Carré (4 biscuits)', carbs: '22 g glucides' },
-    { code: '6194000654321', name: 'Biscuits Saïda Major Chocolat', carbs: '24 g glucides' },
-    { code: '6192000543210', name: 'Yaourt Délice Danone fraise', carbs: '22 g glucides' },
-    { code: '6191000888999', name: 'Tomate concentrée Sicam (30g)', carbs: '4 g glucides' },
+    { code: '6191234567890', name: 'Boga Cidre (Canette 250 ml)', name_ar: 'بوغة سيدر (علبة 250 مل)', carbs: '26 g glucides', carbs_ar: '26 غ كربوهيدرات' },
+    { code: '6191234567891', name: 'Boga Lim (Canette 250 ml)', name_ar: 'بوغة ليم (علبة 250 مل)', carbs: '25 g glucides', carbs_ar: '25 غ كربوهيدرات' },
+    { code: '6194000123456', name: 'Biscuits Saïda Carré (4 biscuits)', name_ar: 'بسكويت سيدة كاري (4 قطع)', carbs: '22 g glucides', carbs_ar: '22 غ كربوهيدرات' },
+    { code: '6194000654321', name: 'Biscuits Saïda Major Chocolat', name_ar: 'بسكويت سيدة ماجور شوكولاتة', carbs: '24 g glucides', carbs_ar: '24 غ كربوهيدرات' },
+    { code: '6192000543210', name: 'Yaourt Délice Danone fraise', name_ar: 'زبادي ديليس دانون فراولة', carbs: '22 g glucides', carbs_ar: '22 غ كربوهيدرات' },
+    { code: '6191000888999', name: 'Tomate concentrée Sicam (30g)', name_ar: 'معجون طماطم سيكام (30 غ)', carbs: '4 g glucides', carbs_ar: '4 غ كربوهيدرات' },
   ];
 
   // Subtle audio & haptic feedback on scan
@@ -413,10 +415,10 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-extrabold text-slate-900 tracking-tight">
-                Scanner produit & Code-barres
+                {language === 'ar' ? 'مسح المنتجات والرمز الشريطي' : 'Scanner produit & Code-barres'}
               </h2>
               <p className="text-xs text-slate-500">
-                Caméra en direct EAN-13 ou lecture d’étiquette nutritionnelle
+                {language === 'ar' ? 'كاميرا حية لمسح باركود EAN-13 أو قراءة البطاقة الغذائية' : 'Caméra en direct EAN-13 ou lecture d’étiquette nutritionnelle'}
               </p>
             </div>
           </div>
@@ -424,7 +426,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
             id="btn-close-barcode-modal"
             onClick={onClose}
             className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center transition-colors cursor-pointer"
-            title="Fermer"
+            title={t('close')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -445,7 +447,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
             }`}
           >
             <ScanLine className="w-3.5 h-3.5 text-amber-600" />
-            <span>Code-barres EAN en direct</span>
+            <span>{t('barcode_camera_tab')}</span>
           </button>
           <button
             id="tab-label-ocr"
@@ -460,7 +462,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
             }`}
           >
             <FileText className="w-3.5 h-3.5 text-amber-600" />
-            <span>Photographier l’étiquette</span>
+            <span>{t('barcode_label_tab')}</span>
           </button>
         </div>
 
@@ -494,13 +496,13 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                       <div className="absolute -bottom-1 -right-1 w-4 h-4 border-b-2 border-r-2 border-amber-300 rounded-br" />
 
                       <span className="text-[10px] text-amber-200 font-medium bg-slate-950/80 px-2 py-0.5 rounded-full border border-amber-400/30">
-                        Alignez le code-barres dans le cadre
+                        {language === 'ar' ? 'ضع الرمز الشريطي داخل الإطار' : 'Alignez le code-barres dans le cadre'}
                       </span>
                     </div>
 
                     <span className="text-[11px] text-emerald-400 font-semibold mt-3 bg-slate-950/80 px-3 py-1 rounded-full flex items-center gap-1.5 border border-emerald-500/30">
                       <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                      Reconnaissance continue active
+                      {language === 'ar' ? 'التعرف التلقائي المستمر نشط' : 'Reconnaissance continue active'}
                     </span>
                   </div>
                 )}
@@ -512,10 +514,12 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                       <Camera className="w-6 h-6" />
                     </div>
                     <h3 className="text-sm font-bold text-white mb-1">
-                      Caméra en attente d’activation
+                      {language === 'ar' ? 'الكاميرا في انتظار التفعيل' : 'Caméra en attente d’activation'}
                     </h3>
                     <p className="text-xs text-slate-400 mb-4 leading-relaxed">
-                      Cliquez ci-dessous pour lancer le scanner en direct sur votre appareil.
+                      {language === 'ar'
+                        ? 'اضغط أدناه لبدء المسح المباشر عبر كاميرا هاتفك.'
+                        : 'Cliquez ci-dessous pour lancer le scanner en direct sur votre appareil.'}
                     </p>
                     <button
                       id="btn-start-scanner-camera"
@@ -523,7 +527,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                       className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-md cursor-pointer transition-all active:scale-95"
                     >
                       <Camera className="w-4 h-4" />
-                      <span>Activer la caméra</span>
+                      <span>{language === 'ar' ? 'تفعيل الكاميرا' : 'Activer la caméra'}</span>
                     </button>
                   </div>
                 )}
@@ -541,7 +545,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                           className={`p-2 rounded-xl backdrop-blur-xs transition-colors cursor-pointer ${
                             isTorchOn ? 'bg-amber-500 text-slate-950' : 'bg-slate-900/80 text-white'
                           }`}
-                          title="Lampe torche"
+                          title={language === 'ar' ? 'المصباح' : 'Lampe torche'}
                         >
                           {isTorchOn ? <Zap className="w-4 h-4" /> : <ZapOff className="w-4 h-4" />}
                         </button>
@@ -549,7 +553,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                       <button
                         onClick={toggleCameraFacing}
                         className="p-2 rounded-xl bg-slate-900/80 text-white hover:bg-slate-800 backdrop-blur-xs transition-colors cursor-pointer"
-                        title="Changer de caméra"
+                        title={language === 'ar' ? 'تبديل الكاميرا' : 'Changer de caméra'}
                       >
                         <SwitchCamera className="w-4 h-4" />
                       </button>
@@ -565,7 +569,9 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                   <div className="flex-1">
                     <p className="font-semibold">{cameraError}</p>
                     <p className="text-[11px] text-amber-800 mt-0.5">
-                      Vous pouvez aussi téléverser une photo du code-barres prise avec votre téléphone.
+                      {language === 'ar'
+                        ? 'يمكنك أيضاً تحميل صورة للرمز الشريطي ملتقطة بهاتفك.'
+                        : 'Vous pouvez aussi téléverser une photo du code-barres prise avec votre téléphone.'}
                     </p>
                   </div>
                 </div>
@@ -582,12 +588,12 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                   {isDecodingFile ? (
                     <>
                       <RefreshCw className="w-3.5 h-3.5 animate-spin text-amber-600" />
-                      <span>Décodage de la photo en cours…</span>
+                      <span>{language === 'ar' ? 'جارٍ فك تشفير الرمز الشريطي…' : 'Décodage de la photo en cours…'}</span>
                     </>
                   ) : (
                     <>
                       <Upload className="w-3.5 h-3.5 text-amber-600" />
-                      <span>Prendre ou importer une photo du code</span>
+                      <span>{language === 'ar' ? 'التقاط أو استيراد صورة الرمز' : 'Prendre ou importer une photo du code'}</span>
                     </>
                   )}
                 </button>
@@ -604,7 +610,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
               {/* Manual EAN Input */}
               <div className="pt-2 border-t border-slate-100">
                 <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  Ou saisir manuellement le code EAN :
+                  {language === 'ar' ? 'أو أدخل رمز باركود EAN يدوياً:' : 'Ou saisir manuellement le code EAN :'}
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -618,7 +624,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                       }
                     }}
                     className="flex-1 p-2.5 rounded-xl border border-slate-200 focus:border-amber-500 focus:outline-hidden text-xs font-mono bg-white"
-                    placeholder="Ex : 6191234567890"
+                    placeholder={language === 'ar' ? 'مثال: 6191234567890' : 'Ex : 6191234567890'}
                   />
                   <button
                     id="btn-search-barcode"
@@ -627,7 +633,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                     className="px-4 py-2.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
                   >
                     <Search className="w-3.5 h-3.5" />
-                    <span>Rechercher</span>
+                    <span>{language === 'ar' ? 'بحث' : 'Rechercher'}</span>
                   </button>
                 </div>
               </div>
@@ -635,7 +641,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
               {/* Quick Tunisian Industrial Presets */}
               <div className="pt-2 border-t border-slate-100">
                 <span className="text-[11px] font-bold text-slate-600 block mb-2">
-                  Codes fréquents du marché tunisien (1 clic) :
+                  {language === 'ar' ? 'منتجات تونسية شائعة (بنقرة واحدة):' : 'Codes fréquents du marché tunisien (1 clic) :'}
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {quickTunisianBarcodes.map((prod) => (
@@ -644,12 +650,14 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                       onClick={() => handleDetectedBarcode(prod.code)}
                       className="p-2.5 rounded-xl bg-amber-50/40 hover:bg-amber-100/60 border border-amber-200/60 flex items-center justify-between cursor-pointer transition-colors"
                     >
-                      <div className="pr-2 min-w-0">
-                        <h4 className="text-xs font-bold text-slate-900 truncate">{prod.name}</h4>
+                      <div className="pr-2 rtl:pr-0 rtl:pl-2 min-w-0">
+                        <h4 className="text-xs font-bold text-slate-900 truncate">
+                          {language === 'ar' ? prod.name_ar : prod.name}
+                        </h4>
                         <span className="text-[10px] font-mono text-slate-500">{prod.code}</span>
                       </div>
                       <span className="text-[11px] font-extrabold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded-md whitespace-nowrap">
-                        {prod.carbs}
+                        {language === 'ar' ? prod.carbs_ar : prod.carbs}
                       </span>
                     </div>
                   ))}
@@ -662,10 +670,13 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
               <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-xs text-amber-900 flex items-start gap-2.5">
                 <FileText className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                 <div>
-                  <h4 className="font-bold">Lecture IA du tableau nutritionnel</h4>
+                  <h4 className="font-bold">
+                    {language === 'ar' ? 'قراءة جدول القيمة الغذائية بالذكاء الاصطناعي' : 'Lecture IA du tableau nutritionnel'}
+                  </h4>
                   <p className="text-[11px] text-amber-800 mt-0.5">
-                    Photographiez le tableau au dos de l’emballage (lignes « Glucides / Carbohydrates »,
-                    « dont sucres », « portion »). L’IA extrait directement les valeurs pour le bolus.
+                    {language === 'ar'
+                      ? 'التقط صورة لجدول الحقائق الغذائية خلف العبوة (أسطر الكربوهيدرات والسكريات والحصة). يتعرف الذكاء الاصطناعي على الكميات بدقة لحساب جرعة الإنسولين.'
+                      : 'Photographiez le tableau au dos de l’emballage (lignes « Glucides / Carbohydrates », « dont sucres », « portion »). L’IA extrait directement les valeurs pour le bolus.'}
                   </p>
                 </div>
               </div>
@@ -680,8 +691,8 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                   />
                   <button
                     onClick={() => setLabelImagePreview(null)}
-                    className="absolute top-2 right-2 p-1.5 bg-slate-900/80 text-white rounded-full hover:bg-rose-600 transition-colors cursor-pointer"
-                    title="Reprendre la photo"
+                    className="absolute top-2 right-2 rtl:right-auto rtl:left-2 p-1.5 bg-slate-900/80 text-white rounded-full hover:bg-rose-600 transition-colors cursor-pointer"
+                    title={language === 'ar' ? 'إعادة التقاط الصورة' : 'Reprendre la photo'}
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -697,7 +708,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                   />
                   <div className="absolute inset-0 pointer-events-none border-2 border-dashed border-amber-400/80 m-4 rounded-xl flex items-center justify-center">
                     <span className="text-[11px] bg-slate-950/80 text-amber-200 px-2 py-0.5 rounded">
-                      Cadrer le tableau nutritionnel
+                      {language === 'ar' ? 'وجّه الكاميرا نحو جدول القيمة الغذائية' : 'Cadrer le tableau nutritionnel'}
                     </span>
                   </div>
                   <button
@@ -705,7 +716,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                     className="absolute bottom-3 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-xl shadow-lg flex items-center gap-2 cursor-pointer z-10"
                   >
                     <Camera className="w-4 h-4" />
-                    <span>Prendre la photo</span>
+                    <span>{language === 'ar' ? 'التقاط الصورة' : 'Prendre la photo'}</span>
                   </button>
                 </div>
               ) : (
@@ -718,10 +729,10 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                       <Camera className="w-5 h-5" />
                     </div>
                     <span className="text-xs font-bold text-slate-800">
-                      Ouvrir la caméra
+                      {language === 'ar' ? 'فتح الكاميرا' : 'Ouvrir la caméra'}
                     </span>
                     <span className="text-[10px] text-slate-500">
-                      Photographier directement
+                      {language === 'ar' ? 'تصوير الملصق مباشرة' : 'Photographier directement'}
                     </span>
                   </button>
 
@@ -733,10 +744,10 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
                       <Upload className="w-5 h-5" />
                     </div>
                     <span className="text-xs font-bold text-slate-800">
-                      Importer une photo
+                      {language === 'ar' ? 'استيراد صورة' : 'Importer une photo'}
                     </span>
                     <span className="text-[10px] text-slate-500">
-                      Galerie / Fichier
+                      {language === 'ar' ? 'من معرض الصور / الملفات' : 'Galerie / Fichier'}
                     </span>
                   </button>
                   <input
@@ -752,13 +763,13 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
               {/* Or Manual Nutritional Text */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Ou coller le texte nutritionnel :
+                  {language === 'ar' ? 'أو الصق النص الغذائي المكتوب:' : 'Ou coller le texte nutritionnel :'}
                 </label>
                 <textarea
                   rows={2}
                   value={labelValue}
                   onChange={(e) => setLabelValue(e.target.value)}
-                  placeholder="Ex : Glucides : 52g pour 100g, dont sucres 18g, portion 40g..."
+                  placeholder={language === 'ar' ? 'مثال: كربوهيدرات: 52غ لكل 100غ، منها سكريات 18غ، حصة 40غ...' : 'Ex : Glucides : 52g pour 100g, dont sucres 18g, portion 40g...'}
                   className="w-full p-2.5 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-hidden focus:border-amber-500"
                 />
               </div>
@@ -772,7 +783,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
             onClick={onClose}
             className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
           >
-            Fermer
+            {t('close')}
           </button>
 
           {activeTab === 'label' && (
@@ -782,7 +793,7 @@ export const BarcodeModal: React.FC<BarcodeModalProps> = ({
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white shadow-md cursor-pointer transition-all"
             >
               <Sparkles className="w-4 h-4" />
-              <span>Analyser avec l’IA</span>
+              <span>{language === 'ar' ? 'تحليل بواسطة الذكاء الاصطناعي' : 'Analyser avec l’IA'}</span>
             </button>
           )}
         </div>
