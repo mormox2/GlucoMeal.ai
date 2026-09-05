@@ -6,7 +6,6 @@ import {
   getFirestore,
   Firestore,
   doc,
-  getDocFromServer,
   setDoc,
   collection,
   onSnapshot,
@@ -62,18 +61,6 @@ try {
 
 export const auth: Auth = getAuth(app);
 export { db };
-
-// Vérification de connexion initiale requise
-async function testFirestoreConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore mode hors-ligne actif (cache local persistant prêt).');
-    }
-  }
-}
-testFirestoreConnection();
 
 /**
  * Assure qu'un utilisateur est authentifié (authentification anonyme transparente par défaut si non connecté)

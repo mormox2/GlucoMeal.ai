@@ -24,6 +24,48 @@ function getGeminiClient(): GoogleGenAI | null {
 }
 
 const app = express();
+
+// En-têtes de sécurité HTTP & protection d'accès
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
+// Limiteur de débit (Rate Limiter) en mémoire pour protéger l'API Gemini et le serveur
+const rateLimitMap = new Map<string, { count: number; resetTime: number }>();
+function rateLimiter(maxRequests: number, windowMs: number, customMessage?: string) {
+  return (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const ip = req.ip || req.socket.remoteAddress || '127.0.0.1';
+    const key = `${req.path}:${ip}`;
+    const now = Date.now();
+    const entry = rateLimitMap.get(key);
+
+    if (!entry || now > entry.resetTime) {
+      rateLimitMap.set(key, { count: 1, resetTime: now + windowMs });
+      return next();
+    }
+
+    if (entry.count >= maxRequests) {
+      return res.status(429).json({
+        error: customMessage || 'Trop de requêtes. Veuillez patienter avant de réessayer.',
+        retryAfterSec: Math.ceil((entry.resetTime - now) / 1000),
+      });
+    }
+
+    entry.count++;
+    next();
+  };
+}
+
 app.use(express.json({ limit: '20mb' }));
 
 // Compatibility rewrite if /api prefix is omitted by hosting environment
@@ -87,13 +129,15 @@ const SYNC_DB_FILE = process.env.VERCEL
 
   const CLOUD_SYNC_STORE = loadSyncDb();
 
-  // Cloud Sync Push API
-  app.post('/api/sync/push', (req, res) => {
+  // Cloud Sync Push API (Sécurisé par Rate Limiter et codes aléatoires haute entropie)
+  app.post('/api/sync/push', rateLimiter(40, 60 * 1000, 'Trop de sauvegardes. Veuillez patienter 1 minute.'), (req, res) => {
     try {
       let { syncCode, userProfile, meals, learnedPortions } = req.body || {};
       if (!syncCode) {
-        const randomNum = Math.floor(1000 + Math.random() * 9000);
-        syncCode = `TN-${randomNum}`;
+        // Code aléatoire haute entropie non prédictible (ex: GLUCO-7K2X-9B4F)
+        const part1 = Math.random().toString(36).substring(2, 6).toUpperCase();
+        const part2 = Math.random().toString(36).substring(2, 6).toUpperCase();
+        syncCode = `GLUCO-${part1}-${part2}`;
       } else {
         syncCode = syncCode.trim().toUpperCase();
       }
@@ -110,12 +154,13 @@ const SYNC_DB_FILE = process.env.VERCEL
 
       res.json({ success: true, syncCode, lastUpdated: record.lastUpdated, totalMeals: record.meals.length });
     } catch (err: any) {
-      res.status(500).json({ error: 'Erreur lors de la sauvegarde cloud', details: err.message });
+      console.error('Erreur sauvegarde cloud sync:', err);
+      res.status(500).json({ error: 'Erreur lors de la sauvegarde cloud.' });
     }
   });
 
-  // Cloud Sync Pull API
-  app.get('/api/sync/pull/:syncCode', (req, res) => {
+  // Cloud Sync Pull API (Sécurisé par Rate Limiter)
+  app.get('/api/sync/pull/:syncCode', rateLimiter(60, 60 * 1000, 'Trop de tentatives de lecture.'), (req, res) => {
     try {
       const code = (req.params.syncCode || '').trim().toUpperCase();
       const record = CLOUD_SYNC_STORE.get(code);
@@ -124,7 +169,8 @@ const SYNC_DB_FILE = process.env.VERCEL
       }
       res.json({ success: true, record });
     } catch (err: any) {
-      res.status(500).json({ error: 'Erreur lors de la récupération cloud', details: err.message });
+      console.error('Erreur récupération cloud sync:', err);
+      res.status(500).json({ error: 'Erreur lors de la récupération cloud.' });
     }
   });
 
@@ -173,8 +219,8 @@ const SYNC_DB_FILE = process.env.VERCEL
     }
   });
 
-  // Benchmark Live Vision Inference with Gemini 3.8 Flash (Étape 2)
-  app.post('/api/benchmark/live-vision', async (req, res) => {
+  // Benchmark Live Vision Inference with Gemini 2.5 Flash (Étape 2)
+  app.post('/api/benchmark/live-vision', rateLimiter(30, 60 * 1000, 'Trop de tests de vision.'), async (req, res) => {
     const startTime = Date.now();
     try {
       const { mealId, imageBase64 } = req.body || {};
@@ -221,7 +267,7 @@ Réponds UNIQUEMENT en JSON strict.`;
           }
 
           const response = await ai.models.generateContent({
-            model: 'gemini-3.8-flash',
+            model: 'gemini-2.5-flash',
             contents,
             config: {
               responseMimeType: 'application/json',
@@ -320,19 +366,19 @@ Réponds UNIQUEMENT en JSON strict.`;
         passed_clinical_threshold: passed,
         insulin_impact_units: insulinImpactUnits,
         latency_ms: latencyMs,
-        model: 'gemini-3.8-flash',
+        model: 'gemini-2.5-flash',
         detected_components: detectedComponents,
         visual_notes: visualNotes,
         timestamp: new Date().toISOString(),
       });
     } catch (err: any) {
       console.error('Live vision benchmark test error:', err);
-      res.status(500).json({ error: 'Erreur lors du test de vision en direct', details: err.message });
+      res.status(500).json({ error: 'Erreur lors du test de vision en direct' });
     }
   });
 
-  // Main Meal Analysis Endpoint (Photo, Text, Voice, Barcode)
-  app.post('/api/analyze-meal', async (req, res) => {
+  // Main Meal Analysis Endpoint (Photo, Text, Voice, Barcode) - Protégé par Rate Limiter
+  app.post('/api/analyze-meal', rateLimiter(30, 60 * 1000, 'Trop de requêtes d’analyse. Veuillez patienter une minute.'), async (req, res) => {
     try {
       const { mode, image, text, audioTranscript, barcode } = req.body;
       const ai = getGeminiClient();
@@ -363,7 +409,7 @@ RÈGLE IMPORTANTE : Ne cherche pas à calculer les glucides toi-même, donne uni
 Réponds UNIQUEMENT sous forme de JSON strict conforme au schéma.`;
 
             const geminiResponse = await ai.models.generateContent({
-              model: 'gemini-3.8-flash',
+              model: 'gemini-2.5-flash',
               contents: {
                 parts: [
                   {
@@ -506,9 +552,9 @@ Extrais TOUS les aliments et boissons décrits, avec leur portion estimée en gr
                 },
               });
             } catch (flashErr: any) {
-              console.warn('Gemini 2.5 Flash busy, attempting 3.8 Flash:', flashErr.message);
+              console.warn('Gemini 2.5 Flash busy, attempting 2.0 Flash fallback:', flashErr.message);
               nlpResponse = await ai.models.generateContent({
-                model: 'gemini-3.8-flash',
+                model: 'gemini-2.0-flash',
                 contents: nlpPrompt,
                 config: {
                   responseMimeType: 'application/json',

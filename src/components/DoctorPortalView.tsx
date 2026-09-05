@@ -88,9 +88,13 @@ export const DoctorPortalView: React.FC<DoctorPortalViewProps> = ({
 
   const handleUnlock = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    // Code par défaut ou simple validation soignant
     const cleanCode = doctorCode.trim().toUpperCase();
-    if (cleanCode === 'DR-GLUCO-2026' || cleanCode === 'MED' || cleanCode === '1234' || cleanCode === '') {
+    if (!cleanCode) {
+      setCodeError(true);
+      return;
+    }
+    // Validation stricte du code d'accès praticien (empêche l'accès vide accidentel par un enfant)
+    if (cleanCode === 'DR-GLUCO-2026' || cleanCode === 'MEDIC-TUNISIE') {
       setIsUnlocked(true);
       setCodeError(false);
     } else {

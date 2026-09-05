@@ -75,6 +75,9 @@ export interface CalculatedBolusSummary {
   activityReductionPct?: number; // ex: 0, 15, 30, 50
   activityReductionUnits?: number; // ex: 1.5 UI
   rawMealBolus?: number; // Bolus avant modulation d'effort
+  isCapped?: boolean; // True si plafonné au seuil de sécurité max (20 UI)
+  unclampedTotalBolus?: number; // Valeur brute avant plafonnement
+  safetyWarning?: string; // Message d'alerte sécurité clinique si détection anomalie
 }
 
 export interface DualWaveSuggestion {

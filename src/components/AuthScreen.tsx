@@ -75,8 +75,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             throw new Error(isRtl ? 'هذا البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول.' : 'Cet e-mail est déjà associé à un compte. Veuillez vous connecter.');
           } else if (firebaseErr.code === 'auth/weak-password') {
             throw new Error(isRtl ? 'يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.' : 'Le mot de passe doit comporter au moins 6 caractères.');
+          } else if (firebaseErr.code === 'auth/invalid-email') {
+            throw new Error(isRtl ? 'صيغة البريد الإلكتروني غير صالحة.' : 'Format d’adresse e-mail invalide.');
           } else {
-            console.warn('Firebase register notice:', firebaseErr.message);
+            throw new Error(
+              firebaseErr.message ||
+                (isRtl ? 'فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.' : 'Échec de création de compte. Veuillez réessayer.')
+            );
           }
         }
 
@@ -131,7 +136,29 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         try {
           await loginWithEmail(email, password);
         } catch (firebaseErr: any) {
-          console.warn('Firebase login note:', firebaseErr.message);
+          console.error('Firebase login error:', firebaseErr);
+          if (
+            firebaseErr.code === 'auth/wrong-password' ||
+            firebaseErr.code === 'auth/invalid-credential' ||
+            firebaseErr.code === 'auth/user-not-found'
+          ) {
+            throw new Error(
+              isRtl
+                ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة.'
+                : 'Adresse e-mail ou mot de passe incorrect.'
+            );
+          } else if (firebaseErr.code === 'auth/too-many-requests') {
+            throw new Error(
+              isRtl
+                ? 'تم حظر الحساب مؤقتًا بسبب كثرة المحاولات. يرجى المحاولة لاحقًا.'
+                : 'Trop de tentatives infructueuses. Veuillez patienter avant de réessayer.'
+            );
+          } else {
+            throw new Error(
+              firebaseErr.message ||
+                (isRtl ? 'فشل تسجيل الدخول. يرجى التحقق من اتصالك.' : 'Échec de connexion. Veuillez vérifier vos identifiants.')
+            );
+          }
         }
 
         const updatedProfile: UserProfileDT1 = {

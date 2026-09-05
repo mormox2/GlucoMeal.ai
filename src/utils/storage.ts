@@ -424,10 +424,10 @@ export function sanitizeUserProfile(profile?: Partial<UserProfileDT1> | null): U
     glucoseUnit: profile.glucoseUnit === 'mg/dL' ? 'mg/dL' : 'g/L',
     targetGlucose: typeof profile.targetGlucose === 'number' && profile.targetGlucose > 0
       ? profile.targetGlucose
-      : DEFAULT_USER_PROFILE.targetGlucose,
+      : (profile.glucoseUnit === 'mg/dL' ? 100 : DEFAULT_USER_PROFILE.targetGlucose),
     isf: typeof profile.isf === 'number' && profile.isf > 0
       ? profile.isf
-      : DEFAULT_USER_PROFILE.isf,
+      : (profile.glucoseUnit === 'mg/dL' ? 40 : DEFAULT_USER_PROFILE.isf),
     icRatios,
     roundingStep: profile.roundingStep === 1 || profile.roundingStep === 0.1 ? profile.roundingStep : 0.5,
     ramadanMode: Boolean(profile.ramadanMode),
@@ -490,8 +490,11 @@ export function getCurrentMealSlot(ramadanMode: boolean = false): MealSlot {
   return 'dinner';
 }
 
+export const MAX_SAFE_BOLUS_UNITS = 20.0;
+
 /**
  * Calcule la dose de bolus personnalisée (glucides + correction optionnelle - modulation activité physique)
+ * avec plafond de sécurité médical strict (Safety Cap 20 UI max) et validation d'échelle d'unités
  */
 export function calculatePersonalizedBolus(
   totalCarbs: number,
@@ -518,19 +521,44 @@ export function calculatePersonalizedBolus(
   const activityReductionUnits = (rawMealBolus * activityReductionPct) / 100;
   const netMealBolus = Math.max(0, rawMealBolus - activityReductionUnits);
 
+  // Détection d'anomalie d'échelle glycémique et normalisation sécurisée
+  let normalizedCurrentGlucose = currentGlucose;
+  let safetyWarning: string | undefined;
+
+  if (typeof currentGlucose === 'number' && currentGlucose > 0) {
+    if (safeProfile.glucoseUnit === 'g/L' && currentGlucose > 5.0) {
+      // Patient a probablement saisi en mg/dL (ex: 180 au lieu de 1.80)
+      normalizedCurrentGlucose = Number((currentGlucose / 100).toFixed(2));
+      safetyWarning = `Attention : glycémie saisie (${currentGlucose}) interprétée en mg/dL et convertie en ${normalizedCurrentGlucose} g/L pour prévenir un surdosage d'insuline.`;
+    } else if (safeProfile.glucoseUnit === 'mg/dL' && currentGlucose < 25.0) {
+      // Patient a probablement saisi en g/L (ex: 1.40 au lieu de 140)
+      normalizedCurrentGlucose = Math.round(currentGlucose * 100);
+      safetyWarning = `Attention : glycémie saisie (${currentGlucose}) interprétée en g/L et convertie en ${normalizedCurrentGlucose} mg/dL.`;
+    }
+  }
+
   // Bolus de correction (si glycémie renseignée et > cible)
   let rawCorrectionBolus = 0;
   if (
-    typeof currentGlucose === 'number' &&
-    currentGlucose > profile.targetGlucose &&
-    profile.isf > 0
+    typeof normalizedCurrentGlucose === 'number' &&
+    normalizedCurrentGlucose > safeProfile.targetGlucose &&
+    safeProfile.isf > 0
   ) {
-    rawCorrectionBolus = (currentGlucose - profile.targetGlucose) / profile.isf;
+    rawCorrectionBolus = (normalizedCurrentGlucose - safeProfile.targetGlucose) / safeProfile.isf;
   }
 
   const rawTotal = netMealBolus + rawCorrectionBolus;
-  const step = profile.roundingStep || 0.5;
+  const step = safeProfile.roundingStep || 0.5;
   const roundedTotal = Math.max(0, Math.round(rawTotal / step) * step);
+
+  // Plafond de sécurité maximal absolu (Safety Cap à 20 UI)
+  const isCapped = roundedTotal > MAX_SAFE_BOLUS_UNITS;
+  const safeTotalBolus = isCapped ? MAX_SAFE_BOLUS_UNITS : roundedTotal;
+
+  if (isCapped) {
+    safetyWarning = (safetyWarning ? `${safetyWarning} ` : '') +
+      `⚠️ ALERTE SÉCURITÉ CLINIQUE : Dose calculée (${roundedTotal.toFixed(1)} UI) plafonnée d'office à ${MAX_SAFE_BOLUS_UNITS} UI max pour prévenir tout surdosage critique.`;
+  }
 
   return {
     slot,
@@ -538,10 +566,13 @@ export function calculatePersonalizedBolus(
     rawMealBolus: Number(rawMealBolus.toFixed(2)),
     mealBolus: Number(netMealBolus.toFixed(2)),
     correctionBolus: Number(rawCorrectionBolus.toFixed(2)),
-    totalBolus: Number(roundedTotal.toFixed(1)),
-    currentGlucose,
-    targetGlucose: profile.targetGlucose,
-    isf: profile.isf,
+    totalBolus: Number(safeTotalBolus.toFixed(1)),
+    unclampedTotalBolus: Number(roundedTotal.toFixed(1)),
+    isCapped,
+    safetyWarning,
+    currentGlucose: normalizedCurrentGlucose,
+    targetGlucose: safeProfile.targetGlucose,
+    isf: safeProfile.isf,
     activityLevel,
     activityReductionPct,
     activityReductionUnits: Number(activityReductionUnits.toFixed(2)),

@@ -117,7 +117,7 @@ export const LiveVisionTester: React.FC<LiveVisionTesterProps> = ({
                 Pipeline IA Réel : Test Inférence Vision
               </h3>
               <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 text-[10px] font-mono font-bold border border-emerald-500/30">
-                gemini-3.8-flash
+                gemini-2.5-flash
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-0.5">

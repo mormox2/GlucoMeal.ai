@@ -817,6 +817,30 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           )}
         </div>
 
+        {/* Clinically Safe Alert for Capped Bolus or Scale Detection */}
+        {bolusCalculation.safetyWarning && (
+          <div className="p-3.5 rounded-2xl bg-amber-950/90 border-2 border-amber-500 text-amber-100 flex items-start gap-2.5 text-xs animate-in fade-in">
+            <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="font-extrabold text-amber-200">
+                {bolusCalculation.isCapped
+                  ? (language === 'ar' ? '⚠️ تحذير طبي : سقف الأمان الأقصى للأنسولين (20 وحدة)' : '⚠️ Alerte Sécurité Clinique : Plafond maximal de sécurité atteint (20 UI)')
+                  : (language === 'ar' ? '⚠️ تصحيح مقياس السكر' : '⚠️ Contrôle de plausibilité de l\'échelle glycémique')}
+              </p>
+              <p className="mt-0.5 text-[11px] leading-relaxed text-amber-100/90">
+                {bolusCalculation.safetyWarning}
+              </p>
+              {bolusCalculation.isCapped && bolusCalculation.unclampedTotalBolus && (
+                <p className="mt-1 text-[10px] text-amber-300 font-semibold">
+                  {language === 'ar'
+                    ? `الجرعة المحسوبة بدون سقف الأمان: ${bolusCalculation.unclampedTotalBolus} وحدة. تم تقييدها إلى ${bolusCalculation.totalBolus} وحدة.`
+                    : `Dose brute calculée hors sécurité : ${bolusCalculation.unclampedTotalBolus} UI. Bridée d'office à ${bolusCalculation.totalBolus} UI.`}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Calculated Insulin Doses Breakdown */}
         <div className="grid grid-cols-3 gap-2.5 text-center">
           <div className="p-3 rounded-2xl bg-white/5 border border-white/10">

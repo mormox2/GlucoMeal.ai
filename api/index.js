@@ -2037,9 +2037,43 @@ function getGeminiClient() {
   return aiClient;
 }
 var app = express();
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+  next();
+});
+var rateLimitMap = /* @__PURE__ */ new Map();
+function rateLimiter(maxRequests, windowMs, customMessage) {
+  return (req, res, next) => {
+    const ip = req.ip || req.socket.remoteAddress || "127.0.0.1";
+    const key = `${req.path}:${ip}`;
+    const now = Date.now();
+    const entry = rateLimitMap.get(key);
+    if (!entry || now > entry.resetTime) {
+      rateLimitMap.set(key, { count: 1, resetTime: now + windowMs });
+      return next();
+    }
+    if (entry.count >= maxRequests) {
+      return res.status(429).json({
+        error: customMessage || "Trop de requ\xEAtes. Veuillez patienter avant de r\xE9essayer.",
+        retryAfterSec: Math.ceil((entry.resetTime - now) / 1e3)
+      });
+    }
+    entry.count++;
+    next();
+  };
+}
 app.use(express.json({ limit: "20mb" }));
 app.use((req, res, next) => {
-  if (!req.url.startsWith("/api") && !req.url.startsWith("/assets") && req.url !== "/" && !req.url.startsWith("/@") && !req.url.startsWith("/node_modules")) {
+  if (!req.url.startsWith("/api") && !req.url.startsWith("/assets") && !req.url.startsWith("/src") && !req.url.startsWith("/public") && !req.url.startsWith("/@") && !req.url.startsWith("/node_modules") && req.url !== "/" && !path.extname(req.url.split("?")[0])) {
     req.url = "/api" + req.url;
   }
   next();
@@ -2079,12 +2113,13 @@ function persistSyncDb(store) {
   }
 }
 var CLOUD_SYNC_STORE = loadSyncDb();
-app.post("/api/sync/push", (req, res) => {
+app.post("/api/sync/push", rateLimiter(40, 60 * 1e3, "Trop de sauvegardes. Veuillez patienter 1 minute."), (req, res) => {
   try {
     let { syncCode, userProfile, meals, learnedPortions } = req.body || {};
     if (!syncCode) {
-      const randomNum = Math.floor(1e3 + Math.random() * 9e3);
-      syncCode = `TN-${randomNum}`;
+      const part1 = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const part2 = Math.random().toString(36).substring(2, 6).toUpperCase();
+      syncCode = `GLUCO-${part1}-${part2}`;
     } else {
       syncCode = syncCode.trim().toUpperCase();
     }
@@ -2099,10 +2134,11 @@ app.post("/api/sync/push", (req, res) => {
     persistSyncDb(CLOUD_SYNC_STORE);
     res.json({ success: true, syncCode, lastUpdated: record.lastUpdated, totalMeals: record.meals.length });
   } catch (err) {
-    res.status(500).json({ error: "Erreur lors de la sauvegarde cloud", details: err.message });
+    console.error("Erreur sauvegarde cloud sync:", err);
+    res.status(500).json({ error: "Erreur lors de la sauvegarde cloud." });
   }
 });
-app.get("/api/sync/pull/:syncCode", (req, res) => {
+app.get("/api/sync/pull/:syncCode", rateLimiter(60, 60 * 1e3, "Trop de tentatives de lecture."), (req, res) => {
   try {
     const code = (req.params.syncCode || "").trim().toUpperCase();
     const record = CLOUD_SYNC_STORE.get(code);
@@ -2111,7 +2147,8 @@ app.get("/api/sync/pull/:syncCode", (req, res) => {
     }
     res.json({ success: true, record });
   } catch (err) {
-    res.status(500).json({ error: "Erreur lors de la r\xE9cup\xE9ration cloud", details: err.message });
+    console.error("Erreur r\xE9cup\xE9ration cloud sync:", err);
+    res.status(500).json({ error: "Erreur lors de la r\xE9cup\xE9ration cloud." });
   }
 });
 app.get("/api/foods", (req, res) => {
@@ -2149,7 +2186,7 @@ app.post("/api/benchmark/evaluate", async (req, res) => {
     res.status(500).json({ error: "Erreur lors de l\u2019\xE9valuation du benchmark", details: err.message });
   }
 });
-app.post("/api/benchmark/live-vision", async (req, res) => {
+app.post("/api/benchmark/live-vision", rateLimiter(30, 60 * 1e3, "Trop de tests de vision."), async (req, res) => {
   const startTime = Date.now();
   try {
     const { mealId, imageBase64 } = req.body || {};
@@ -2189,7 +2226,7 @@ R\xE9ponds UNIQUEMENT en JSON strict.`;
           }
         }
         const response = await ai.models.generateContent({
-          model: "gemini-3.8-flash",
+          model: "gemini-2.5-flash",
           contents,
           config: {
             responseMimeType: "application/json",
@@ -2278,17 +2315,17 @@ R\xE9ponds UNIQUEMENT en JSON strict.`;
       passed_clinical_threshold: passed,
       insulin_impact_units: insulinImpactUnits,
       latency_ms: latencyMs,
-      model: "gemini-3.8-flash",
+      model: "gemini-2.5-flash",
       detected_components: detectedComponents,
       visual_notes: visualNotes,
       timestamp: (/* @__PURE__ */ new Date()).toISOString()
     });
   } catch (err) {
     console.error("Live vision benchmark test error:", err);
-    res.status(500).json({ error: "Erreur lors du test de vision en direct", details: err.message });
+    res.status(500).json({ error: "Erreur lors du test de vision en direct" });
   }
 });
-app.post("/api/analyze-meal", async (req, res) => {
+app.post("/api/analyze-meal", rateLimiter(30, 60 * 1e3, "Trop de requ\xEAtes d\u2019analyse. Veuillez patienter une minute."), async (req, res) => {
   try {
     const { mode, image, text, audioTranscript, barcode } = req.body;
     const ai = getGeminiClient();
@@ -2314,7 +2351,7 @@ Consignes cruciales :
 R\xC8GLE IMPORTANTE : Ne cherche pas \xE0 calculer les glucides toi-m\xEAme, donne uniquement les composants et l'estimation de portion en grammes. La formule d\xE9terministe de GlucoMeal fera le calcul exact avec la base certifi\xE9e.
 R\xE9ponds UNIQUEMENT sous forme de JSON strict conforme au sch\xE9ma.`;
           const geminiResponse = await ai.models.generateContent({
-            model: "gemini-3.8-flash",
+            model: "gemini-2.5-flash",
             contents: {
               parts: [
                 {
@@ -2447,9 +2484,9 @@ Extrais TOUS les aliments et boissons d\xE9crits, avec leur portion estim\xE9e e
               }
             });
           } catch (flashErr) {
-            console.warn("Gemini 2.5 Flash busy, attempting 3.8 Flash:", flashErr.message);
+            console.warn("Gemini 2.5 Flash busy, attempting 2.0 Flash fallback:", flashErr.message);
             nlpResponse = await ai.models.generateContent({
-              model: "gemini-3.8-flash",
+              model: "gemini-2.0-flash",
               contents: nlpPrompt,
               config: {
                 responseMimeType: "application/json",
