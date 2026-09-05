@@ -270,8 +270,45 @@ export default function App() {
   };
 
   // Handle Nutrition Label OCR
-  const handleAnalyzeLabel = (labelInfo: string) => {
-    handleAnalyzeText(labelInfo);
+  const handleAnalyzeLabel = async (imageOrText: string, isImage?: boolean) => {
+    if (isImage || imageOrText.startsWith('data:image')) {
+      setIsAnalyzing(true);
+      setAnalysisStepLabel("Lecture OCR de l'étiquette nutritionnelle par IA…");
+      setActiveInputModal(null);
+      setMealFlowState('analyzing');
+
+      try {
+        const response = await fetch('/api/analyze-meal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'label_photo', image: imageOrText }),
+        });
+
+        const data = await response.json();
+        const analyzedMeal: AnalyzedMeal = {
+          id: `meal-${Date.now()}`,
+          user_id: 'user-t1d-1',
+          meal_name: data.meal_name || 'Produit scanné (Étiquette)',
+          meal_name_ar: data.meal_name_ar || '',
+          created_at: new Date().toISOString(),
+          input_type: 'barcode',
+          total_carbs: data.total_carbs,
+          overall_confidence: data.overall_confidence || 'high',
+          confidence_score: data.confidence_score || 96,
+          notes: data.notes,
+          items: data.items || [],
+        };
+
+        setCurrentMealDraft(analyzedMeal);
+        setMealFlowState('review');
+      } catch (err) {
+        console.error('Label OCR analysis error:', err);
+      } finally {
+        setIsAnalyzing(false);
+      }
+    } else {
+      handleAnalyzeText(imageOrText);
+    }
   };
 
   // Handle Validation and Commit
