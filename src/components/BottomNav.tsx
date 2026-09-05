@@ -18,8 +18,8 @@ import { useLanguage } from '../i18n/LanguageContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface BottomNavProps {
-  currentTab: 'app' | 'history' | 'database' | 'benchmark' | 'specs' | 'doctor';
-  setCurrentTab: (tab: 'app' | 'history' | 'database' | 'benchmark' | 'specs' | 'doctor') => void;
+  currentTab: 'app' | 'history' | 'database' | 'benchmark' | 'doctor';
+  setCurrentTab: (tab: 'app' | 'history' | 'database' | 'benchmark' | 'doctor') => void;
   activeMealCount: number;
   onOpenProfileModal: () => void;
   onOpenMedicalReport?: () => void;
@@ -44,7 +44,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   const [isToolsOpen, setIsToolsOpen] = useState(false);
 
   const isMedicalTab = currentTab === 'doctor';
-  const isToolsActive = ['database', 'benchmark', 'specs'].includes(currentTab);
+  const isToolsActive = ['database', 'benchmark'].includes(currentTab);
 
   return (
     <>
@@ -202,25 +202,15 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               )}
             </div>
 
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-center text-xs text-slate-500">
               <button
                 onClick={() => {
                   setIsToolsOpen(false);
                   setCurrentTab('benchmark');
                 }}
-                className="hover:text-emerald-700 cursor-pointer"
+                className="hover:text-emerald-700 cursor-pointer font-medium"
               >
-                {language === 'ar' ? 'مجموعة التحقق (100 طبق)' : 'Dataset 100'}
-              </button>
-              <span>•</span>
-              <button
-                onClick={() => {
-                  setIsToolsOpen(false);
-                  setCurrentTab('specs');
-                }}
-                className="hover:text-emerald-700 cursor-pointer"
-              >
-                {language === 'ar' ? 'المواصفات الفنية' : 'Specs Techniques'}
+                {language === 'ar' ? 'مجموعة التحقق (100 طبق)' : 'Dataset 100 Repas'}
               </button>
             </div>
           </div>

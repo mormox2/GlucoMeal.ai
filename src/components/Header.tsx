@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Camera, BookOpen, Database, Sparkles, History, ShieldAlert, Settings, Syringe, FileText, Wifi, Cloud, Stethoscope, Heart, User, Home, MoreHorizontal, ChevronDown, Check, Download, Smartphone } from 'lucide-react';
+import { Camera, Database, Sparkles, History, ShieldAlert, Settings, Syringe, FileText, Wifi, Cloud, Stethoscope, Heart, User, Home, MoreHorizontal, ChevronDown, Check, Download, Smartphone } from 'lucide-react';
 import { UserProfileDT1 } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface HeaderProps {
-  currentTab: 'app' | 'history' | 'database' | 'benchmark' | 'specs' | 'doctor';
-  setCurrentTab: (tab: 'app' | 'history' | 'database' | 'benchmark' | 'specs' | 'doctor') => void;
+  currentTab: 'app' | 'history' | 'database' | 'benchmark' | 'doctor';
+  setCurrentTab: (tab: 'app' | 'history' | 'database' | 'benchmark' | 'doctor') => void;
   activeMealCount: number;
   onOpenProfileModal: () => void;
   onOpenMedicalReport?: () => void;
@@ -48,7 +48,7 @@ export const Header: React.FC<HeaderProps> = ({
   const isChildProfile = userProfile?.accountType === 'parent' || !!userProfile?.childProfile;
   const childName = userProfile?.childProfile?.childName || (language === 'ar' ? 'الطفل السكري' : 'Enfant DT1');
 
-  const isToolTabActive = ['database', 'benchmark', 'specs'].includes(currentTab);
+  const isToolTabActive = ['database', 'benchmark'].includes(currentTab);
 
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-emerald-100 shadow-xs">
@@ -193,22 +193,6 @@ export const Header: React.FC<HeaderProps> = ({
                     </div>
                   </button>
 
-                  <button
-                    onClick={() => {
-                      setCurrentTab('specs');
-                      setIsTabletMenuOpen(false);
-                    }}
-                    className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-left rtl:text-right transition-colors ${
-                      currentTab === 'specs' ? 'bg-emerald-50 text-emerald-800 font-bold' : 'hover:bg-slate-50 text-slate-700'
-                    }`}
-                  >
-                    <BookOpen className="w-4 h-4 text-slate-500 shrink-0" />
-                    <div className="flex-1">
-                      <div className="font-semibold">{language === 'ar' ? 'المواصفات وخوارزميات العلاج' : 'Spécifications ITF'}</div>
-                      <div className="text-[10px] text-slate-400">{language === 'ar' ? 'الصيغ الحسابية والمعايير' : 'Formules et algorithmes'}</div>
-                    </div>
-                  </button>
-
                   <div className="border-t border-slate-100 my-1 pt-1">
                     {onOpenMedicalReport && (
                       <button
@@ -333,19 +317,6 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
               <span>{t('nav_benchmark')}</span>
-            </button>
-
-            <button
-              id="nav-tab-specs"
-              onClick={() => setCurrentTab('specs')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 2xl:px-3.5 2xl:py-2 rounded-lg text-xs font-bold whitespace-nowrap transition-all ${
-                currentTab === 'specs'
-                  ? 'bg-white text-emerald-800 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5 text-slate-500" />
-              <span>{t('nav_specs')}</span>
             </button>
 
             <button

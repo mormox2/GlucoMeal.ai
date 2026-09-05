@@ -9,7 +9,6 @@ import { PortionAdjustmentView } from './components/PortionAdjustmentView';
 import { MealValidationSuccess } from './components/MealValidationSuccess';
 import { FoodDatabaseView } from './components/FoodDatabaseView';
 import { BenchmarkView } from './components/BenchmarkView';
-import { TechnicalDocsView } from './components/TechnicalDocsView';
 import { HistoryView } from './components/HistoryView';
 import { UserProfileModal } from './components/UserProfileModal';
 import { MedicalReportModal } from './components/MedicalReportModal';
@@ -50,7 +49,7 @@ export default function App() {
   });
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('signup');
 
-  const [currentTab, setCurrentTab] = useState<'app' | 'history' | 'database' | 'benchmark' | 'specs' | 'doctor'>('app');
+  const [currentTab, setCurrentTab] = useState<'app' | 'history' | 'database' | 'benchmark' | 'doctor'>('app');
   const [activeInputModal, setActiveInputModal] = useState<InputMode | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisStepLabel, setAnalysisStepLabel] = useState('Identification visuelle des aliments…');
@@ -529,10 +528,7 @@ export default function App() {
         {/* Tab 4: Benchmark Dataset */}
         {currentTab === 'benchmark' && <BenchmarkView />}
 
-        {/* Tab 5: Technical Specifications */}
-        {currentTab === 'specs' && <TechnicalDocsView />}
-
-        {/* Tab 6: Diabetologist Portal & Telemonitoring */}
+        {/* Tab 5: Diabetologist Portal & Telemonitoring */}
         {currentTab === 'doctor' && (
           <DoctorPortalView
             meals={savedMeals}
