@@ -20,6 +20,8 @@ export const translations = {
     cgm_btn: 'Capteur CGM',
     cloud_btn: 'Synchronisation Cloud',
     report_btn: 'Rapport PDF',
+    services_menu_btn: 'Services',
+    services_menu_title: 'Outils & Services Cliniques',
 
     // Home Meal Entry
     home_title: 'Qu’avez-vous mangé ?',
@@ -335,6 +337,8 @@ export const translations = {
     cgm_btn: 'مستشعر السكر (CGM)',
     cloud_btn: 'المزامنة السحابية',
     report_btn: 'تقرير الاستشارة PDF',
+    services_menu_btn: 'الخدمات',
+    services_menu_title: 'الخدمات والأدوات الطبية',
 
     // Home Meal Entry
     home_title: 'ماذا تناولت في وجبتك؟',
