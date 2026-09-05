@@ -28,7 +28,16 @@ app.use(express.json({ limit: '20mb' }));
 
 // Compatibility rewrite if /api prefix is omitted by hosting environment
 app.use((req, res, next) => {
-  if (!req.url.startsWith('/api') && !req.url.startsWith('/assets') && req.url !== '/' && !req.url.startsWith('/@') && !req.url.startsWith('/node_modules')) {
+  if (
+    !req.url.startsWith('/api') &&
+    !req.url.startsWith('/assets') &&
+    !req.url.startsWith('/src') &&
+    !req.url.startsWith('/public') &&
+    !req.url.startsWith('/@') &&
+    !req.url.startsWith('/node_modules') &&
+    req.url !== '/' &&
+    !path.extname(req.url.split('?')[0])
+  ) {
     req.url = '/api' + req.url;
   }
   next();

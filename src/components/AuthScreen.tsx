@@ -8,15 +8,14 @@ import {
   ArrowRight,
   ShieldCheck,
   AlertCircle,
-  Syringe,
-  School,
-  Phone,
   ArrowLeft,
   HeartPulse,
 } from 'lucide-react';
-import { registerWithEmail, loginWithEmail, ensureAuthenticatedUser, syncProfileToFirestore } from '../services/firebase';
+import { registerWithEmail, loginWithEmail, syncProfileToFirestore } from '../services/firebase';
 import { UserProfileDT1, AccountType, ChildProfileInfo } from '../types';
 import { saveUserProfile, loadUserProfile } from '../utils/storage';
+import { useLanguage } from '../i18n/LanguageContext';
+import { LanguageSwitcher } from './LanguageSwitcher';
 
 interface AuthScreenProps {
   initialMode?: 'login' | 'signup';
@@ -31,6 +30,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   onCancel,
   onBackToLanding,
 }) => {
+  const { t, isRtl } = useLanguage();
   const [mode, setMode] = useState<'login' | 'signup'>(initialMode);
   const [accountType, setAccountType] = useState<AccountType>('parent');
 
@@ -60,11 +60,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
       if (mode === 'signup') {
         if (!email || !password) {
-          throw new Error('Veuillez renseigner votre e-mail et un mot de passe.');
+          throw new Error(isRtl ? 'يرجى إدخال البريد الإلكتروني وكلمة المرور.' : 'Veuillez renseigner votre e-mail et un mot de passe.');
         }
 
         if (accountType === 'parent' && !childName.trim()) {
-          throw new Error("Veuillez renseigner le prénom de votre enfant.");
+          throw new Error(isRtl ? 'يرجى إدخال اسم الطفل.' : "Veuillez renseigner le prénom de votre enfant.");
         }
 
         // Inscription Firebase
@@ -72,9 +72,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           await registerWithEmail(email, password);
         } catch (firebaseErr: any) {
           if (firebaseErr.code === 'auth/email-already-in-use') {
-            throw new Error('Cet e-mail est déjà associé à un compte. Veuillez vous connecter.');
+            throw new Error(isRtl ? 'هذا البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول.' : 'Cet e-mail est déjà associé à un compte. Veuillez vous connecter.');
           } else if (firebaseErr.code === 'auth/weak-password') {
-            throw new Error('Le mot de passe doit comporter au moins 6 caractères.');
+            throw new Error(isRtl ? 'يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.' : 'Le mot de passe doit comporter au moins 6 caractères.');
           } else {
             console.warn('Firebase register notice:', firebaseErr.message);
           }
@@ -125,7 +125,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       } else {
         // Mode Login
         if (!email || !password) {
-          throw new Error('Veuillez saisir votre e-mail et mot de passe.');
+          throw new Error(isRtl ? 'يرجى إدخال البريد الإلكتروني وكلمة المرور.' : 'Veuillez saisir votre e-mail et mot de passe.');
         }
 
         try {
@@ -143,7 +143,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         onSuccess(updatedProfile);
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "Une erreur est survenue lors de l'opération.");
+      setErrorMsg(err.message || (isRtl ? 'حدث خطأ أثناء العملية.' : "Une erreur est survenue lors de l'opération."));
     } finally {
       setLoading(false);
     }
@@ -151,24 +151,27 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-center py-10 px-4 sm:px-6">
-      {/* Navigation retour */}
-      <div className="max-w-md w-full mx-auto mb-4 flex items-center justify-between">
+      {/* Navigation retour & langue */}
+      <div className="max-w-md w-full mx-auto mb-4 flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={onBackToLanding}
           className="flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
         >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Retour à la présentation</span>
+          <ArrowLeft className={`w-4 h-4 shrink-0 transition-transform ${isRtl ? 'rotate-180' : ''}`} />
+          <span>{t('auth_back_to_landing')}</span>
         </button>
 
-        <button
-          type="button"
-          onClick={onCancel}
-          className="text-xs font-semibold text-slate-700 hover:text-slate-950 underline cursor-pointer"
-        >
-          Accéder sans compte
-        </button>
+        <div className="flex items-center gap-2">
+          <LanguageSwitcher variant="header" />
+          <button
+            type="button"
+            onClick={onCancel}
+            className="text-xs font-semibold text-slate-700 hover:text-slate-950 underline cursor-pointer whitespace-nowrap"
+          >
+            {t('auth_access_without_account')}
+          </button>
+        </div>
       </div>
 
       <div className="max-w-md w-full mx-auto bg-white rounded-xl shadow-xs border border-slate-200 p-6 sm:p-7 space-y-5">
@@ -178,12 +181,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <HeartPulse className="w-5 h-5" />
           </div>
           <h2 className="text-xl font-bold text-slate-900 tracking-tight">
-            {mode === 'signup' ? 'Création de compte clinique' : 'Connexion à votre espace'}
+            {mode === 'signup' ? t('auth_signup_title') : t('auth_login_title')}
           </h2>
           <p className="text-xs text-slate-500 max-w-xs mx-auto">
-            {mode === 'signup'
-              ? 'Enregistrez les ratios d’insuline prescrits et le profil de votre enfant'
-              : 'Accédez à votre historique nutritionnel et vos paramètres thérapeutiques'}
+            {mode === 'signup' ? t('auth_signup_subtitle') : t('auth_login_subtitle')}
           </p>
         </div>
 
@@ -201,7 +202,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            Créer un compte
+            {t('auth_tab_signup')}
           </button>
           <button
             type="button"
@@ -215,7 +216,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            Se connecter
+            {t('auth_tab_login')}
           </button>
         </div>
 
@@ -232,7 +233,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               {/* Type de compte : Parent vs Patient vs Praticien */}
               <div className="space-y-1.5">
                 <label className="font-bold text-slate-800 block">
-                  Profil utilisateur principal :
+                  {t('auth_user_profile_label')}
                 </label>
                 <div className="grid grid-cols-3 gap-2">
                   <button
@@ -245,9 +246,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     }`}
                   >
                     <Users className="w-4 h-4 mx-auto mb-1" />
-                    <div className="font-semibold text-xs">Parent</div>
+                    <div className="font-semibold text-xs">{t('auth_type_parent')}</div>
                     <div className={`text-[10px] ${accountType === 'parent' ? 'text-slate-300' : 'text-slate-400'}`}>
-                      Enfant DT1
+                      {t('auth_type_parent_desc')}
                     </div>
                   </button>
 
@@ -261,9 +262,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     }`}
                   >
                     <User className="w-4 h-4 mx-auto mb-1" />
-                    <div className="font-semibold text-xs">Patient</div>
+                    <div className="font-semibold text-xs">{t('auth_type_patient')}</div>
                     <div className={`text-[10px] ${accountType === 'patient' ? 'text-slate-300' : 'text-slate-400'}`}>
-                      Autonome
+                      {t('auth_type_patient_desc')}
                     </div>
                   </button>
 
@@ -277,9 +278,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     }`}
                   >
                     <Stethoscope className="w-4 h-4 mx-auto mb-1" />
-                    <div className="font-semibold text-xs">Soignant</div>
+                    <div className="font-semibold text-xs">{t('auth_type_doctor')}</div>
                     <div className={`text-[10px] ${accountType === 'doctor' ? 'text-slate-300' : 'text-slate-400'}`}>
-                      Diabétologue
+                      {t('auth_type_doctor_desc')}
                     </div>
                   </button>
                 </div>
@@ -289,28 +290,28 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               {accountType === 'parent' && (
                 <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 space-y-3">
                   <div className="flex items-center gap-1.5 font-bold text-slate-900 text-xs">
-                    <ShieldCheck className="w-4 h-4 text-emerald-700" />
-                    <span>Fiche médicale de l'enfant</span>
+                    <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span>{t('auth_child_info_section')}</span>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2.5">
                     <div>
                       <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                        Prénom de l'enfant *
+                        {t('auth_child_name_label')}
                       </label>
                       <input
                         type="text"
                         required
                         value={childName}
                         onChange={(e) => setChildName(e.target.value)}
-                        placeholder="Ex : Sarah"
+                        placeholder={t('auth_child_name_placeholder')}
                         className="w-full px-2.5 py-1.5 text-xs rounded-md bg-white border border-slate-300 focus:outline-none focus:border-slate-800"
                       />
                     </div>
 
                     <div>
                       <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                        Âge de l'enfant
+                        {t('auth_child_age_label')}
                       </label>
                       <select
                         value={childAge}
@@ -319,7 +320,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                       >
                         {[3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17].map((a) => (
                           <option key={a} value={a}>
-                            {a} ans
+                            {a} {isRtl ? 'سنوات' : 'ans'}
                           </option>
                         ))}
                       </select>
@@ -328,45 +329,45 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
                   <div>
                     <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                      Mode d'injection de l'insuline
+                      {t('auth_delivery_label')}
                     </label>
                     <select
                       value={insulinDeliveryType}
                       onChange={(e) => setInsulinDeliveryType(e.target.value as any)}
                       className="w-full px-2.5 py-1.5 text-xs rounded-md bg-white border border-slate-300 focus:outline-none focus:border-slate-800"
                     >
-                      <option value="pen_half_unit">Stylo pédiatrique à demi-unités (0.5 U • NovoPen Echo)</option>
-                      <option value="pump">Pompe à insuline pédiatrique (incrément 0.1 U)</option>
-                      <option value="standard_pen">Stylo standard pour adolescent (1.0 U)</option>
+                      <option value="pen_half_unit">{t('auth_delivery_pen_half')}</option>
+                      <option value="pump">{t('auth_delivery_pump')}</option>
+                      <option value="standard_pen">{t('auth_delivery_pen_std')}</option>
                     </select>
                     <p className="text-[10px] text-slate-500 mt-1">
-                      L'application adaptera automatiquement le calcul du bolus à cet incrément.
+                      {t('auth_pediatric_security_note')}
                     </p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2.5">
                     <div>
                       <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                        École / Établissement
+                        {t('auth_school_label')}
                       </label>
                       <input
                         type="text"
                         value={schoolName}
                         onChange={(e) => setSchoolName(e.target.value)}
-                        placeholder="Ex : École Pasteur"
+                        placeholder={t('auth_school_placeholder')}
                         className="w-full px-2.5 py-1.5 text-xs rounded-md bg-white border border-slate-300 focus:outline-none focus:border-slate-800"
                       />
                     </div>
 
                     <div>
                       <label className="text-[11px] font-semibold text-slate-700 block mb-1">
-                        Urgence (Téléphone)
+                        {t('auth_emergency_phone_label')}
                       </label>
                       <input
                         type="tel"
                         value={emergencyContactPhone}
                         onChange={(e) => setEmergencyContactPhone(e.target.value)}
-                        placeholder="+216 ... ou +33 ..."
+                        placeholder={t('auth_emergency_phone_placeholder')}
                         className="w-full px-2.5 py-1.5 text-xs rounded-md bg-white border border-slate-300 focus:outline-none focus:border-slate-800"
                       />
                     </div>
@@ -376,13 +377,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
               <div>
                 <label className="font-semibold text-slate-700 block mb-1">
-                  Votre nom ou prénom (Parent / Référent)
+                  {t('auth_parent_name_label')}
                 </label>
                 <input
                   type="text"
                   value={userName}
                   onChange={(e) => setUserName(e.target.value)}
-                  placeholder={accountType === 'parent' ? "Ex : Amina (Maman)" : "Ex : Mohamed"}
+                  placeholder={t('auth_parent_name_placeholder')}
                   className="w-full px-2.5 py-1.5 rounded-md bg-white border border-slate-300 focus:outline-none focus:border-slate-800"
                 />
               </div>
@@ -392,7 +393,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           {/* Email */}
           <div>
             <label className="font-semibold text-slate-700 block mb-1">
-              Adresse e-mail
+              {t('auth_email_label')}
             </label>
             <div className="relative">
               <input
@@ -400,17 +401,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="votre.email@exemple.com"
-                className="w-full pl-8 pr-3 py-1.5 rounded-md bg-white border border-slate-300 focus:outline-none focus:border-slate-800"
+                placeholder={t('auth_email_placeholder')}
+                className={`w-full ${isRtl ? 'pr-8 pl-3' : 'pl-8 pr-3'} py-1.5 rounded-md bg-white border border-slate-300 focus:outline-none focus:border-slate-800`}
               />
-              <Mail className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <Mail className={`w-3.5 h-3.5 text-slate-400 absolute ${isRtl ? 'right-2.5' : 'left-2.5'} top-2.5`} />
             </div>
           </div>
 
           {/* Password */}
           <div>
             <label className="font-semibold text-slate-700 block mb-1">
-              Mot de passe
+              {t('auth_password_label')}
             </label>
             <div className="relative">
               <input
@@ -419,10 +420,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="6 caractères minimum"
-                className="w-full pl-8 pr-3 py-1.5 rounded-md bg-white border border-slate-300 focus:outline-none focus:border-slate-800"
+                placeholder={t('auth_password_placeholder')}
+                className={`w-full ${isRtl ? 'pr-8 pl-3' : 'pl-8 pr-3'} py-1.5 rounded-md bg-white border border-slate-300 focus:outline-none focus:border-slate-800`}
               />
-              <Lock className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+              <Lock className={`w-3.5 h-3.5 text-slate-400 absolute ${isRtl ? 'right-2.5' : 'left-2.5'} top-2.5`} />
             </div>
           </div>
 
@@ -432,16 +433,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             className="w-full mt-2 py-2.5 px-4 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
           >
             {loading ? (
-              <span>Enregistrement en cours…</span>
+              <span>{t('auth_btn_loading')}</span>
             ) : mode === 'signup' ? (
               <>
-                <span>Créer le profil et continuer</span>
-                <ArrowRight className="w-4 h-4" />
+                <span>{t('auth_btn_submit_signup')}</span>
+                <ArrowRight className={`w-4 h-4 shrink-0 transition-transform ${isRtl ? 'rotate-180' : ''}`} />
               </>
             ) : (
               <>
-                <span>Se connecter</span>
-                <ArrowRight className="w-4 h-4" />
+                <span>{t('auth_btn_submit_login')}</span>
+                <ArrowRight className={`w-4 h-4 shrink-0 transition-transform ${isRtl ? 'rotate-180' : ''}`} />
               </>
             )}
           </button>
@@ -449,7 +450,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
         <div className="pt-3 border-t border-slate-100 text-center">
           <p className="text-[11px] text-slate-500">
-            Données protégées • Hébergement sécurisé Google Firestore
+            {isRtl ? 'بيانات مشفرة ومحمية • استضافة سحابية Google Firestore' : 'Données protégées • Hébergement sécurisé Google Firestore'}
           </p>
         </div>
       </div>
