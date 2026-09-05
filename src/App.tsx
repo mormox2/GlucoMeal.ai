@@ -20,6 +20,7 @@ import { CloudSyncModal } from './components/CloudSyncModal';
 import { DoctorPortalView } from './components/DoctorPortalView';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { PostPrandialReminderBanner } from './components/PostPrandialReminderBanner';
+import { BottomNav } from './components/BottomNav';
 import { AnalyzedMeal, InputMode, UserProfileDT1 } from './types';
 import {
   loadSavedMeals,
@@ -394,6 +395,10 @@ export default function App() {
             onRecordPostPrandial={(meal) => setPostPrandialMealTarget(meal)}
             onOpenAutoTitration={() => setIsAutoTitrationOpen(true)}
             onOpenCloudSync={() => setIsCloudSyncOpen(true)}
+            onQuickSelectMeal={(mealText) => {
+              setCurrentTab('app');
+              handleAnalyzeText(mealText);
+            }}
           />
         )}
 
@@ -416,6 +421,20 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Mobile Fixed Bottom Navigation Bar (Hidden in portion review so sticky bolus confirmation has full viewport priority) */}
+      {mealFlowState !== 'review' && (
+        <BottomNav
+          currentTab={currentTab}
+          setCurrentTab={setCurrentTab}
+          activeMealCount={savedMeals.length}
+          onOpenProfileModal={() => setIsProfileModalOpen(true)}
+          onOpenMedicalReport={() => setIsReportModalOpen(true)}
+          onOpenCGM={() => setIsCGMModalOpen(true)}
+          onOpenCloudSync={() => setIsCloudSyncOpen(true)}
+          onOpenAutoTitration={() => setIsAutoTitrationOpen(true)}
+        />
+      )}
 
       {/* DT1 Therapeutic Profile Modal */}
       <UserProfileModal

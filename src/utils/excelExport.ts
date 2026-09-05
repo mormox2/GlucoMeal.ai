@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
+import { sanitizeUserProfile } from './storage';
 
 /**
  * Exporte l'ensemble des données du patient dans un classeur Excel (.xlsx) complet multi-onglets
@@ -185,20 +186,21 @@ export function exportToExcelWorkbook(
   // ==========================================
   // ONGLET 3 : PROFIL & RATIOS INSULINE:GLUCIDES
   // ==========================================
+  const safeProfile = sanitizeUserProfile(profile);
   const profileRows = [
-    { Paramètre: 'Nom du Patient', Valeur: profile.name },
-    { Paramètre: 'Unité Glycémique', Valeur: profile.glucoseUnit },
-    { Paramètre: 'Glycémie Cible', Valeur: `${profile.targetGlucose} ${profile.glucoseUnit}` },
-    { Paramètre: 'Facteur de Sensibilité (ISF)', Valeur: `1 UI pour ${profile.isf} ${profile.glucoseUnit}` },
-    { Paramètre: 'Pas d\'arrondi du stylo', Valeur: `${profile.roundingStep} UI` },
-    { Paramètre: 'Ratio Matin (Petit-déjeuner)', Valeur: `1 UI pour ${profile.icRatios.morning} g de glucides` },
-    { Paramètre: 'Ratio Midi (Déjeuner)', Valeur: `1 UI pour ${profile.icRatios.lunch} g de glucides` },
-    { Paramètre: 'Ratio Soir (Dîner)', Valeur: `1 UI pour ${profile.icRatios.dinner} g de glucides` },
-    { Paramètre: 'Ratio Collation (Goûter)', Valeur: `1 UI pour ${profile.icRatios.snack} g de glucides` },
-    { Paramètre: 'Mode Ramadan Actif', Valeur: profile.ramadanMode ? 'OUI (Régime Jeûne)' : 'NON (Schéma Standard)' },
-    { Paramètre: 'Ratio Iftar (Rupture Jeûne)', Valeur: `1 UI pour ${profile.icRatios.iftar || 8} g` },
-    { Paramètre: 'Ratio Sahriya (Soirée)', Valeur: `1 UI pour ${profile.icRatios.sahriya || 9} g` },
-    { Paramètre: 'Ratio Shor (Aube)', Valeur: `1 UI pour ${profile.icRatios.shor || 12} g` },
+    { Paramètre: 'Nom du Patient', Valeur: safeProfile.name },
+    { Paramètre: 'Unité Glycémique', Valeur: safeProfile.glucoseUnit },
+    { Paramètre: 'Glycémie Cible', Valeur: `${safeProfile.targetGlucose} ${safeProfile.glucoseUnit}` },
+    { Paramètre: 'Facteur de Sensibilité (ISF)', Valeur: `1 UI pour ${safeProfile.isf} ${safeProfile.glucoseUnit}` },
+    { Paramètre: 'Pas d\'arrondi du stylo', Valeur: `${safeProfile.roundingStep} UI` },
+    { Paramètre: 'Ratio Matin (Petit-déjeuner)', Valeur: `1 UI pour ${safeProfile.icRatios.morning} g de glucides` },
+    { Paramètre: 'Ratio Midi (Déjeuner)', Valeur: `1 UI pour ${safeProfile.icRatios.lunch} g de glucides` },
+    { Paramètre: 'Ratio Soir (Dîner)', Valeur: `1 UI pour ${safeProfile.icRatios.dinner} g de glucides` },
+    { Paramètre: 'Ratio Collation (Goûter)', Valeur: `1 UI pour ${safeProfile.icRatios.snack} g de glucides` },
+    { Paramètre: 'Mode Ramadan Actif', Valeur: safeProfile.ramadanMode ? 'OUI (Régime Jeûne)' : 'NON (Schéma Standard)' },
+    { Paramètre: 'Ratio Iftar (Rupture Jeûne)', Valeur: `1 UI pour ${safeProfile.icRatios.iftar || 8} g` },
+    { Paramètre: 'Ratio Sahriya (Soirée)', Valeur: `1 UI pour ${safeProfile.icRatios.sahriya || 9} g` },
+    { Paramètre: 'Ratio Shor (Aube)', Valeur: `1 UI pour ${safeProfile.icRatios.shor || 12} g` },
   ];
 
   const wsProfile = XLSX.utils.json_to_sheet(profileRows);

@@ -114,7 +114,8 @@ export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
           {/* Cards for each slot */}
           <div className="space-y-3.5">
             {slotKeys.map((slot) => {
-              const info: SlotTitrationAnalysis = report.slots[slot];
+              const info = report?.slots?.[slot];
+              if (!info) return null;
               const isApplied = appliedSlots[slot];
               const hasChange = info.status === 'increase_insulin' || info.status === 'decrease_insulin';
 

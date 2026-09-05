@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import { TUNISIAN_FOOD_DATABASE, findFoodInDatabase, calculateCarbsDeterministically } from './src/data/tunisianFoodDatabase';
@@ -33,8 +34,42 @@ async function startServer() {
     res.json({ status: 'ok', service: 'GlucoMeal AI Engine', version: '1.0.0' });
   });
 
-  // In-memory Cloud Sync Store for Multi-Device Telemonitoring
-  const CLOUD_SYNC_STORE = new Map<string, any>();
+  // Persistent Cloud Sync Store for Multi-Device Telemonitoring
+  const SYNC_DB_FILE = path.join(process.cwd(), 'data', 'cloud_sync_db.json');
+
+  function loadSyncDb(): Map<string, any> {
+    const store = new Map<string, any>();
+    try {
+      if (fs.existsSync(SYNC_DB_FILE)) {
+        const raw = fs.readFileSync(SYNC_DB_FILE, 'utf-8');
+        const data = JSON.parse(raw);
+        for (const [k, v] of Object.entries(data)) {
+          store.set(k, v);
+        }
+      }
+    } catch (err) {
+      console.warn('Erreur chargement cloud sync DB:', err);
+    }
+    return store;
+  }
+
+  function persistSyncDb(store: Map<string, any>) {
+    try {
+      const dir = path.dirname(SYNC_DB_FILE);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const obj: Record<string, any> = {};
+      for (const [k, v] of store.entries()) {
+        obj[k] = v;
+      }
+      fs.writeFileSync(SYNC_DB_FILE, JSON.stringify(obj, null, 2), 'utf-8');
+    } catch (err) {
+      console.error('Erreur écriture cloud sync DB:', err);
+    }
+  }
+
+  const CLOUD_SYNC_STORE = loadSyncDb();
 
   // Cloud Sync Push API
   app.post('/api/sync/push', (req, res) => {
@@ -55,6 +90,8 @@ async function startServer() {
         lastUpdated: new Date().toISOString(),
       };
       CLOUD_SYNC_STORE.set(syncCode, record);
+      persistSyncDb(CLOUD_SYNC_STORE);
+
       res.json({ success: true, syncCode, lastUpdated: record.lastUpdated, totalMeals: record.meals.length });
     } catch (err: any) {
       res.status(500).json({ error: 'Erreur lors de la sauvegarde cloud', details: err.message });

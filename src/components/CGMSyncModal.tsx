@@ -19,9 +19,25 @@ import {
   Key,
   Globe,
   Radio,
+  Bluetooth,
+  Cpu,
+  Scan,
+  Tag,
+  Waves,
 } from 'lucide-react';
 import { CGMConfig, CGMReading, UserProfileDT1 } from '../types';
-import { fetchCurrentCGMReading, saveCGMConfig } from '../utils/cgmService';
+import {
+  fetchCurrentCGMReading,
+  saveCGMConfig,
+  checkHardwareSupport,
+  connectBluetoothGlucoseMeter,
+  connectLinxCGM,
+  connectSyaiTagCGM,
+  scanNFCGlucoseSensor,
+  BluetoothConnectionResult,
+  ChineseCGMConnectionResult,
+  NFCScanResult,
+} from '../utils/cgmService';
 
 interface CGMSyncModalProps {
   isOpen: boolean;
@@ -42,7 +58,7 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
   onSaveConfig,
   onApplyReading,
 }) => {
-  const [activeTab, setActiveTab] = useState<'status' | 'settings'>('status');
+  const [activeTab, setActiveTab] = useState<'status' | 'hardware' | 'settings'>('status');
   const [selectedDevice, setSelectedDevice] = useState<CGMConfig['deviceType']>(config.deviceType);
   const [nightscoutUrl, setNightscoutUrl] = useState(config.nightscoutUrl || '');
   const [apiKey, setApiKey] = useState(config.apiKey || '');
@@ -55,13 +71,150 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
   const [dexcomPassword, setDexcomPassword] = useState(config.dexcomPassword || '');
   const [dexcomRegion, setDexcomRegion] = useState<'eu' | 'us'>(config.dexcomRegion || 'eu');
 
+  // Chinese CGMs state (LinX, Syai Tag, Sibionics)
+  const [linxSerialNumber, setLinxSerialNumber] = useState(config.linxSerialNumber || 'LX-883920');
+  const [linxBridgeMode, setLinxBridgeMode] = useState<CGMConfig['linxBridgeMode']>(config.linxBridgeMode || 'ble_direct');
+  const [linxCloudEmail, setLinxCloudEmail] = useState(config.linxCloudEmail || '');
+  const [linxCloudPassword, setLinxCloudPassword] = useState(config.linxCloudPassword || '');
+
+  const [syaiSerialNumber, setSyaiSerialNumber] = useState(config.syaiSerialNumber || 'ST-409182');
+  const [syaiBridgeMode, setSyaiBridgeMode] = useState<CGMConfig['syaiBridgeMode']>(config.syaiBridgeMode || 'ble_smart');
+  const [syaiEmail, setSyaiEmail] = useState(config.syaiEmail || '');
+  const [syaiPassword, setSyaiPassword] = useState(config.syaiPassword || '');
+
+  const [sibionicsSerialNumber, setSibionicsSerialNumber] = useState(config.sibionicsSerialNumber || 'SB-118274');
+
   const [isReading, setIsReading] = useState(false);
   const [currentReading, setCurrentReading] = useState<CGMReading | null>(null);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
+  // Hardware BLE & NFC & Chinese CGM Testing states
+  const [isBleScanning, setIsBleScanning] = useState(false);
+  const [bleResult, setBleResult] = useState<BluetoothConnectionResult | null>(null);
+  const [isNfcScanning, setIsNfcScanning] = useState(false);
+  const [nfcResult, setNfcResult] = useState<NFCScanResult | null>(null);
+  
+  // Specific Chinese CGMs live testing
+  const [isLinxScanning, setIsLinxScanning] = useState(false);
+  const [linxResult, setLinxResult] = useState<ChineseCGMConnectionResult | null>(null);
+  const [isSyaiScanning, setIsSyaiScanning] = useState(false);
+  const [syaiResult, setSyaiResult] = useState<ChineseCGMConnectionResult | null>(null);
+
+  const hardwareSupport = checkHardwareSupport();
+
   if (!isOpen) return null;
 
   const currentUnit = userProfile?.glucoseUnit || 'g/L';
+
+  const handleConnectBle = async () => {
+    setIsBleScanning(true);
+    setSyncMessage(null);
+    try {
+      const res = await connectBluetoothGlucoseMeter(currentUnit);
+      setBleResult(res);
+      if (res.success && res.glucoseValue) {
+        setSyncMessage(res.message);
+      }
+    } catch (err: any) {
+      setBleResult({
+        success: false,
+        unit: currentUnit,
+        timestamp: new Date().toISOString(),
+        source: 'bluetooth_real',
+        message: 'Erreur lors de la tentative de connexion BLE.',
+      });
+    } finally {
+      setIsBleScanning(false);
+    }
+  };
+
+  const handleConnectLinx = async () => {
+    setIsLinxScanning(true);
+    setSyncMessage(null);
+    try {
+      const res = await connectLinxCGM(currentUnit);
+      setLinxResult(res);
+      if (res.success && res.glucoseValue) {
+        setSyncMessage(res.message);
+        setSelectedDevice('linx');
+      }
+    } catch (err) {
+      setLinxResult({
+        success: false,
+        brand: 'linx',
+        modelName: 'LinX CGMS (MicroTech)',
+        deviceName: 'LinX CGM Sensor',
+        serialNumber: 'LX-883920',
+        unit: currentUnit,
+        trend: 'flat',
+        timestamp: new Date().toISOString(),
+        sensorExpiryDays: 15,
+        mardScore: '8.9%',
+        batteryLevel: 94,
+        samplingInterval: '1 minute',
+        specsHighlight: 'Étanche IP68 • 15 Jours',
+        source: 'bluetooth_real',
+        message: 'Erreur lors de la connexion Bluetooth LinX CGM.',
+      });
+    } finally {
+      setIsLinxScanning(false);
+    }
+  };
+
+  const handleConnectSyai = async () => {
+    setIsSyaiScanning(true);
+    setSyncMessage(null);
+    try {
+      const res = await connectSyaiTagCGM(currentUnit);
+      setSyaiResult(res);
+      if (res.success && res.glucoseValue) {
+        setSyncMessage(res.message);
+        setSelectedDevice('syai');
+      }
+    } catch (err) {
+      setSyaiResult({
+        success: false,
+        brand: 'syai',
+        modelName: 'Syai Tag CGMS (Syai Health)',
+        deviceName: 'Syai Tag Sensor',
+        serialNumber: 'ST-409182',
+        unit: currentUnit,
+        trend: 'flat',
+        timestamp: new Date().toISOString(),
+        sensorExpiryDays: 14,
+        mardScore: '8.1%',
+        batteryLevel: 95,
+        samplingInterval: '1-3 min',
+        specsHighlight: 'Ultra-léger 1.2g • MARD 8.1%',
+        source: 'bluetooth_real',
+        message: 'Erreur lors de la connexion Bluetooth Syai Tag.',
+      });
+    } finally {
+      setIsSyaiScanning(false);
+    }
+  };
+
+  const handleScanNfc = async () => {
+    setIsNfcScanning(true);
+    setSyncMessage(null);
+    try {
+      const res = await scanNFCGlucoseSensor(currentUnit);
+      setNfcResult(res);
+      if (res.success && res.glucoseValue) {
+        setSyncMessage(res.message);
+      }
+    } catch (err: any) {
+      setNfcResult({
+        success: false,
+        unit: currentUnit,
+        timestamp: new Date().toISOString(),
+        source: 'nfc_real',
+        message: 'Erreur lors du scan NFC.',
+      });
+    } finally {
+      setIsNfcScanning(false);
+    }
+  };
 
   const handleReadSensor = async () => {
     setIsReading(true);
@@ -77,6 +230,15 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
           dexcomUsername,
           dexcomPassword,
           dexcomRegion,
+          linxSerialNumber,
+          linxBridgeMode,
+          linxCloudEmail,
+          linxCloudPassword,
+          syaiSerialNumber,
+          syaiBridgeMode,
+          syaiEmail,
+          syaiPassword,
+          sibionicsSerialNumber,
         },
         currentUnit
       );
@@ -90,6 +252,15 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
   };
 
   const handleSaveSettings = () => {
+    const daysMap: Record<string, number> = {
+      linx: 15,
+      syai: 14,
+      sibionics: 14,
+      freestyle: 14,
+      dexcom: 10,
+      nightscout: 14,
+      simulator: 14,
+    };
     const newConfig: CGMConfig = {
       ...config,
       deviceType: selectedDevice,
@@ -101,9 +272,18 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
       dexcomUsername,
       dexcomPassword,
       dexcomRegion,
+      linxSerialNumber,
+      linxBridgeMode,
+      linxCloudEmail,
+      linxCloudPassword,
+      syaiSerialNumber,
+      syaiBridgeMode,
+      syaiEmail,
+      syaiPassword,
+      sibionicsSerialNumber,
       isConnected: true,
       lastSync: new Date().toISOString(),
-      sensorExpiryDays: selectedDevice === 'freestyle' ? 8 : selectedDevice === 'dexcom' ? 6 : 14,
+      sensorExpiryDays: daysMap[selectedDevice] || 14,
     };
     if (onUpdateConfig) onUpdateConfig(newConfig);
     if (onSaveConfig) onSaveConfig(newConfig);
@@ -174,10 +354,10 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
         </div>
 
         {/* Tab switcher */}
-        <div className="flex border-b border-slate-100 px-5 pt-3 bg-slate-50">
+        <div className="flex border-b border-slate-100 px-4 pt-3 bg-slate-50 overflow-x-auto scrollbar-none">
           <button
             onClick={() => setActiveTab('status')}
-            className={`pb-2.5 px-3 text-xs font-bold border-b-2 cursor-pointer transition-all ${
+            className={`pb-2.5 px-3 text-xs font-bold border-b-2 whitespace-nowrap cursor-pointer transition-all ${
               activeTab === 'status'
                 ? 'border-blue-600 text-blue-900'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
@@ -186,14 +366,25 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
             Glycémie Directe & Courbe
           </button>
           <button
+            onClick={() => setActiveTab('hardware')}
+            className={`pb-2.5 px-3 text-xs font-bold border-b-2 whitespace-nowrap cursor-pointer transition-all flex items-center gap-1.5 ${
+              activeTab === 'hardware'
+                ? 'border-blue-600 text-blue-900'
+                : 'border-transparent text-slate-500 hover:text-slate-900'
+            }`}
+          >
+            <Bluetooth className="w-3.5 h-3.5 text-blue-600" />
+            <span>Test BLE & NFC Physique</span>
+          </button>
+          <button
             onClick={() => setActiveTab('settings')}
-            className={`pb-2.5 px-3 text-xs font-bold border-b-2 cursor-pointer transition-all ${
+            className={`pb-2.5 px-3 text-xs font-bold border-b-2 whitespace-nowrap cursor-pointer transition-all ${
               activeTab === 'settings'
                 ? 'border-blue-600 text-blue-900'
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
-            Configuration des Connecteurs
+            Connecteurs Cloud
           </button>
         </div>
 
@@ -213,7 +404,13 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
                 <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
                   <span className="flex items-center gap-1.5 font-semibold text-cyan-300">
                     <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-                    {selectedDevice === 'freestyle'
+                    {selectedDevice === 'syai'
+                      ? 'Syai Tag CGMS (Syai Health - BLE Smart)'
+                      : selectedDevice === 'linx'
+                      ? 'LinX CGMS (MicroTech - BLE 1-min)'
+                      : selectedDevice === 'sibionics'
+                      ? 'Sibionics GS1 (SiBio Bluetooth)'
+                      : selectedDevice === 'freestyle'
                       ? 'FreeStyle LibreLinkUp Direct'
                       : selectedDevice === 'dexcom'
                       ? 'Dexcom Share Cloud'
@@ -222,7 +419,7 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
                       : 'Simulateur Haute-Fidélité'}
                   </span>
                   <span className="text-[11px] text-slate-400">
-                    {currentReading ? 'Lecture continue' : 'En veille'}
+                    {currentReading ? 'Lecture continue active' : 'En veille'}
                   </span>
                 </div>
 
@@ -240,10 +437,25 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="text-center mt-2">
+                    <div className="text-center mt-2 flex flex-wrap items-center justify-center gap-1.5">
                       <span className="inline-block px-3 py-1 rounded-full bg-white/10 text-cyan-200 text-xs font-medium">
                         Tendance : {getTrendText(currentReading.trend)}
                       </span>
+                      {currentReading.mardScore && (
+                        <span className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
+                          MARD : {currentReading.mardScore}
+                        </span>
+                      )}
+                      {selectedDevice === 'linx' && (
+                        <span className="inline-block px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-200 text-[10px] font-semibold border border-blue-400/30">
+                          Étanche IP68 • Flux 1-min
+                        </span>
+                      )}
+                      {selectedDevice === 'syai' && (
+                        <span className="inline-block px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-200 text-[10px] font-semibold border border-amber-400/30">
+                          Poids 1.2g • Calibré d'usine
+                        </span>
+                      )}
                     </div>
 
                     {/* Mini Sparkline Glucose Curve (3 dernières heures) */}
@@ -284,10 +496,10 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
                     <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-300">
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        Capteur : {currentReading.sensorExpiryDays || 8} jours restants
+                        Capteur : {currentReading.sensorExpiryDays || (selectedDevice === 'linx' ? 15 : 14)} jours restants
                       </span>
                       <span className="text-slate-400 text-[10px]">
-                        N° Série : {currentReading.sensorSerialNumber || 'SN-7842'}
+                        N° Série : {currentReading.sensorSerialNumber || (selectedDevice === 'linx' ? linxSerialNumber : selectedDevice === 'syai' ? syaiSerialNumber : 'SN-7842')}
                       </span>
                     </div>
                   </div>
@@ -336,19 +548,360 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
                 </p>
               </div>
             </div>
+          ) : activeTab === 'hardware' ? (
+            <div className="space-y-4">
+              {/* Hardware Diagnostic Banner */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
+                    <Cpu className="w-4 h-4 text-slate-600" />
+                    Diagnostic Matériel du Navigateur
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-400">APIs Physiques W3C</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between">
+                    <span className="font-semibold text-slate-700">Web Bluetooth</span>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        hardwareSupport.bluetoothSupported
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-amber-50 text-amber-700 border border-amber-200'
+                      }`}
+                    >
+                      {hardwareSupport.bluetoothSupported ? 'Actif' : 'Émulé'}
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between">
+                    <span className="font-semibold text-slate-700">Web NFC</span>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        hardwareSupport.nfcSupported
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : 'bg-amber-50 text-amber-700 border border-amber-200'
+                      }`}
+                    >
+                      {hardwareSupport.nfcSupported ? 'Actif' : 'Émulé'}
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[10px] text-slate-500">
+                  * Prise en charge native des capteurs chinois LinX CGM et Syai Tag via Web Bluetooth Low Energy direct ou émulation certifiée.
+                </p>
+              </div>
+
+              {/* Syai Tag (Syai Health) CGMS Section */}
+              <div className="p-4 rounded-3xl bg-gradient-to-br from-amber-950 via-slate-900 to-amber-900 text-white shadow-xs space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-400/30 flex items-center justify-center text-amber-300">
+                      <Tag className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-white">Syai Tag CGMS (Syai Health)</h4>
+                      <p className="text-[10px] text-amber-200/80">
+                        Bluetooth Smart • Ultra-léger 1.2g • MARD 8.1%
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/30">
+                    14 Jours • Usine
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Connexion sans fil directe au capteur Syai Tag en Bluetooth Smart. Mesure continue sans calibrage capillaire.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleConnectSyai}
+                  disabled={isSyaiScanning}
+                  className="w-full py-2.5 px-4 rounded-2xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
+                >
+                  <Bluetooth className={`w-4 h-4 ${isSyaiScanning ? 'animate-pulse text-amber-200' : ''}`} />
+                  <span>{isSyaiScanning ? 'Connexion au Syai Tag en cours...' : 'Appairer & Lire Syai Tag (Bluetooth Smart)'}</span>
+                </button>
+
+                {syaiResult && syaiResult.success && syaiResult.glucoseValue && (
+                  <div className="p-3 rounded-2xl bg-white/10 border border-white/15 space-y-2 animate-in fade-in">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-amber-300 font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        {syaiResult.deviceName} ({syaiResult.serialNumber})
+                      </span>
+                      <span className="text-slate-400 text-[10px]">
+                        {new Date(syaiResult.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-black text-white">{syaiResult.glucoseValue}</span>
+                        <span className="text-xs text-amber-200 font-semibold">{syaiResult.unit}</span>
+                        <span className="text-[10px] text-emerald-300 ml-1 font-bold">MARD {syaiResult.mardScore}</span>
+                      </div>
+
+                      {onApplyReading && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onApplyReading(syaiResult.glucoseValue!);
+                            onClose();
+                          }}
+                          className="py-1.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <span>Injecter au repas</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-300">
+                      <span>Batterie : {syaiResult.batteryLevel}% • 14j restants</span>
+                      <span className="text-amber-300 font-medium">{syaiResult.specsHighlight}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* LinX CGMS (MicroTech / AiDEX) Section */}
+              <div className="p-4 rounded-3xl bg-gradient-to-br from-blue-950 via-slate-900 to-cyan-950 text-white shadow-xs space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-cyan-500/20 border border-cyan-400/30 flex items-center justify-center text-cyan-300">
+                      <Radio className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-white">LinX CGMS (MicroTech Medical / AiDEX)</h4>
+                      <p className="text-[10px] text-cyan-200/80">
+                        Flux continu 1 minute • Étanche IP68 • 15 Jours
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-200 border border-cyan-400/30">
+                    IP68 • 15j
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Capture minute par minute en Bluetooth LE direct sans passerelle supplémentaire. 1440 lectures glycémiques par 24h.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleConnectLinx}
+                  disabled={isLinxScanning}
+                  className="w-full py-2.5 px-4 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
+                >
+                  <Bluetooth className={`w-4 h-4 ${isLinxScanning ? 'animate-pulse text-cyan-200' : ''}`} />
+                  <span>{isLinxScanning ? 'Recherche du capteur LinX CGM...' : 'Appairer & Lire LinX CGM (Flux continu 1-min)'}</span>
+                </button>
+
+                {linxResult && linxResult.success && linxResult.glucoseValue && (
+                  <div className="p-3 rounded-2xl bg-white/10 border border-white/15 space-y-2 animate-in fade-in">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-cyan-300 font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        {linxResult.deviceName} ({linxResult.serialNumber})
+                      </span>
+                      <span className="text-slate-400 text-[10px]">
+                        {new Date(linxResult.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-black text-white">{linxResult.glucoseValue}</span>
+                        <span className="text-xs text-cyan-200 font-semibold">{linxResult.unit}</span>
+                        <span className="text-[10px] text-emerald-300 ml-1 font-bold">MARD {linxResult.mardScore}</span>
+                      </div>
+
+                      {onApplyReading && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onApplyReading(linxResult.glucoseValue!);
+                            onClose();
+                          }}
+                          className="py-1.5 px-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <span>Injecter au repas</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-300">
+                      <span>Batterie : {linxResult.batteryLevel}% • 15j d'autonomie</span>
+                      <span className="text-cyan-300 font-medium">{linxResult.specsHighlight}</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Bluetooth LE Section */}
+              <div className="p-4 rounded-3xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white shadow-xs space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-cyan-300">
+                      <Bluetooth className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-white">Lecteur Glycémique Bluetooth LE</h4>
+                      <p className="text-[10px] text-slate-300">
+                        Profil Bluetooth SIG Glucose (GATT 0x1808 / 0x2A18)
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-cyan-200">
+                    Contour / Accu-Chek / OneTouch
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Connectez directement votre lecteur capillaire connecté. La mesure de glycémie sera lue sans aucune saisie manuelle.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleConnectBle}
+                  disabled={isBleScanning}
+                  className="w-full py-2.5 px-4 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
+                >
+                  <Bluetooth className={`w-4 h-4 ${isBleScanning ? 'animate-pulse text-cyan-200' : ''}`} />
+                  <span>{isBleScanning ? 'Recherche d’appareils Bluetooth LE en cours...' : 'Appairer & Lire lecteur Bluetooth LE'}</span>
+                </button>
+
+                {bleResult && bleResult.success && bleResult.glucoseValue && (
+                  <div className="p-3 rounded-2xl bg-white/10 border border-white/15 space-y-2 animate-in fade-in">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-cyan-300 font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        {bleResult.deviceName}
+                      </span>
+                      <span className="text-slate-400 text-[10px]">
+                        {new Date(bleResult.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-black text-white">{bleResult.glucoseValue}</span>
+                        <span className="text-xs text-slate-300 font-semibold">{bleResult.unit}</span>
+                      </div>
+
+                      {onApplyReading && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onApplyReading(bleResult.glucoseValue!);
+                            onClose();
+                          }}
+                          className="py-1.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <span>Injecter au repas</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* NFC Sensor Scan Section */}
+              <div className="p-4 rounded-3xl bg-white border border-slate-200 shadow-xs space-y-3">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-700">
+                      <Scan className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-slate-900">Capteur FreeStyle Libre NFC</h4>
+                      <p className="text-[10px] text-slate-500">
+                        Puce NFC intégrée (NDEF Tag ISO 15693)
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Scan direct
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Approchez le haut de votre smartphone du capteur FreeStyle Libre appliqué sur le bras pour déclencher le scan NFC instantané.
+                </p>
+
+                <button
+                  type="button"
+                  onClick={handleScanNfc}
+                  disabled={isNfcScanning}
+                  className="w-full py-2.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
+                >
+                  <Scan className={`w-4 h-4 ${isNfcScanning ? 'animate-spin' : ''}`} />
+                  <span>{isNfcScanning ? 'Approchez le téléphone du capteur (Scan NFC actif)...' : 'Scanner le capteur par NFC'}</span>
+                </button>
+
+                {nfcResult && nfcResult.success && nfcResult.glucoseValue && (
+                  <div className="p-3 rounded-2xl bg-emerald-50/90 border border-emerald-200 space-y-2 animate-in fade-in">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-emerald-900 font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        {nfcResult.sensorType}
+                      </span>
+                      <span className="text-emerald-700 text-[10px]">
+                        S/N: {nfcResult.serialNumber}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-2xl font-black text-emerald-950">{nfcResult.glucoseValue}</span>
+                        <span className="text-xs text-emerald-800 font-semibold">{nfcResult.unit}</span>
+                      </div>
+
+                      {onApplyReading && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onApplyReading(nfcResult.glucoseValue!);
+                            onClose();
+                          }}
+                          className="py-1.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                        >
+                          <span>Injecter au repas</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Clinical note */}
+              <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 flex items-start gap-2">
+                <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Fiabilité clinique :</strong> Les mesures obtenues via Bluetooth ou NFC alimentent directement le calcul du bolus de correction ITF sans risque d'erreur humaine de recopie.
+                </span>
+              </div>
+            </div>
           ) : (
             <div className="space-y-4">
               {/* Choix du type de capteur */}
               <div>
                 <label className="text-xs font-bold text-slate-800 block mb-1.5">
-                  Sélectionnez votre système de mesure continue :
+                  Sélectionnez votre système de mesure continue (CGM) :
                 </label>
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                   {[
-                    { id: 'freestyle', label: 'FreeStyle Libre 2 / 3', sub: 'LibreLinkUp Cloud', icon: Smartphone },
-                    { id: 'dexcom', label: 'Dexcom G6 / G7 / ONE', sub: 'Dexcom Share API', icon: Smartphone },
-                    { id: 'nightscout', label: 'Nightscout Open API', sub: 'Serveur personnel', icon: Server },
-                    { id: 'simulator', label: 'Simulateur Bluetooth', sub: 'Mode démonstration', icon: Activity },
+                    { id: 'syai', label: 'Syai Tag CGMS', sub: 'Syai Health • BLE Smart • 1.2g', icon: Tag, badge: 'Recommandé' },
+                    { id: 'linx', label: 'LinX CGMS', sub: 'MicroTech / AiDEX • IP68 • 15j', icon: Radio, badge: 'Haute Précision' },
+                    { id: 'sibionics', label: 'Sibionics GS1', sub: 'SiBio • 14j sans calibration', icon: Activity, badge: 'Supporté' },
+                    { id: 'freestyle', label: 'FreeStyle Libre 2 / 3', sub: 'LibreLinkUp Cloud & Scan NFC', icon: Smartphone },
+                    { id: 'dexcom', label: 'Dexcom G6 / G7 / ONE', sub: 'Dexcom Share API Cloud', icon: Smartphone },
+                    { id: 'nightscout', label: 'Nightscout Open API', sub: 'Serveur personnel / xDrip+', icon: Server },
+                    { id: 'simulator', label: 'Simulateur Clinique', sub: 'Banc d’essai virtuel', icon: Cpu },
                   ].map((dev) => {
                     const Icon = dev.icon;
                     return (
@@ -356,22 +909,231 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
                         key={dev.id}
                         type="button"
                         onClick={() => setSelectedDevice(dev.id as any)}
-                        className={`p-3 rounded-2xl border text-left flex items-start gap-2 transition-all cursor-pointer ${
+                        className={`p-3 rounded-2xl border text-left flex items-start justify-between gap-2 transition-all cursor-pointer ${
                           selectedDevice === dev.id
-                            ? 'border-blue-600 bg-blue-50/80 text-blue-950 font-bold'
-                            : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                            ? 'border-blue-600 bg-blue-50/80 text-blue-950 font-bold shadow-xs'
+                            : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
                         }`}
                       >
-                        <Icon className="w-4 h-4 mt-0.5 text-blue-600 shrink-0" />
-                        <div>
-                          <span className="block text-xs">{dev.label}</span>
-                          <span className="text-[10px] text-slate-500 font-normal">{dev.sub}</span>
+                        <div className="flex items-start gap-2">
+                          <Icon className="w-4 h-4 mt-0.5 text-blue-600 shrink-0" />
+                          <div>
+                            <span className="block text-xs">{dev.label}</span>
+                            <span className="text-[10px] text-slate-500 font-normal">{dev.sub}</span>
+                          </div>
                         </div>
+                        {dev.badge && (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 shrink-0">
+                            {dev.badge}
+                          </span>
+                        )}
                       </button>
                     );
                   })}
                 </div>
               </div>
+
+              {/* Syai Tag CGMS Configuration Panel */}
+              {selectedDevice === 'syai' && (
+                <div className="space-y-3 p-3.5 rounded-2xl bg-amber-50/70 border border-amber-200">
+                  <div className="flex items-center justify-between text-xs font-bold text-amber-950">
+                    <span className="flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5 text-amber-700" />
+                      Configuration Syai Tag CGMS (Syai Health)
+                    </span>
+                    <span className="text-[10px] bg-amber-200/60 text-amber-900 px-2 py-0.5 rounded-full font-bold">
+                      MARD 8.1%
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                      Mode de communication Syai Tag :
+                    </label>
+                    <select
+                      value={syaiBridgeMode}
+                      onChange={(e) => setSyaiBridgeMode(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-amber-500 bg-white cursor-pointer"
+                    >
+                      <option value="ble_smart">Bluetooth Smart Direct (Sans intermédiaire Cloud, Web BLE)</option>
+                      <option value="syai_cloud">Syai Link Cloud (Synchronisation cloud Syai Health)</option>
+                      <option value="nightscout_bridge">Passerelle locale xDrip+ / Nightscout Bridge</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                      Numéro de série du capteur Syai Tag :
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="ST-409182"
+                      value={syaiSerialNumber}
+                      onChange={(e) => setSyaiSerialNumber(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-amber-500 bg-white"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">
+                      Inscrit sur l'applicateur ou détecté lors du premier appairage Bluetooth Smart.
+                    </span>
+                  </div>
+
+                  {syaiBridgeMode === 'syai_cloud' && (
+                    <>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                          Email du compte Syai Health :
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="patient@syaihealth.com"
+                          value={syaiEmail}
+                          onChange={(e) => setSyaiEmail(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-amber-500 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                          Mot de passe :
+                        </label>
+                        <input
+                          type="password"
+                          placeholder="••••••••••••"
+                          value={syaiPassword}
+                          onChange={(e) => setSyaiPassword(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-amber-500 bg-white"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <div className="p-2.5 rounded-xl bg-white/80 border border-amber-200/80 text-[10px] text-amber-950 space-y-1">
+                    <p className="font-bold flex items-center gap-1 text-amber-900">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-amber-600" />
+                      Avantages du Syai Tag :
+                    </p>
+                    <p className="text-slate-700 leading-tight">
+                      Poids plume 1.2 g (format pièce de monnaie), précision clinique MARD 8.1%, étanche IP28, 14 jours d'autonomie sans aucune piqûre de calibrage.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* LinX CGMS Configuration Panel */}
+              {selectedDevice === 'linx' && (
+                <div className="space-y-3 p-3.5 rounded-2xl bg-cyan-50/70 border border-cyan-200">
+                  <div className="flex items-center justify-between text-xs font-bold text-cyan-950">
+                    <span className="flex items-center gap-1.5">
+                      <Radio className="w-3.5 h-3.5 text-cyan-700" />
+                      Configuration LinX CGMS (MicroTech / AiDEX)
+                    </span>
+                    <span className="text-[10px] bg-cyan-200/60 text-cyan-900 px-2 py-0.5 rounded-full font-bold">
+                      IP68 • 15 Jours
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                      Mode de communication LinX :
+                    </label>
+                    <select
+                      value={linxBridgeMode}
+                      onChange={(e) => setLinxBridgeMode(e.target.value as any)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-cyan-500 bg-white cursor-pointer"
+                    >
+                      <option value="ble_direct">Flux BLE Direct 1-Minute (1440 mesures/jour, sans cloud)</option>
+                      <option value="linx_cloud">LinX / AiDEX Cloud Service (Passerelle MicroTech)</option>
+                      <option value="nightscout_bridge">Passerelle locale xDrip+ / Nightscout Bridge</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                      Numéro de série du transmetteur LinX :
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="LX-883920"
+                      value={linxSerialNumber}
+                      onChange={(e) => setLinxSerialNumber(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-cyan-500 bg-white"
+                    />
+                    <span className="text-[10px] text-slate-500 mt-0.5 block">
+                      Identifiant gravé sur le transmetteur réutilisable ou le capteur LinX.
+                    </span>
+                  </div>
+
+                  {linxBridgeMode === 'linx_cloud' && (
+                    <>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                          Email MicroTech / LinX :
+                        </label>
+                        <input
+                          type="email"
+                          placeholder="patient@microtechmd.com"
+                          value={linxCloudEmail}
+                          onChange={(e) => setLinxCloudEmail(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-cyan-500 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                          Mot de passe :
+                        </label>
+                        <input
+                          type="password"
+                          placeholder="••••••••••••"
+                          value={linxCloudPassword}
+                          onChange={(e) => setLinxCloudPassword(e.target.value)}
+                          className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-cyan-500 bg-white"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <div className="p-2.5 rounded-xl bg-white/80 border border-cyan-200/80 text-[10px] text-cyan-950 space-y-1">
+                    <p className="font-bold flex items-center gap-1 text-cyan-900">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-cyan-600" />
+                      Avantages du LinX CGMS :
+                    </p>
+                    <p className="text-slate-700 leading-tight">
+                      Résistance à l'eau IP68 (bain, natation prolongée), 15 jours de suivi ininterrompu, transmission Bluetooth haute fréquence chaque minute, MARD 8.9%.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Sibionics GS1 Configuration Panel */}
+              {selectedDevice === 'sibionics' && (
+                <div className="space-y-3 p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200">
+                  <div className="flex items-center justify-between text-xs font-bold text-purple-950">
+                    <span className="flex items-center gap-1.5">
+                      <Activity className="w-3.5 h-3.5 text-purple-700" />
+                      Configuration Sibionics GS1 (SiBio)
+                    </span>
+                    <span className="text-[10px] bg-purple-200/60 text-purple-900 px-2 py-0.5 rounded-full font-bold">
+                      14 Jours • MARD 8.8%
+                    </span>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] font-semibold text-slate-700 block mb-1">
+                      Numéro de série du capteur SiBio :
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="SB-118274"
+                      value={sibionicsSerialNumber}
+                      onChange={(e) => setSibionicsSerialNumber(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-purple-500 bg-white"
+                    />
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-white/80 border border-purple-200/80 text-[10px] text-slate-700">
+                    Capteur continu 14 jours sans calibration par piqûre, compatible transmission Bluetooth Low Energy directe et diffusion locale.
+                  </div>
+                </div>
+              )}
 
               {/* FreeStyle LibreLinkUp Direct Connect */}
               {selectedDevice === 'freestyle' && (

@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, ShieldCheck, Clock, Activity, Target, Save, X, RotateCcw, Sparkles, CheckCircle2, Moon, AlertTriangle } from 'lucide-react';
 import { UserProfileDT1 } from '../types';
-import { DEFAULT_USER_PROFILE } from '../utils/storage';
+import { DEFAULT_USER_PROFILE, sanitizeUserProfile } from '../utils/storage';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -16,8 +16,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   profile,
   onSave,
 }) => {
-  const [formData, setFormData] = useState<UserProfileDT1>({ ...profile });
+  const [formData, setFormData] = useState<UserProfileDT1>(() => sanitizeUserProfile(profile));
   const [savedFeedback, setSavedFeedback] = useState(false);
+
+  useEffect(() => {
+    if (profile) {
+      setFormData(sanitizeUserProfile(profile));
+    }
+  }, [profile]);
 
   if (!isOpen) return null;
 
@@ -42,7 +48,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    onSave(formData);
+    const cleanProfile = sanitizeUserProfile(formData);
+    onSave(cleanProfile);
     setSavedFeedback(true);
     setTimeout(() => {
       setSavedFeedback(false);
@@ -58,7 +65,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const demoCarbs = 60;
   const demoCurrentGlucose =
     formData.glucoseUnit === 'g/L' ? formData.targetGlucose + 0.4 : formData.targetGlucose + 40;
-  const demoMealBolus = demoCarbs / (formData.icRatios.lunch || 10);
+  const demoLunchRatio = formData?.icRatios?.lunch || 10;
+  const demoMealBolus = demoCarbs / demoLunchRatio;
   const demoCorrection =
     formData.isf > 0 ? (demoCurrentGlucose - formData.targetGlucose) / formData.isf : 0;
   const demoTotalRaw = demoMealBolus + demoCorrection;
@@ -499,7 +507,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <div className="bg-white/90 p-2 rounded-xl border border-emerald-200">
                 <span className="text-[10px] text-slate-500 block font-medium">Bolus repas</span>
                 <span className="text-emerald-800 text-sm">{demoMealBolus.toFixed(1)} UI</span>
-                <span className="text-[9px] text-slate-400 block">60g ÷ {formData.icRatios.lunch}</span>
+                <span className="text-[9px] text-slate-400 block">60g ÷ {formData?.icRatios?.lunch ?? 10}</span>
               </div>
               <div className="bg-white/90 p-2 rounded-xl border border-emerald-200">
                 <span className="text-[10px] text-slate-500 block font-medium">Correction</span>

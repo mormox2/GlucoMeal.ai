@@ -1,4 +1,5 @@
 import { AnalyzedMeal, UserProfileDT1, MealSlot } from '../types';
+import { sanitizeUserProfile } from './storage';
 
 export interface SlotTitrationAnalysis {
   slot: MealSlot;
@@ -53,6 +54,7 @@ export function analyzePatientTitration(
   meals: AnalyzedMeal[],
   userProfile: UserProfileDT1
 ): GlobalTitrationReport {
+  const safeProfile = sanitizeUserProfile(userProfile);
   const slotLabels: Record<MealSlot, string> = {
     morning: 'Petit-déjeuner (Matin)',
     lunch: 'Déjeuner (Midi)',
@@ -104,7 +106,7 @@ export function analyzePatientTitration(
       else if (m.post_prandial_evaluation === 'hypo') hypoCount++;
       else if (m.post_prandial_glucose) {
         // Déduction si évaluation manquante (seuil g/L vs mg/dL)
-        const isMgDl = userProfile.glucoseUnit === 'mg/dL';
+        const isMgDl = safeProfile.glucoseUnit === 'mg/dL';
         const val = m.post_prandial_glucose;
         const low = isMgDl ? 70 : 0.7;
         const high = isMgDl ? 180 : 1.8;
@@ -121,7 +123,7 @@ export function analyzePatientTitration(
     const hyperPct = countPP > 0 ? Math.round((hyperCount / countPP) * 100) : 0;
     const hypoPct = countPP > 0 ? Math.round((hypoCount / countPP) * 100) : 0;
 
-    const currentRatio = userProfile.icRatios[slot] || 10;
+    const currentRatio = safeProfile.icRatios[slot] || 10;
     let suggestedRatio = currentRatio;
     let status: SlotTitrationAnalysis['status'] = 'optimal';
     let recommendationTitle = 'Ratio équilibré';

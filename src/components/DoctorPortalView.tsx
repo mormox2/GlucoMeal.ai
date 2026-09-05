@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { AnalyzedMeal, UserProfileDT1, MealSlot } from '../types';
 import { analyzePatientTitration } from '../utils/autoTitration';
+import { sanitizeUserProfile } from '../utils/storage';
 
 interface DoctorPortalViewProps {
   meals: AnalyzedMeal[];
@@ -105,13 +106,14 @@ export const DoctorPortalView: React.FC<DoctorPortalViewProps> = ({
   };
 
   const handlePrescribeRatio = (slot: MealSlot, newRatio: number) => {
-    const updatedProfile: UserProfileDT1 = {
-      ...userProfile,
+    const cleanCurrent = sanitizeUserProfile(userProfile);
+    const updatedProfile: UserProfileDT1 = sanitizeUserProfile({
+      ...cleanCurrent,
       icRatios: {
-        ...userProfile.icRatios,
+        ...cleanCurrent.icRatios,
         [slot]: newRatio,
       },
-    };
+    });
     onUpdateProfile(updatedProfile);
     setPrescribedSlots((prev) => ({ ...prev, [slot]: true }));
     setTimeout(() => {
@@ -317,7 +319,8 @@ export const DoctorPortalView: React.FC<DoctorPortalViewProps> = ({
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {slotKeys.map((slot) => {
-                const info = report.slots[slot];
+                const info = report?.slots?.[slot];
+                if (!info) return null;
                 const isPrescribed = prescribedSlots[slot];
                 const hasRecommendation = info.status === 'increase_insulin' || info.status === 'decrease_insulin';
 

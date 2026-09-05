@@ -91,14 +91,17 @@ export interface CGMReading {
   unit: 'g/L' | 'mg/dL';
   trend: 'flat' | 'up_slow' | 'up_fast' | 'down_slow' | 'down_fast';
   timestamp: string;
-  device: 'dexcom' | 'freestyle' | 'nightscout' | 'manual' | 'simulator';
+  device: 'dexcom' | 'freestyle' | 'nightscout' | 'manual' | 'simulator' | 'linx' | 'syai' | 'sibionics';
   sensorExpiryDays?: number;
   sensorSerialNumber?: string;
+  sensorModelName?: string;
+  mardScore?: string;
+  batteryLevel?: number;
   recentSparkline?: { time: string; value: number }[];
 }
 
 export interface CGMConfig {
-  deviceType: 'dexcom' | 'freestyle' | 'nightscout' | 'simulator';
+  deviceType: 'dexcom' | 'freestyle' | 'nightscout' | 'simulator' | 'linx' | 'syai' | 'sibionics';
   isConnected: boolean;
   nightscoutUrl?: string;
   apiKey?: string;
@@ -111,6 +114,18 @@ export interface CGMConfig {
   dexcomUsername?: string;
   dexcomPassword?: string;
   dexcomRegion?: 'eu' | 'us';
+  // Chinese CGMs: LinX CGM & Syai Tag & Sibionics
+  linxDeviceName?: string;
+  linxSerialNumber?: string;
+  linxBridgeMode?: 'ble_direct' | 'linx_cloud' | 'nightscout_bridge' | 'xdrip';
+  linxCloudEmail?: string;
+  linxCloudPassword?: string;
+  syaiDeviceName?: string;
+  syaiSerialNumber?: string;
+  syaiBridgeMode?: 'ble_smart' | 'syai_link' | 'nightscout_bridge' | 'xdrip';
+  syaiEmail?: string;
+  syaiPassword?: string;
+  sibionicsSerialNumber?: string;
   // Sensor metadata
   sensorExpiryDays?: number;
   sensorSerialNumber?: string;

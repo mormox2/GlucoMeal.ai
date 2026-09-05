@@ -365,5 +365,59 @@ Sprint 4 : Tests Cliniques Patients & Validation (Semaines 7-8)
 - Test bêta fermé avec 20 patients diabétiques de type 1 en Tunisie.
 - Mesure du KPI principal : passage du temps de comptage manuel de 5-10 min à moins de 45 secondes.
 - Audit de sécurité et packaging APK final.`,
-  }
+  },
+  {
+    id: 'spec-k',
+    letter: 'K',
+    title: 'Intégration Matérielle CGM & Capteurs Chinois (LinX, Syai Tag, Sibionics)',
+    summary: 'Architecture de capture glycémique en temps réel : Web Bluetooth LE, NFC et protocoles asiatiques de nouvelle génération.',
+    content: `1. Écosystème des Capteurs Chinois de Nouvelle Génération :
+L'accès démocratisé aux capteurs de glycémie continue en Tunisie et en Afrique du Nord passe de plus en plus par des dispositifs certifiés à bas coût et haute précision :
+
+- LinX CGMS (MicroTech Medical / AiDEX) :
+  * Transmission : Bluetooth Low Energy direct chaque minute (1 440 points/jour)
+  * Résistance : Certification IP68 étanche (bain, natation prolongée)
+  * Durée : 15 jours consécutifs avec transmetteur réutilisable
+  * Précision : MARD 8.9%
+  * Connectivité : Flux direct Web BLE (GATT 0x1808) sans passerelle obligatoire, ou passerelle Cloud LinX
+
+- Syai Tag CGMS (Syai Health) :
+  * Format : Poids plume de 1.2 g (format pièce de monnaie)
+  * Transmission : Bluetooth Smart direct toutes les 3 minutes
+  * Calibration : Étalonnage usine direct sans glycémie capillaire
+  * Durée : 14 jours d'autonomie
+  * Précision clinique : MARD 8.1% (excellence clinique internationale)
+  * Connectivité : Appairage direct Web BLE, Syai Cloud Link ou passerelle locale xDrip+
+
+- Sibionics GS1 (SiBio) :
+  * Durée : 14 jours continus sans calibration
+  * Transmission : BLE broadcast instantané (MARD 8.8%)
+
+2. Protocoles Physiques W3C Implémentés :
+- Web Bluetooth (navigator.bluetooth) : Requête du service standard 'glucose' (UUID 0x1808) et caractéristique 'glucose_measurement' (UUID 0x2A18) avec filtre pour transmetteurs LinX et Syai Tag.
+- Web NFC (NDEFReader) : Scan ISO 15693 des capteurs FreeStyle Libre par contact smartphone.
+- Fallback & Simulation : Bascule automatique en mode banc d'essai émulé certifié en cas d'iFrame restreinte.`,
+    codeSnippet: {
+      language: 'typescript',
+      code: `// Exemple d'appairage direct Web Bluetooth pour LinX & Syai Tag
+export async function connectChineseCGM(brand: 'linx' | 'syai' | 'sibionics') {
+  if (!navigator.bluetooth) throw new Error("Web Bluetooth non supporté");
+  
+  const device = await navigator.bluetooth.requestDevice({
+    filters: [
+      { namePrefix: brand === 'linx' ? 'LinX' : brand === 'syai' ? 'Syai' : 'SiBio' },
+      { services: ['glucose', 0x1808] }
+    ],
+    optionalServices: ['battery_service', 0x180F]
+  });
+  
+  const server = await device.gatt?.connect();
+  const service = await server?.getPrimaryService('glucose');
+  const characteristic = await service?.getCharacteristic('glucose_measurement');
+  await characteristic?.startNotifications();
+  
+  return { deviceName: device.name, connected: true };
+}`,
+    },
+  },
 ];

@@ -23,6 +23,8 @@ import {
   FileSpreadsheet,
   Dumbbell,
   Moon,
+  Utensils,
+  Plus,
 } from 'lucide-react';
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
 import { exportUserDataBackup, importUserDataBackup, DEFAULT_USER_PROFILE } from '../utils/storage';
@@ -42,6 +44,7 @@ interface HistoryViewProps {
   onRecordPostPrandial?: (meal: AnalyzedMeal) => void;
   onOpenAutoTitration?: () => void;
   onOpenCloudSync?: () => void;
+  onQuickSelectMeal?: (mealDescription: string) => void;
 }
 
 export const HistoryView: React.FC<HistoryViewProps> = ({
@@ -57,6 +60,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   onRecordPostPrandial,
   onOpenAutoTitration,
   onOpenCloudSync,
+  onQuickSelectMeal,
 }) => {
   const [filterMode, setFilterMode] = useState<'all' | 'favorites'>('all');
   const [importStatus, setImportStatus] = useState<string | null>(null);
@@ -527,12 +531,135 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             ))}
           </div>
         ) : (
-          <div className="p-8 rounded-3xl bg-slate-50 border border-slate-200/60 text-center">
-            <p className="text-sm text-slate-500">
-              {filterMode === 'favorites'
-                ? 'Aucun repas favori enregistré. Cliquez sur l’étoile d’un repas pour l’ajouter à vos favoris !'
-                : 'Aucun repas encore archivé. Commencez par estimer votre premier repas !'}
-            </p>
+          <div className="p-6 sm:p-8 rounded-3xl bg-white border border-slate-200/90 shadow-xs text-center">
+            {filterMode === 'favorites' ? (
+              <div className="space-y-3">
+                <Star className="w-8 h-8 text-amber-400 fill-amber-300 mx-auto" />
+                <h3 className="text-base font-extrabold text-slate-800">Aucun repas favori pour le moment</h3>
+                <p className="text-xs text-slate-500 max-w-md mx-auto">
+                  Cliquez sur l'étoile à côté du nom de n'importe quel repas enregistré pour le retrouver instantanément dans vos favoris.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setFilterMode('all')}
+                  className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  Voir tous les repas
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center mx-auto shadow-xs">
+                  <Utensils className="w-6 h-6" />
+                </div>
+
+                <div className="space-y-1.5 max-w-lg mx-auto">
+                  <h3 className="text-base font-black text-slate-900">
+                    Votre carnet de repas est prêt
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Testez immédiatement l'analyse des glucides et le calcul de bolus d'insuline personnalisé en 1 clic grâce aux suggestions de plats tunisiens typiques :
+                  </p>
+                </div>
+
+                {/* Interactive quick chips */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-w-2xl mx-auto pt-1 text-left">
+                  {[
+                    {
+                      name: 'Couscous au poisson',
+                      nameTn: 'Kskousi bel hout',
+                      desc: 'Semoule, daurade, carotte, courgette',
+                      carbs: 68,
+                      ig: 'IG 55',
+                      icon: '🐟',
+                    },
+                    {
+                      name: "Brik à l'oeuf & thon",
+                      nameTn: 'Brika bel aadhma',
+                      desc: 'Feuille malsouka, oeuf, persil, thon',
+                      carbs: 24,
+                      ig: 'IG 45',
+                      icon: '🍳',
+                    },
+                    {
+                      name: 'Plat Tunisien traditionnel',
+                      nameTn: 'Sahn Tounsi',
+                      desc: 'Salade méchouia, thon, oeuf dur, olives, pain',
+                      carbs: 32,
+                      ig: 'IG 40',
+                      icon: '🥗',
+                    },
+                    {
+                      name: 'Fricassé tunisien (2 pièces)',
+                      nameTn: '2 Fricassés',
+                      desc: 'Pain frit garni pomme de terre, thon, harissa',
+                      carbs: 45,
+                      ig: 'IG 65',
+                      icon: '🥪',
+                    },
+                    {
+                      name: 'Kafteji tunisien',
+                      nameTn: 'Kafteji bel aadhma',
+                      desc: 'Légumes hachés, courge, piments, oeufs',
+                      carbs: 22,
+                      ig: 'IG 45',
+                      icon: '🌶️',
+                    },
+                    {
+                      name: 'Ojja merguez tunisienne',
+                      nameTn: 'Ojja bel merguez',
+                      desc: 'Tomate, oeufs, merguez épicées, huile olive',
+                      carbs: 18,
+                      ig: 'IG 35',
+                      icon: '🥘',
+                    },
+                  ].map((preset) => (
+                    <button
+                      key={preset.name}
+                      type="button"
+                      onClick={() => {
+                        if (onQuickSelectMeal) {
+                          onQuickSelectMeal(preset.name);
+                        } else {
+                          onNewMeal();
+                        }
+                      }}
+                      className="group p-3 rounded-2xl bg-slate-50/80 hover:bg-emerald-50/90 border border-slate-200/80 hover:border-emerald-300 shadow-2xs hover:shadow-xs transition-all cursor-pointer flex flex-col justify-between gap-2"
+                    >
+                      <div className="flex items-start justify-between gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xl shrink-0">{preset.icon}</span>
+                          <div>
+                            <span className="text-xs font-bold text-slate-800 group-hover:text-emerald-900 block leading-snug">
+                              {preset.name}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block font-medium">
+                              {preset.nameTn}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-slate-500 line-clamp-1">{preset.desc}</p>
+                      <div className="flex items-center justify-between pt-1 border-t border-slate-200/50 text-[10px]">
+                        <span className="font-extrabold text-emerald-700">≈ {preset.carbs} g glucides</span>
+                        <span className="text-slate-400 font-semibold">{preset.ig}</span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={onNewMeal}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Prendre une photo ou saisir un autre repas</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

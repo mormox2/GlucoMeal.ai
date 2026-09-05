@@ -364,12 +364,12 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
                   Protocole ITF Actif :
                 </span>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-slate-600 text-[11px]">
-                  <span>Matin : <strong>1 UI / {userProfile.icRatios.morning}g</strong></span>
-                  <span>Midi : <strong>1 UI / {userProfile.icRatios.lunch}g</strong></span>
-                  <span>Soir : <strong>1 UI / {userProfile.icRatios.dinner}g</strong></span>
-                  <span>Collation : <strong>1 UI / {userProfile.icRatios.snack}g</strong></span>
+                  <span>Matin : <strong>1 UI / {userProfile?.icRatios?.morning ?? 8}g</strong></span>
+                  <span>Midi : <strong>1 UI / {userProfile?.icRatios?.lunch ?? 10}g</strong></span>
+                  <span>Soir : <strong>1 UI / {userProfile?.icRatios?.dinner ?? 12}g</strong></span>
+                  <span>Collation : <strong>1 UI / {userProfile?.icRatios?.snack ?? 10}g</strong></span>
                   <span className="col-span-2 pt-1 border-t border-slate-100 text-slate-500">
-                    Cible : <strong>{userProfile.targetGlucose} {userProfile.glucoseUnit}</strong> • ISF : <strong>{userProfile.isf} {userProfile.glucoseUnit}</strong>
+                    Cible : <strong>{userProfile?.targetGlucose ?? 1.0} {userProfile?.glucoseUnit ?? 'g/L'}</strong> • ISF : <strong>{userProfile?.isf ?? 0.4} {userProfile?.glucoseUnit ?? 'g/L'}</strong>
                   </span>
                 </div>
               </div>
@@ -576,7 +576,7 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
                             ≈ {meal.total_carbs} g
                           </span>
                           <span className="text-[10px] text-slate-400 block mt-0.5">
-                            Ratio : 1UI / {meal.bolus_calculated?.icRatio || userProfile.icRatios.lunch}g
+                            Ratio : 1UI / {meal.bolus_calculated?.icRatio || userProfile?.icRatios?.lunch || 10}g
                           </span>
                         </td>
                         <td className="py-3 px-2 text-center whitespace-nowrap">

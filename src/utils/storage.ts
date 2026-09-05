@@ -389,6 +389,43 @@ export function deleteMealFromHistory(mealId: string): AnalyzedMeal[] {
 }
 
 /**
+ * Valide et garantit la structure complète et intègre du profil thérapeutique DT1
+ */
+export function sanitizeUserProfile(profile?: Partial<UserProfileDT1> | null): UserProfileDT1 {
+  if (!profile || typeof profile !== 'object') {
+    return { ...DEFAULT_USER_PROFILE };
+  }
+
+  const rawRatios: Partial<UserProfileDT1['icRatios']> =
+    profile.icRatios && typeof profile.icRatios === 'object' ? profile.icRatios : {};
+  const icRatios = {
+    morning: Number(rawRatios.morning) > 0 ? Number(rawRatios.morning) : DEFAULT_USER_PROFILE.icRatios.morning,
+    lunch: Number(rawRatios.lunch) > 0 ? Number(rawRatios.lunch) : DEFAULT_USER_PROFILE.icRatios.lunch,
+    dinner: Number(rawRatios.dinner) > 0 ? Number(rawRatios.dinner) : DEFAULT_USER_PROFILE.icRatios.dinner,
+    snack: Number(rawRatios.snack) > 0 ? Number(rawRatios.snack) : DEFAULT_USER_PROFILE.icRatios.snack,
+    iftar: Number(rawRatios.iftar) > 0 ? Number(rawRatios.iftar) : (DEFAULT_USER_PROFILE.icRatios.iftar || 8),
+    sahriya: Number(rawRatios.sahriya) > 0 ? Number(rawRatios.sahriya) : (DEFAULT_USER_PROFILE.icRatios.sahriya || 9),
+    shor: Number(rawRatios.shor) > 0 ? Number(rawRatios.shor) : (DEFAULT_USER_PROFILE.icRatios.shor || 12),
+  };
+
+  return {
+    ...DEFAULT_USER_PROFILE,
+    ...profile,
+    name: profile.name?.trim() || DEFAULT_USER_PROFILE.name,
+    glucoseUnit: profile.glucoseUnit === 'mg/dL' ? 'mg/dL' : 'g/L',
+    targetGlucose: typeof profile.targetGlucose === 'number' && profile.targetGlucose > 0
+      ? profile.targetGlucose
+      : DEFAULT_USER_PROFILE.targetGlucose,
+    isf: typeof profile.isf === 'number' && profile.isf > 0
+      ? profile.isf
+      : DEFAULT_USER_PROFILE.isf,
+    icRatios,
+    roundingStep: profile.roundingStep === 1 || profile.roundingStep === 0.1 ? profile.roundingStep : 0.5,
+    ramadanMode: Boolean(profile.ramadanMode),
+  };
+}
+
+/**
  * Charge le profil thérapeutique DT1
  */
 export function loadUserProfile(): UserProfileDT1 {
@@ -399,7 +436,13 @@ export function loadUserProfile(): UserProfileDT1 {
       saveUserProfile(DEFAULT_USER_PROFILE);
       return DEFAULT_USER_PROFILE;
     }
-    return { ...DEFAULT_USER_PROFILE, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    const sanitized = sanitizeUserProfile(parsed);
+    // Si les données stockées étaient corrompues ou incomplètes, restaurer la version saine
+    if (!parsed?.icRatios?.lunch) {
+      localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(sanitized));
+    }
+    return sanitized;
   } catch (err) {
     console.error('Erreur lecture profil DT1:', err);
     return DEFAULT_USER_PROFILE;
@@ -412,7 +455,8 @@ export function loadUserProfile(): UserProfileDT1 {
 export function saveUserProfile(profile: UserProfileDT1): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(profile));
+    const sanitized = sanitizeUserProfile(profile);
+    localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(sanitized));
   } catch (err) {
     console.error('Erreur sauvegarde profil DT1:', err);
   }
@@ -445,7 +489,8 @@ export function calculatePersonalizedBolus(
   currentGlucose?: number,
   activityLevel: PhysicalActivityLevel = 'none'
 ): CalculatedBolusSummary {
-  const icRatio = profile.icRatios[slot] || 10;
+  const safeProfile = sanitizeUserProfile(profile);
+  const icRatio = safeProfile.icRatios[slot] || 10;
   // Bolus repas brut = Glucides / Ratio
   const rawMealBolus = totalCarbs / icRatio;
 

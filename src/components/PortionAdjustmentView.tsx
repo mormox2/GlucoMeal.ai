@@ -22,6 +22,10 @@ import {
   Wifi,
   Dumbbell,
   Moon,
+  Eye,
+  EyeOff,
+  Minimize2,
+  Maximize2,
 } from 'lucide-react';
 import {
   AnalyzedMeal,
@@ -64,6 +68,8 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
   const [foodSearchQuery, setFoodSearchQuery] = useState('');
   const [appliedHabitPreset, setAppliedHabitPreset] = useState(false);
   const [isReadingCGM, setIsReadingCGM] = useState(false);
+  const [isHighContrastMode, setIsHighContrastMode] = useState(false);
+  const [isIngredientsCompact, setIsIngredientsCompact] = useState(false);
 
   // Slot horaire actuel (matin, midi, soir, collation OU iftar, sahriya, shor si Ramadan)
   const [selectedSlot, setSelectedSlot] = useState<MealSlot>(
@@ -76,6 +82,18 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
 
   const currentGlucoseNum = currentGlucoseInput ? parseFloat(currentGlucoseInput) : undefined;
 
+  // Détection clinique d'hypoglycémie et prudence basse (<0.70 g/L ou <70 mg/dL)
+  const isHypoglycemia =
+    currentGlucoseNum !== undefined &&
+    ((userProfile.glucoseUnit === 'g/L' && currentGlucoseNum < 0.7) ||
+      (userProfile.glucoseUnit === 'mg/dL' && currentGlucoseNum < 70));
+
+  const isCautionLow =
+    currentGlucoseNum !== undefined &&
+    !isHypoglycemia &&
+    ((userProfile.glucoseUnit === 'g/L' && currentGlucoseNum < 0.8) ||
+      (userProfile.glucoseUnit === 'mg/dL' && currentGlucoseNum < 80));
+
   // Calcul du bolus selon le profil personnalisé avec modulation activité physique
   const bolusCalculation = calculatePersonalizedBolus(
     meal.total_carbs,
@@ -84,6 +102,48 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
     currentGlucoseNum,
     activityLevel
   );
+
+  // Validation commune utilisée par le bouton pleine page et le bandeau sticky mobile
+  const handleConfirmAction = () => {
+    // Apprentissage actif : mémoriser les ajustements du patient
+    meal.items.forEach((item) => {
+      if (item.confirmed_weight_g && item.original_ai_weight_g) {
+        recordPatientPortionCorrection(
+          item.name_fr,
+          item.name_fr,
+          item.original_ai_weight_g,
+          item.confirmed_weight_g
+        );
+      }
+    });
+
+    const finalMealWithBolus: AnalyzedMeal = {
+      ...meal,
+      activity_level: activityLevel,
+      ramadan_slot: userProfile.ramadanMode ? (selectedSlot as any) : undefined,
+      average_glycemic_index: glycemicMetrics.averageGlycemicIndex,
+      total_glycemic_load: glycemicMetrics.totalGlycemicLoad,
+      dual_wave: dualWaveSuggestion || undefined,
+      bolus_calculated: {
+        slot: selectedSlot,
+        icRatio: bolusCalculation.icRatio,
+        mealBolus: bolusCalculation.mealBolus,
+        rawMealBolus: bolusCalculation.rawMealBolus,
+        activityReductionPct: bolusCalculation.activityReductionPct,
+        activityReductionUnits: bolusCalculation.activityReductionUnits,
+        currentGlucose: currentGlucoseNum,
+        targetGlucose: userProfile.targetGlucose,
+        isf: userProfile.isf,
+        correctionBolus: bolusCalculation.correctionBolus,
+        totalBolus: bolusCalculation.totalBolus,
+      },
+    };
+
+    // Programmation automatique du rappel H+2 pour contrôle post-prandial
+    scheduleH2Reminder(finalMealWithBolus);
+
+    onConfirmMeal(finalMealWithBolus);
+  };
 
   // Calcul métrique glycémique (Index Glycémique & Charge Glycémique globale)
   const glycemicMetrics = calculateMealGlycemicMetrics(meal.items);
@@ -252,8 +312,8 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
   };
 
   return (
-    <div className="max-w-2xl mx-auto py-6 sm:py-8 px-4 sm:px-6">
-      {/* Top back action */}
+    <div className={`max-w-2xl mx-auto py-6 sm:py-8 px-4 sm:px-6 pb-32 sm:pb-36 ${isHighContrastMode ? 'contrast-125' : ''}`}>
+      {/* Top back action & Accessibility controls */}
       <div className="flex items-center justify-between mb-5">
         <button
           onClick={onCancel}
@@ -262,9 +322,24 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           <ArrowLeft className="w-4 h-4" />
           <span>Changer de repas</span>
         </button>
-        <span className="text-xs font-medium text-slate-400">
-          Étape 2 / 2 • Vérification humaine
-        </span>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            onClick={() => setIsHighContrastMode(!isHighContrastMode)}
+            className={`inline-flex items-center gap-1 text-[11px] font-bold px-2.5 py-1 rounded-full border transition-all cursor-pointer ${
+              isHighContrastMode
+                ? 'bg-amber-400 text-slate-950 border-amber-500 shadow-xs'
+                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+            }`}
+            title="Mode Grand Affichage / Contraste Élevé pour tremblements ou vue troublée"
+          >
+            {isHighContrastMode ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+            <span>{isHighContrastMode ? 'Contraste Standard' : 'Grand Contraste'}</span>
+          </button>
+          <span className="text-xs font-medium text-slate-400 hidden sm:inline">
+            Étape 2 / 2
+          </span>
+        </div>
       </div>
 
       {/* Main Result Card (Prominent display ≈ 87 g) */}
@@ -339,15 +414,34 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
       {/* Detected Components List (The core interactive steppers) */}
       <div className="mb-6">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
-            Aliments détectés ({meal.items.length})
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">
+              Aliments détectés ({meal.items.length})
+            </h3>
+            <button
+              type="button"
+              onClick={() => setIsIngredientsCompact(!isIngredientsCompact)}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-600 hover:text-emerald-700 bg-slate-100 hover:bg-emerald-50 px-2 py-0.5 rounded-md transition-colors cursor-pointer"
+            >
+              {isIngredientsCompact ? (
+                <>
+                  <Maximize2 className="w-3 h-3 text-slate-500" />
+                  <span>Détaillé</span>
+                </>
+              ) : (
+                <>
+                  <Minimize2 className="w-3 h-3 text-slate-500" />
+                  <span>Compact</span>
+                </>
+              )}
+            </button>
+          </div>
           <span className="text-xs text-slate-500">
             Ajustez les grammes si nécessaire
           </span>
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2.5">
           {meal.items.map((item) => {
             const currentWeight = item.confirmed_weight_g || item.estimated_weight_g;
             const isCorrected = item.is_corrected;
@@ -356,9 +450,11 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               <div
                 key={item.id}
                 id={`meal-item-row-${item.id}`}
-                className="p-4 rounded-2xl bg-white border border-slate-200 hover:border-emerald-300 shadow-xs transition-all"
+                className={`rounded-2xl bg-white border border-slate-200 hover:border-emerald-300 shadow-xs transition-all ${
+                  isIngredientsCompact ? 'p-3' : 'p-4'
+                }`}
               >
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
                   {/* Item info */}
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
@@ -388,7 +484,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                     </div>
 
                     {/* Learning feedback chip */}
-                    {isCorrected && (
+                    {!isIngredientsCompact && isCorrected && (
                       <div className="mt-1 text-[11px] text-teal-800 font-medium bg-teal-50 px-2 py-0.5 rounded-md inline-block border border-teal-200/60">
                         ✏️ Ajusté : IA {item.original_ai_weight_g || item.estimated_weight_g} g → Vous {currentWeight} g (Apprentissage enregistré)
                       </div>
@@ -489,7 +585,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                 Calculateur de Bolus Personnalisé (ITF)
               </h3>
               <p className="text-[10px] text-slate-400">
-                Profil DT1 actif : 1 UI pour {userProfile.icRatios[selectedSlot]} g de glucides
+                Profil DT1 actif : 1 UI pour {userProfile?.icRatios?.[selectedSlot] ?? 10} g de glucides
               </p>
             </div>
           </div>
@@ -527,16 +623,16 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           <div className="grid grid-cols-4 gap-1.5 text-xs">
             {(userProfile.ramadanMode
               ? [
-                  { id: 'iftar', label: '🌙 Iftar', desc: 'Rupture', ratio: userProfile.icRatios.iftar ?? 8 },
-                  { id: 'sahriya', label: '🍵 Sahriya', desc: 'Soirée', ratio: userProfile.icRatios.sahriya ?? 9 },
-                  { id: 'shor', label: '🌅 Shor', desc: 'Aube', ratio: userProfile.icRatios.shor ?? 12 },
-                  { id: 'snack', label: 'Collation', desc: 'Nuit', ratio: userProfile.icRatios.snack },
+                  { id: 'iftar', label: '🌙 Iftar', desc: 'Rupture', ratio: userProfile?.icRatios?.iftar ?? 8 },
+                  { id: 'sahriya', label: '🍵 Sahriya', desc: 'Soirée', ratio: userProfile?.icRatios?.sahriya ?? 9 },
+                  { id: 'shor', label: '🌅 Shor', desc: 'Aube', ratio: userProfile?.icRatios?.shor ?? 12 },
+                  { id: 'snack', label: 'Collation', desc: 'Nuit', ratio: userProfile?.icRatios?.snack ?? 10 },
                 ]
               : [
-                  { id: 'morning', label: 'Matin', desc: 'Petit-déj', ratio: userProfile.icRatios.morning },
-                  { id: 'lunch', label: 'Midi', desc: 'Déjeuner', ratio: userProfile.icRatios.lunch },
-                  { id: 'dinner', label: 'Soir', desc: 'Dîner', ratio: userProfile.icRatios.dinner },
-                  { id: 'snack', label: 'Collation', desc: 'Goûter', ratio: userProfile.icRatios.snack },
+                  { id: 'morning', label: 'Matin', desc: 'Petit-déj', ratio: userProfile?.icRatios?.morning ?? 8 },
+                  { id: 'lunch', label: 'Midi', desc: 'Déjeuner', ratio: userProfile?.icRatios?.lunch ?? 10 },
+                  { id: 'dinner', label: 'Soir', desc: 'Dîner', ratio: userProfile?.icRatios?.dinner ?? 12 },
+                  { id: 'snack', label: 'Collation', desc: 'Goûter', ratio: userProfile?.icRatios?.snack ?? 10 },
                 ]
             ).map((slot) => (
               <button
@@ -638,14 +734,35 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           </div>
 
           {currentGlucoseNum !== undefined && (
-            <div className="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-xs">
-              {currentGlucoseNum > userProfile.targetGlucose ? (
+            <div className="mt-2.5 pt-2 border-t border-white/10 flex flex-col gap-2 text-xs">
+              {isHypoglycemia ? (
+                <div className="p-3.5 rounded-xl bg-rose-950/90 border-2 border-rose-500 text-white space-y-2 animate-in fade-in">
+                  <div className="flex items-center gap-2 text-rose-300 font-black text-xs sm:text-sm">
+                    <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 animate-bounce" />
+                    <span>🚨 ALERTE HYPOGLYCÉMIE PRÉ-PRANDIALE ({currentGlucoseNum} {userProfile.glucoseUnit})</span>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-white/10 border border-white/10 text-[11px] text-rose-100 space-y-1">
+                    <p className="font-extrabold text-white">⚡ Protocole vital : Règle des 15 g de sucre rapide</p>
+                    <p>Prenez immédiatement l'un des équivalents suivants :</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 pt-1 font-semibold text-white">
+                      <div className="p-1.5 rounded bg-rose-900/80 text-center">🥤 150 ml de jus d'orange / soda</div>
+                      <div className="p-1.5 rounded bg-rose-900/80 text-center">🍬 3 morceaux de sucre n°4</div>
+                      <div className="p-1.5 rounded bg-rose-900/80 text-center">🍯 1 c. à soupe de miel</div>
+                    </div>
+                  </div>
+
+                  <p className="text-[11px] text-rose-200 bg-rose-900/50 p-2 rounded-lg border border-rose-400/40">
+                    ⚠️ <strong>Consigne de sécurité stricte :</strong> Reposez-vous 15 min, recontrôlez la glycémie. <strong>Ne réalisez PAS l'injection de bolus</strong> tant que la glycémie n'est pas revenue ≥ 0.80 g/L (80 mg/dL).
+                  </p>
+                </div>
+              ) : isCautionLow ? (
+                <div className="p-2.5 rounded-xl bg-amber-500/20 border border-amber-400/50 text-amber-200 text-xs">
+                  ⚠️ <strong>Glycémie basse de prudence ({currentGlucoseNum} {userProfile.glucoseUnit}) :</strong> Risque d'hypoglycémie pendant la digestion. Surveillez vos symptômes et envisagez de scinder ou différer le bolus.
+                </div>
+              ) : currentGlucoseNum > userProfile.targetGlucose ? (
                 <span className="text-amber-300 font-medium">
-                  ⚠️ Glycémie supérieure à la cible (+{(currentGlucoseNum - userProfile.targetGlucose).toFixed(2)} {userProfile.glucoseUnit}) : correction calculée.
-                </span>
-              ) : currentGlucoseNum < 0.7 && userProfile.glucoseUnit === 'g/L' ? (
-                <span className="text-rose-400 font-bold">
-                  🚨 Risque d'hypoglycémie ! Resucrage recommandé avant le bolus.
+                  ⚠️ Glycémie supérieure à la cible (+{(currentGlucoseNum - userProfile.targetGlucose).toFixed(2)} {userProfile.glucoseUnit}) : correction calculée (+{bolusCalculation.correctionBolus} UI).
                 </span>
               ) : (
                 <span className="text-emerald-300 font-medium">
@@ -662,7 +779,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
               Bolus Repas
             </span>
-            <span className="text-lg font-black text-white block">
+            <span className={`font-black text-white block ${isHighContrastMode ? 'text-xl' : 'text-lg'}`}>
               {bolusCalculation.mealBolus} UI
             </span>
             <span className="text-[10px] text-slate-400">
@@ -674,7 +791,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">
               Correction
             </span>
-            <span className="text-lg font-black text-blue-300 block">
+            <span className={`font-black text-blue-300 block ${isHighContrastMode ? 'text-xl' : 'text-lg'}`}>
               +{bolusCalculation.correctionBolus} UI
             </span>
             <span className="text-[10px] text-slate-400">
@@ -682,14 +799,24 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             </span>
           </div>
 
-          <div className="p-3 rounded-2xl bg-emerald-600/90 text-white border border-emerald-400/40 shadow-sm">
-            <span className="text-[10px] uppercase font-extrabold text-emerald-100 block mb-0.5">
+          <div className={`p-3 rounded-2xl border shadow-sm ${
+            isHighContrastMode
+              ? 'bg-amber-400 text-slate-950 border-amber-300 ring-2 ring-amber-300'
+              : 'bg-emerald-600/90 text-white border-emerald-400/40'
+          }`}>
+            <span className={`text-[10px] uppercase font-extrabold block mb-0.5 ${
+              isHighContrastMode ? 'text-slate-900' : 'text-emerald-100'
+            }`}>
               Bolus Total
             </span>
-            <span className="text-xl font-black block tracking-tight">
+            <span className={`font-black block tracking-tight ${
+              isHighContrastMode ? 'text-2xl text-slate-950 font-black' : 'text-xl'
+            }`}>
               {bolusCalculation.totalBolus} UI
             </span>
-            <span className="text-[10px] text-emerald-100/90">
+            <span className={`text-[10px] ${
+              isHighContrastMode ? 'text-slate-800 font-bold' : 'text-emerald-100/90'
+            }`}>
               arrondi {userProfile.roundingStep} UI
             </span>
           </div>
@@ -740,51 +867,69 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
 
         <button
           id="btn-validate-meal"
-          onClick={() => {
-            // Apprentissage actif : mémoriser les ajustements du patient
-            meal.items.forEach((item) => {
-              if (item.confirmed_weight_g && item.original_ai_weight_g) {
-                recordPatientPortionCorrection(
-                  item.name_fr,
-                  item.name_fr,
-                  item.original_ai_weight_g,
-                  item.confirmed_weight_g
-                );
-              }
-            });
-
-            const finalMealWithBolus: AnalyzedMeal = {
-              ...meal,
-              activity_level: activityLevel,
-              ramadan_slot: userProfile.ramadanMode ? (selectedSlot as any) : undefined,
-              average_glycemic_index: glycemicMetrics.averageGlycemicIndex,
-              total_glycemic_load: glycemicMetrics.totalGlycemicLoad,
-              dual_wave: dualWaveSuggestion || undefined,
-              bolus_calculated: {
-                slot: selectedSlot,
-                icRatio: bolusCalculation.icRatio,
-                mealBolus: bolusCalculation.mealBolus,
-                rawMealBolus: bolusCalculation.rawMealBolus,
-                activityReductionPct: bolusCalculation.activityReductionPct,
-                activityReductionUnits: bolusCalculation.activityReductionUnits,
-                currentGlucose: currentGlucoseNum,
-                targetGlucose: userProfile.targetGlucose,
-                isf: userProfile.isf,
-                correctionBolus: bolusCalculation.correctionBolus,
-                totalBolus: bolusCalculation.totalBolus,
-              },
-            };
-
-            // Programmation automatique du rappel H+2 pour contrôle post-prandial
-            scheduleH2Reminder(finalMealWithBolus);
-
-            onConfirmMeal(finalMealWithBolus);
-          }}
-          className="w-full sm:w-2/3 py-3.5 px-5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-extrabold shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 transition-all cursor-pointer"
+          onClick={handleConfirmAction}
+          className={`w-full sm:w-2/3 py-3.5 px-5 rounded-2xl text-white text-sm font-extrabold shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
+            isHypoglycemia
+              ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/25'
+              : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25'
+          }`}
         >
           <CheckCircle2 className="w-5 h-5" />
-          <span>Valider le repas (≈ {meal.total_carbs} g • {bolusCalculation.totalBolus} UI)</span>
+          <span>
+            {isHypoglycemia
+              ? `Valider après resucrage (≈ ${meal.total_carbs} g • ${bolusCalculation.totalBolus} UI)`
+              : `Valider le repas (≈ ${meal.total_carbs} g • ${bolusCalculation.totalBolus} UI)`}
+          </span>
         </button>
+      </div>
+
+      {/* P0 - Sticky Mobile Confirmation Bar (Floating action footer) */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 backdrop-blur-md border-t border-slate-200/90 px-3 sm:px-4 py-2.5 sm:py-3 shadow-[0_-4px_25px_rgba(0,0,0,0.1)]">
+        <div className="max-w-2xl mx-auto flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2">
+            <div className="bg-emerald-50/90 border border-emerald-200/80 px-2.5 py-1 rounded-xl">
+              <span className="text-[9px] uppercase font-extrabold text-emerald-800 block leading-tight">Glucides</span>
+              <span className="text-sm font-black text-emerald-950 block">≈ {meal.total_carbs} g</span>
+            </div>
+            <div className={`px-2.5 sm:px-3 py-1 rounded-xl border shadow-xs ${
+              isHighContrastMode
+                ? 'bg-amber-400 text-slate-950 border-amber-300'
+                : 'bg-slate-900 text-white border-slate-700/80'
+            }`}>
+              <span className={`text-[9px] uppercase font-extrabold block leading-tight ${
+                isHighContrastMode ? 'text-slate-900' : 'text-slate-400'
+              }`}>
+                Bolus
+              </span>
+              <span className={`text-sm font-black block ${
+                isHighContrastMode ? 'text-slate-950 text-base font-black' : 'text-emerald-400'
+              }`}>
+                {bolusCalculation.totalBolus} UI
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
+            {isHypoglycemia && (
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-100 px-2 py-1 rounded-lg">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Resucrage requis
+              </span>
+            )}
+            <button
+              id="btn-sticky-validate-meal"
+              onClick={handleConfirmAction}
+              className={`flex-1 sm:flex-initial py-2.5 px-4 sm:px-6 rounded-xl font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                isHypoglycemia
+                  ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/25'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25'
+              }`}
+            >
+              <CheckCircle2 className="w-4 h-4" />
+              <span>{isHypoglycemia ? 'Valider (après resucrage)' : 'Valider le repas'}</span>
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Modal: Add Food from Tunisian Database */}
