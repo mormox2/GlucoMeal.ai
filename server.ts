@@ -1,7 +1,7 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
-import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI, Type } from '@google/genai';
 import { TUNISIAN_FOOD_DATABASE, findFoodInDatabase, calculateCarbsDeterministically, normalizeCulinaryTerm } from './src/data/tunisianFoodDatabase';
 import { TUNISIAN_DATASET, TUNISIAN_DATASET_100, generateExpandedDataset } from './src/types/benchmark';
@@ -23,19 +23,26 @@ function getGeminiClient(): GoogleGenAI | null {
   return aiClient;
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+app.use(express.json({ limit: '20mb' }));
 
-  app.use(express.json({ limit: '20mb' }));
+// Compatibility rewrite if /api prefix is omitted by hosting environment
+app.use((req, res, next) => {
+  if (!req.url.startsWith('/api') && !req.url.startsWith('/assets') && req.url !== '/' && !req.url.startsWith('/@') && !req.url.startsWith('/node_modules')) {
+    req.url = '/api' + req.url;
+  }
+  next();
+});
 
-  // API Healthcheck
-  app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', service: 'GlucoMeal AI Engine', version: '1.0.0' });
-  });
+// API Healthcheck
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', service: 'GlucoMeal AI Engine', version: '1.0.0' });
+});
 
-  // Persistent Cloud Sync Store for Multi-Device Telemonitoring
-  const SYNC_DB_FILE = path.join(process.cwd(), 'data', 'cloud_sync_db.json');
+// Persistent Cloud Sync Store for Multi-Device Telemonitoring
+const SYNC_DB_FILE = process.env.VERCEL
+  ? path.join('/tmp', 'cloud_sync_db.json')
+  : path.join(process.cwd(), 'data', 'cloud_sync_db.json');
 
   function loadSyncDb(): Map<string, any> {
     const store = new Map<string, any>();
@@ -1327,8 +1334,12 @@ Réponds en JSON strict conforme au schéma.`;
     return 15;
   }
 
+async function startServer() {
+  const PORT = Number(process.env.PORT) || 3000;
+
   // Vite middleware setup
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -1347,4 +1358,9 @@ Réponds en JSON strict conforme au schéma.`;
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export { app };
+export default app;
