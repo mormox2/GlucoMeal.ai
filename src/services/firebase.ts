@@ -97,25 +97,50 @@ export const auth: Auth = getAuth(app);
 export const storage: FirebaseStorage = getStorage(app, firebaseConfig.storageBucket);
 export { db };
 
+let anonymousAuthFailed = false;
+
 /**
  * Assure qu'un utilisateur est authentifié (authentification anonyme transparente par défaut si non connecté)
  */
 export async function ensureAuthenticatedUser(): Promise<User> {
   // Si déjà en session, retourner directement pour éviter la création répétée de listeners
   if (auth.currentUser) {
+    anonymousAuthFailed = false;
     return auth.currentUser;
+  }
+
+  // Si l'authentification anonyme est bloquée côté Firebase Console, éviter de spammer l'API
+  if (anonymousAuthFailed) {
+    throw new Error(
+      'Authentification Firebase anonyme désactivée dans la console Firebase (auth/admin-restricted-operation).'
+    );
   }
 
   return new Promise((resolve, reject) => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       unsubscribe();
       if (user) {
+        anonymousAuthFailed = false;
         resolve(user);
       } else {
         try {
           const cred = await signInAnonymously(auth);
+          anonymousAuthFailed = false;
           resolve(cred.user);
-        } catch (error) {
+        } catch (error: any) {
+          if (
+            error?.code === 'auth/admin-restricted-operation' ||
+            error?.code === 'auth/operation-not-allowed'
+          ) {
+            anonymousAuthFailed = true;
+            console.warn(
+              '⚠️ [GlucoMeal.ai / Firebase Auth] L’authentification anonyme est désactivée dans la console Firebase (auth/admin-restricted-operation).\n' +
+                '➡️ Pour activer la synchronisation automatique transparente :\n' +
+                '1. Rendez-vous sur Firebase Console > Authentification > Modes de connexion (Sign-in method)\n' +
+                '2. Cliquez sur "Anonyme" > Activez-le > Enregistrez.\n' +
+                '3. Dans l’onglet Paramètres > Actions des utilisateurs, vérifiez que "Autoriser les utilisateurs à s’inscrire" est activé.'
+            );
+          }
           reject(error);
         }
       }

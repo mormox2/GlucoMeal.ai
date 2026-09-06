@@ -84,6 +84,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             throw new Error(isRtl ? 'يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.' : 'Le mot de passe doit comporter au moins 6 caractères.');
           } else if (firebaseErr.code === 'auth/invalid-email') {
             throw new Error(isRtl ? 'صيغة البريد الإلكتروني غير صالحة.' : 'Format d’adresse e-mail invalide.');
+          } else if (
+            firebaseErr.code === 'auth/admin-restricted-operation' ||
+            firebaseErr.code === 'auth/operation-not-allowed'
+          ) {
+            throw new Error(
+              isRtl
+                ? 'التسجيل معطّل حالياً في إعدادات Firebase. يرجى تفعيل مزود البريد الإلكتروني وفتح التسجيل في وحدة تحكم Firebase.'
+                : 'Les inscriptions sont désactivées dans Firebase. Veuillez activer le fournisseur "Adresse e-mail/Mot de passe" et autoriser les inscriptions dans la console Firebase.'
+            );
           } else {
             throw new Error(
               firebaseErr.message ||
@@ -164,6 +173,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               isRtl
                 ? 'تم حظر الحساب مؤقتًا بسبب كثرة المحاولات. يرجى المحاولة لاحقًا.'
                 : 'Trop de tentatives infructueuses. Veuillez patienter avant de réessayer.'
+            );
+          } else if (
+            firebaseErr.code === 'auth/operation-not-allowed' ||
+            firebaseErr.code === 'auth/admin-restricted-operation'
+          ) {
+            throw new Error(
+              isRtl
+                ? 'تسجيل الدخول بالبريد الإلكتروني معطّل في إعدادات Firebase.'
+                : 'La méthode de connexion par e-mail est désactivée dans la console Firebase (Sign-in method).'
             );
           } else {
             throw new Error(
