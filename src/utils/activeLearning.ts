@@ -13,43 +13,35 @@ interface CorrectionEvent {
   timestamp: string;
 }
 
-// Initial defaults for active learning demonstration
-const DEFAULT_PREFERENCES: PatientCustomPortion[] = [
-  {
-    food_id: 'fec-04',
-    food_name: 'Pain Tabouna traditionnel',
-    custom_portion_g: 40,
-    default_portion_g: 75,
-    correction_count: 5,
-    last_updated: new Date().toISOString(),
-    is_active: true,
-  },
-  {
-    food_id: 'couscous_semoule',
-    food_name: 'Couscous (semoule cuite vapeur)',
-    custom_portion_g: 180,
-    default_portion_g: 220,
-    correction_count: 3,
-    last_updated: new Date().toISOString(),
-    is_active: true,
-  },
-];
+// Initialement vide : apprentissage uniquement à partir des vraies corrections du patient
+const DEFAULT_PREFERENCES: PatientCustomPortion[] = [];
 
 /**
  * Charge les préférences personnalisées apprises
  */
 export function loadPatientCustomPortions(): PatientCustomPortion[] {
-  if (typeof window === 'undefined') return DEFAULT_PREFERENCES;
+  if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CUSTOM_PORTIONS);
     if (!raw) {
-      savePatientCustomPortions(DEFAULT_PREFERENCES);
-      return DEFAULT_PREFERENCES;
+      return [];
     }
-    return JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+
+    // Purge automatique des anciennes portions démo factices
+    const cleaned = parsed.filter(
+      (p: any) =>
+        !(p.food_id === 'fec-04' && p.correction_count === 5) &&
+        !(p.food_id === 'couscous_semoule' && p.correction_count === 3)
+    );
+    if (cleaned.length !== parsed.length) {
+      savePatientCustomPortions(cleaned);
+    }
+    return cleaned;
   } catch (err) {
     console.error('Erreur chargement portions apprises:', err);
-    return DEFAULT_PREFERENCES;
+    return [];
   }
 }
 
@@ -62,6 +54,19 @@ export function savePatientCustomPortions(portions: PatientCustomPortion[]): voi
     localStorage.setItem(STORAGE_KEYS.CUSTOM_PORTIONS, JSON.stringify(portions));
   } catch (err) {
     console.error('Erreur sauvegarde portions apprises:', err);
+  }
+}
+
+/**
+ * Réinitialise toutes les portions apprises et l'historique des corrections
+ */
+export function clearPatientCustomPortions(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(STORAGE_KEYS.CUSTOM_PORTIONS);
+    localStorage.removeItem(STORAGE_KEYS.ACTIVE_CORRECTIONS);
+  } catch (err) {
+    console.error('Erreur réinitialisation portions apprises:', err);
   }
 }
 

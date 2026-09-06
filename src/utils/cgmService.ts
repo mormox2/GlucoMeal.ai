@@ -9,10 +9,10 @@ const STORAGE_KEYS = {
 
 export const DEFAULT_CGM_CONFIG: CGMConfig = {
   deviceType: 'freestyle',
-  isConnected: true,
-  nightscoutUrl: 'https://monsite-nightscout.herokuapp.com',
-  apiKey: '********',
-  lastSync: new Date().toISOString(),
+  isConnected: false,
+  nightscoutUrl: '',
+  apiKey: '',
+  lastSync: undefined,
 };
 
 /**
@@ -23,10 +23,17 @@ export function loadCGMConfig(): CGMConfig {
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.CGM_CONFIG);
     if (!raw) {
-      saveCGMConfig(DEFAULT_CGM_CONFIG);
       return DEFAULT_CGM_CONFIG;
     }
-    return { ...DEFAULT_CGM_CONFIG, ...JSON.parse(raw) };
+    const parsed = JSON.parse(raw);
+    // Purge de l'ancienne URL de démonstration fictive
+    if (parsed && parsed.nightscoutUrl === 'https://monsite-nightscout.herokuapp.com') {
+      parsed.nightscoutUrl = '';
+      parsed.apiKey = '';
+      parsed.isConnected = false;
+      saveCGMConfig(parsed);
+    }
+    return { ...DEFAULT_CGM_CONFIG, ...parsed };
   } catch (err) {
     console.error('Erreur lecture config CGM:', err);
     return DEFAULT_CGM_CONFIG;

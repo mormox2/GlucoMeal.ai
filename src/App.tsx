@@ -32,6 +32,7 @@ import {
   saveSingleMeal,
   toggleFavoriteMeal,
   deleteMealFromHistory,
+  clearAllMeals,
   loadUserProfile,
   saveUserProfile,
 } from './utils/storage';
@@ -131,6 +132,11 @@ export default function App() {
     setSavedMeals(updated);
   };
 
+  const handleClearAllMeals = () => {
+    const updated = clearAllMeals();
+    setSavedMeals(updated);
+  };
+
   const handleRefreshHistory = () => {
     setSavedMeals(loadSavedMeals());
   };
@@ -183,7 +189,7 @@ export default function App() {
       const data = await response.json();
       const analyzedMeal: AnalyzedMeal = {
         id: `meal-${Date.now()}`,
-        user_id: 'user-t1d-1',
+        user_id: auth.currentUser?.uid || 'user-local',
         meal_name: data.meal_name || presetName || 'Repas photographié',
         meal_name_ar: data.meal_name_ar || '',
         created_at: new Date().toISOString(),
@@ -221,7 +227,7 @@ export default function App() {
       const data = await response.json();
       const analyzedMeal: AnalyzedMeal = {
         id: `meal-${Date.now()}`,
-        user_id: 'user-t1d-1',
+        user_id: auth.currentUser?.uid || 'user-local',
         meal_name: data.meal_name || 'Repas décrit',
         meal_name_ar: data.meal_name_ar || '',
         created_at: new Date().toISOString(),
@@ -259,7 +265,7 @@ export default function App() {
       const data = await response.json();
       const analyzedMeal: AnalyzedMeal = {
         id: `meal-${Date.now()}`,
-        user_id: 'user-t1d-1',
+        user_id: auth.currentUser?.uid || 'user-local',
         meal_name: data.meal_name || 'Repas dicté',
         meal_name_ar: data.meal_name_ar || '',
         created_at: new Date().toISOString(),
@@ -297,7 +303,7 @@ export default function App() {
       const data = await response.json();
       const analyzedMeal: AnalyzedMeal = {
         id: `meal-${Date.now()}`,
-        user_id: 'user-t1d-1',
+        user_id: auth.currentUser?.uid || 'user-local',
         meal_name: data.meal_name || 'Produit industriel',
         meal_name_ar: data.meal_name_ar || '',
         created_at: new Date().toISOString(),
@@ -336,7 +342,7 @@ export default function App() {
         const data = await response.json();
         const analyzedMeal: AnalyzedMeal = {
           id: `meal-${Date.now()}`,
-          user_id: 'user-t1d-1',
+          user_id: auth.currentUser?.uid || 'user-local',
           meal_name: data.meal_name || 'Produit scanné (Étiquette)',
           meal_name_ar: data.meal_name_ar || '',
           created_at: new Date().toISOString(),
@@ -548,6 +554,7 @@ export default function App() {
             onNewMeal={handleStartNewMeal}
             onToggleFavorite={handleToggleFavorite}
             onDeleteMeal={handleDeleteMeal}
+            onClearAllMeals={handleClearAllMeals}
             onRefreshHistory={handleRefreshHistory}
             onOpenMedicalReport={() => setIsReportModalOpen(true)}
             onOpenCGMSync={() => setIsCGMModalOpen(true)}

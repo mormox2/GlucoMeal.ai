@@ -26,322 +26,34 @@ export const DEFAULT_USER_PROFILE: UserProfileDT1 = {
   ramadanMode: false,
 };
 
-// Repas par défaut initiaux avec données cliniques complètes (post-prandial, double bolus, index glycémique)
-export const INITIAL_DEMO_MEALS: AnalyzedMeal[] = [
-  {
-    id: 'meal-hist-1',
-    user_id: 'user-t1d-1',
-    meal_name: 'Couscous agneau et légumes',
-    meal_name_ar: 'كسكسي بلحم الخروف والخضار',
-    created_at: new Date(Date.now() - 3600000 * 3).toISOString(),
-    input_type: 'photo',
-    total_carbs: 74,
-    overall_confidence: 'high',
-    confidence_score: 91,
-    is_validated: true,
-    is_favorite: true,
-    average_glycemic_index: 58,
-    total_glycemic_load: 43,
-    post_prandial_glucose: 1.25,
-    post_prandial_timestamp: new Date(Date.now() - 3600000 * 1).toISOString(),
-    post_prandial_evaluation: 'target',
-    dual_wave: {
-      is_recommended: true,
-      immediate_pct: 60,
-      immediate_units: 4.8,
-      extended_pct: 40,
-      extended_units: 3.2,
-      duration_hours: 2.5,
-      reason: "Présence d'agneau gras et sauce mijotée retardant l'absorption des glucides de la semoule.",
-    },
-    bolus_calculated: {
-      slot: 'lunch',
-      icRatio: 10,
-      mealBolus: 7.4,
-      currentGlucose: 1.2,
-      targetGlucose: 1.0,
-      isf: 0.4,
-      correctionBolus: 0.5,
-      totalBolus: 8.0,
-    },
-    items: [
-      {
-        id: 'item-1',
-        name_fr: 'Couscous (semoule cuite vapeur)',
-        name_ar: 'كسكسي مطبوخ',
-        category: 'feculents',
-        estimated_weight_g: 220,
-        confirmed_weight_g: 220,
-        carbs_per_100g: 28,
-        calculated_carbs: 62,
-        confidence: 'high',
-        original_ai_weight_g: 220,
-        is_corrected: false,
-        glycemic_index: 65,
-      },
-      {
-        id: 'item-2',
-        name_fr: 'Pois chiches cuits',
-        name_ar: 'حمص مسلوق',
-        category: 'legumineuses',
-        estimated_weight_g: 40,
-        confirmed_weight_g: 40,
-        carbs_per_100g: 20,
-        calculated_carbs: 8,
-        confidence: 'high',
-        original_ai_weight_g: 40,
-        is_corrected: false,
-        glycemic_index: 28,
-      },
-      {
-        id: 'item-3',
-        name_fr: 'Légumes mijotés',
-        name_ar: 'خضار مطبوخة',
-        category: 'fruits_legumes',
-        estimated_weight_g: 80,
-        confirmed_weight_g: 80,
-        carbs_per_100g: 5,
-        calculated_carbs: 4,
-        confidence: 'medium',
-        original_ai_weight_g: 80,
-        is_corrected: false,
-        glycemic_index: 35,
-      },
-    ],
-  },
-  {
-    id: 'meal-hist-2',
-    user_id: 'user-t1d-1',
-    meal_name: 'Lablabi complet au thon et œuf',
-    meal_name_ar: 'لبلابي تونسي كامل',
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-    input_type: 'voice',
-    total_carbs: 62,
-    overall_confidence: 'high',
-    confidence_score: 94,
-    is_validated: true,
-    is_favorite: true,
-    average_glycemic_index: 48,
-    total_glycemic_load: 30,
-    post_prandial_glucose: 1.18,
-    post_prandial_timestamp: new Date(Date.now() - 86400000 + 7200000).toISOString(),
-    post_prandial_evaluation: 'target',
-    bolus_calculated: {
-      slot: 'lunch',
-      icRatio: 10,
-      mealBolus: 6.2,
-      correctionBolus: 0,
-      totalBolus: 6.0,
-    },
-    items: [
-      {
-        id: 'item-1',
-        name_fr: 'Pois chiches en bouillon',
-        name_ar: 'حمص مسلوق',
-        category: 'legumineuses',
-        estimated_weight_g: 180,
-        confirmed_weight_g: 180,
-        carbs_per_100g: 19,
-        calculated_carbs: 34,
-        confidence: 'high',
-        original_ai_weight_g: 180,
-        is_corrected: false,
-        glycemic_index: 30,
-      },
-      {
-        id: 'item-2',
-        name_fr: 'Pain rassis trempé',
-        name_ar: 'خبز منقوع',
-        category: 'feculents',
-        estimated_weight_g: 60,
-        confirmed_weight_g: 60,
-        carbs_per_100g: 48,
-        calculated_carbs: 28,
-        confidence: 'medium',
-        original_ai_weight_g: 60,
-        is_corrected: false,
-        glycemic_index: 70,
-      },
-    ],
-  },
-  {
-    id: 'meal-hist-3',
-    user_id: 'user-t1d-1',
-    meal_name: 'Ojja merguez avec pain Tabouna',
-    meal_name_ar: 'عجة بالمرقاز مع خبز طابونة',
-    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
-    input_type: 'text',
-    total_carbs: 45,
-    overall_confidence: 'high',
-    confidence_score: 89,
-    is_validated: true,
-    is_favorite: false,
-    average_glycemic_index: 54,
-    total_glycemic_load: 24,
-    post_prandial_glucose: 1.55,
-    post_prandial_timestamp: new Date(Date.now() - 86400000 * 2 + 7200000).toISOString(),
-    post_prandial_evaluation: 'hyper',
-    dual_wave: {
-      is_recommended: true,
-      immediate_pct: 60,
-      immediate_units: 2.5,
-      extended_pct: 40,
-      extended_units: 1.5,
-      duration_hours: 2.5,
-      reason: 'Lipides abondants du merguez et de la friture retardant le pic glycémique.',
-    },
-    bolus_calculated: {
-      slot: 'dinner',
-      icRatio: 12,
-      mealBolus: 3.75,
-      correctionBolus: 0,
-      totalBolus: 4.0,
-    },
-    items: [
-      {
-        id: 'item-1',
-        name_fr: 'Pain Tabouna traditionnel',
-        name_ar: 'خبز طابونة',
-        category: 'feculents',
-        estimated_weight_g: 75,
-        confirmed_weight_g: 75,
-        carbs_per_100g: 48,
-        calculated_carbs: 36,
-        confidence: 'high',
-        original_ai_weight_g: 75,
-        is_corrected: false,
-        glycemic_index: 68,
-      },
-      {
-        id: 'item-2',
-        name_fr: 'Ojja merguez sauce tomate',
-        name_ar: 'عجة بالمرقاز',
-        category: 'plats',
-        estimated_weight_g: 220,
-        confirmed_weight_g: 220,
-        carbs_per_100g: 4,
-        calculated_carbs: 9,
-        confidence: 'high',
-        original_ai_weight_g: 220,
-        is_corrected: false,
-        glycemic_index: 38,
-      },
-    ],
-  },
-  {
-    id: 'meal-hist-4',
-    user_id: 'user-t1d-1',
-    meal_name: 'Petit-déjeuner : Pain Tabouna, huile d\'olive et café',
-    meal_name_ar: 'فطور صباح : خبز طابونة وزيت زيتونة',
-    created_at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    input_type: 'photo',
-    total_carbs: 32,
-    overall_confidence: 'high',
-    confidence_score: 95,
-    is_validated: true,
-    is_favorite: true,
-    average_glycemic_index: 52,
-    total_glycemic_load: 17,
-    post_prandial_glucose: 1.10,
-    post_prandial_timestamp: new Date(Date.now() - 86400000 * 3 + 7200000).toISOString(),
-    post_prandial_evaluation: 'target',
-    bolus_calculated: {
-      slot: 'morning',
-      icRatio: 8,
-      mealBolus: 4.0,
-      correctionBolus: 0,
-      totalBolus: 4.0,
-    },
-    items: [
-      {
-        id: 'item-1',
-        name_fr: 'Pain Tabouna traditionnel',
-        name_ar: 'خبز طابونة',
-        category: 'feculents',
-        estimated_weight_g: 65,
-        confirmed_weight_g: 65,
-        carbs_per_100g: 48,
-        calculated_carbs: 31,
-        confidence: 'high',
-        original_ai_weight_g: 65,
-        is_corrected: true,
-        glycemic_index: 60,
-      },
-      {
-        id: 'item-2',
-        name_fr: 'Huile d\'olive vierge',
-        name_ar: 'زيت زيتون',
-        category: 'produits_industriels',
-        estimated_weight_g: 15,
-        confirmed_weight_g: 15,
-        carbs_per_100g: 0,
-        calculated_carbs: 0,
-        confidence: 'high',
-        original_ai_weight_g: 15,
-        is_corrected: false,
-        glycemic_index: 0,
-      },
-    ],
-  },
-  {
-    id: 'meal-hist-5',
-    user_id: 'user-t1d-1',
-    meal_name: 'Collation : Makroudh au miel et thé à la menthe',
-    meal_name_ar: 'لمجة : مقروض وعصير أو تاي',
-    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
-    input_type: 'text',
-    total_carbs: 42,
-    overall_confidence: 'high',
-    confidence_score: 90,
-    is_validated: true,
-    is_favorite: false,
-    average_glycemic_index: 75,
-    total_glycemic_load: 31,
-    post_prandial_glucose: 1.62,
-    post_prandial_timestamp: new Date(Date.now() - 86400000 * 4 + 7200000).toISOString(),
-    post_prandial_evaluation: 'hyper',
-    bolus_calculated: {
-      slot: 'snack',
-      icRatio: 10,
-      mealBolus: 4.2,
-      correctionBolus: 0,
-      totalBolus: 4.0,
-    },
-    items: [
-      {
-        id: 'item-1',
-        name_fr: 'Makroudh artisanal au miel',
-        name_ar: 'مقروض بالعسل',
-        category: 'patisseries',
-        estimated_weight_g: 65,
-        confirmed_weight_g: 65,
-        carbs_per_100g: 65,
-        calculated_carbs: 42,
-        confidence: 'high',
-        original_ai_weight_g: 65,
-        is_corrected: false,
-        glycemic_index: 75,
-      },
-    ],
-  },
-];
+// Historique initial vide (aucune donnée fictive de démonstration)
+export const INITIAL_DEMO_MEALS: AnalyzedMeal[] = [];
+let memoryMealsStore: AnalyzedMeal[] = [];
 
 /**
  * Charge l'historique des repas sauvegardés
  */
 export function loadSavedMeals(): AnalyzedMeal[] {
-  if (typeof window === 'undefined') return INITIAL_DEMO_MEALS;
+  if (typeof window === 'undefined') return [...memoryMealsStore];
   try {
     const raw = localStorage.getItem(STORAGE_KEYS.MEALS);
     if (!raw) {
-      saveMeals(INITIAL_DEMO_MEALS);
-      return INITIAL_DEMO_MEALS;
+      return [];
     }
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : INITIAL_DEMO_MEALS;
+    if (!Array.isArray(parsed)) return [];
+
+    // Purge automatique des anciens repas de démo (meal-hist-1, meal-hist-2, etc.)
+    const cleaned = parsed.filter(
+      (m: any) => !m.id?.startsWith('meal-hist-') && m.user_id !== 'user-t1d-1'
+    );
+    if (cleaned.length !== parsed.length) {
+      saveMeals(cleaned);
+    }
+    return cleaned;
   } catch (err) {
     console.error('Erreur lecture repas sauvegardés:', err);
-    return INITIAL_DEMO_MEALS;
+    return [];
   }
 }
 
@@ -349,6 +61,7 @@ export function loadSavedMeals(): AnalyzedMeal[] {
  * Sauvegarde la liste complète des repas
  */
 export function saveMeals(meals: AnalyzedMeal[]): void {
+  memoryMealsStore = [...meals];
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(STORAGE_KEYS.MEALS, JSON.stringify(meals));
@@ -395,6 +108,14 @@ export function deleteMealFromHistory(mealId: string): AnalyzedMeal[] {
   // Suppression synchrone dans Firestore
   deleteMealFromFirestore(mealId).catch(() => {});
   return updated;
+}
+
+/**
+ * Supprime l'intégralité des repas de l'historique
+ */
+export function clearAllMeals(): AnalyzedMeal[] {
+  saveMeals([]);
+  return [];
 }
 
 /**

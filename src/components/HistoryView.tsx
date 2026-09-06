@@ -38,6 +38,7 @@ interface HistoryViewProps {
   onNewMeal: () => void;
   onToggleFavorite?: (mealId: string) => void;
   onDeleteMeal?: (mealId: string) => void;
+  onClearAllMeals?: () => void;
   onRefreshHistory?: () => void;
   onOpenMedicalReport?: () => void;
   onOpenCGMSync?: () => void;
@@ -54,6 +55,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   onNewMeal,
   onToggleFavorite,
   onDeleteMeal,
+  onClearAllMeals,
   onRefreshHistory,
   onOpenMedicalReport,
   onOpenCGMSync,
@@ -68,6 +70,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
   const favoriteMeals = meals.filter((m) => m.is_favorite);
   const displayedMeals = filterMode === 'favorites' ? favoriteMeals : meals;
+
+  const handleClearAll = () => {
+    if (window.confirm('Êtes-vous sûr de vouloir supprimer tous les repas de votre historique ? Cette action est irréversible.')) {
+      if (onClearAllMeals) {
+        onClearAllMeals();
+      }
+    }
+  };
 
   const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -91,34 +101,6 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
   // Récupération des portions personnalisées apprises dynamiquement
   const patientPortions = loadPatientCustomPortions();
-
-  // Habitudes alimentaires réelles et calibrées
-  const baseHabits = [
-    {
-      dish: 'Couscous agneau traditionnel',
-      dish_ar: 'كسكسي تونسي باللحم',
-      occurrences: 9,
-      usual_weight_g: 240,
-      usual_carbs: '65–70 g',
-      note: 'Pour ce patient, la semoule servie est plus compacte que la portion moyenne.',
-    },
-    {
-      dish: 'Pain Tabouna traditionnel',
-      dish_ar: 'خبز طابونة',
-      occurrences: 24,
-      usual_weight_g: 40,
-      usual_carbs: '≈ 20 g',
-      note: 'Correction mémorisée : portion habituelle = 40 g (au lieu des 60 g standards).',
-    },
-    {
-      dish: 'Lablabi complet au thon',
-      dish_ar: 'لبلابي كامل',
-      occurrences: 5,
-      usual_weight_g: 350,
-      usual_carbs: '60–64 g',
-      note: 'Bol standard avec 1 tranche de pain rassis, pois chiches et thon.',
-    },
-  ];
 
   return (
     <div className="max-w-5xl xl:max-w-6xl mx-auto py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
@@ -246,61 +228,44 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-          {/* Portions apprises dynamiquement du patient si existantes */}
-          {patientPortions.slice(0, 3).map((lp, idx) => (
-            <div
-              key={`learned-${idx}`}
-              className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-300/80 shadow-xs"
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
-                  ✨ Appris ({lp.correction_count} corrections)
-                </span>
+        {patientPortions.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            {patientPortions.slice(0, 3).map((lp, idx) => (
+              <div
+                key={`learned-${idx}`}
+                className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-300/80 shadow-xs"
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
+                    ✨ Appris ({lp.correction_count} corrections)
+                  </span>
+                </div>
+                <h3 className="text-sm font-black text-slate-900 mt-1">{lp.food_name}</h3>
+                <div className="mt-3 pt-3 border-t border-emerald-200/60 flex items-baseline justify-between">
+                  <span className="text-xs text-slate-600">Portion personnalisée :</span>
+                  <span className="text-xs font-black text-emerald-900">{lp.custom_portion_g} g</span>
+                </div>
+                <p className="text-[11px] text-slate-600 mt-1.5">
+                  Proposé automatiquement à la place des {lp.default_portion_g}g standards de l'INNT.
+                </p>
               </div>
-              <h3 className="text-sm font-black text-slate-900 mt-1">{lp.food_name}</h3>
-              <div className="mt-3 pt-3 border-t border-emerald-200/60 flex items-baseline justify-between">
-                <span className="text-xs text-slate-600">Portion personnalisée :</span>
-                <span className="text-xs font-black text-emerald-900">{lp.custom_portion_g} g</span>
-              </div>
-              <p className="text-[11px] text-slate-600 mt-1.5">
-                Proposé automatiquement à la place des {lp.default_portion_g}g standards de l'INNT.
+            ))}
+          </div>
+        ) : (
+          <div className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 mt-0.5">
+              <Sparkles className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-slate-800">
+                Apprentissage actif de vos portions réelles
+              </h4>
+              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                Aucune habitude encore mémorisée. Lorsque vous ajusterez manuellement les portions de vos aliments lors d'un repas (ex. semoule, pain tabouna, pâtes), l'application mémorisera vos quantités habituelles pour les proposer automatiquement.
               </p>
             </div>
-          ))}
-
-          {/* Habitudes de base */}
-          {baseHabits.slice(0, Math.max(1, 3 - Math.min(3, patientPortions.length))).map((habit, idx) => (
-            <div
-              key={idx}
-              className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs hover:border-emerald-300 transition-colors"
-            >
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                  {habit.occurrences} repas enregistrés
-                </span>
-              </div>
-              <h3 className="text-sm font-bold text-slate-900 mt-1">{habit.dish}</h3>
-              <p className="text-xs text-slate-500">{habit.dish_ar}</p>
-
-              <div className="mt-3 pt-3 border-t border-slate-100 flex items-baseline justify-between">
-                <span className="text-xs text-slate-500">Portion habituelle :</span>
-                <span className="text-xs font-extrabold text-slate-800">{habit.usual_weight_g} g</span>
-              </div>
-
-              <div className="flex items-baseline justify-between mt-1">
-                <span className="text-xs text-slate-500">Glucides moyens :</span>
-                <span className="text-xs font-extrabold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded">
-                  {habit.usual_carbs}
-                </span>
-              </div>
-
-              <p className="text-[11px] text-slate-500 mt-2 italic">
-                {habit.note}
-              </p>
-            </div>
-          ))}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Validated Meals List & Filter Tabs */}
@@ -313,29 +278,43 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             </h2>
           </div>
 
-          {/* Filter: All vs Favorites */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs">
-            <button
-              onClick={() => setFilterMode('all')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
-                filterMode === 'all'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              Tous les repas ({meals.length})
-            </button>
-            <button
-              onClick={() => setFilterMode('favorites')}
-              className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
-                filterMode === 'favorites'
-                  ? 'bg-amber-400 text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-              <span>Favoris ({favoriteMeals.length})</span>
-            </button>
+          {/* Filter: All vs Favorites & Clear Button */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs">
+              <button
+                onClick={() => setFilterMode('all')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer ${
+                  filterMode === 'all'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                Tous les repas ({meals.length})
+              </button>
+              <button
+                onClick={() => setFilterMode('favorites')}
+                className={`px-3 py-1.5 rounded-lg font-bold transition-all cursor-pointer flex items-center gap-1 ${
+                  filterMode === 'favorites'
+                    ? 'bg-amber-400 text-slate-900 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+                <span>Favoris ({favoriteMeals.length})</span>
+              </button>
+            </div>
+
+            {onClearAllMeals && meals.length > 0 && (
+              <button
+                type="button"
+                onClick={handleClearAll}
+                className="px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Supprimer définitivement tous les repas de l'historique"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Vider l'historique</span>
+              </button>
+            )}
           </div>
         </div>
 

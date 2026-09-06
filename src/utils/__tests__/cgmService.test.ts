@@ -6,8 +6,8 @@ import {
   fetchCurrentCGMReading,
   DEFAULT_CGM_CONFIG,
 } from '../cgmService';
-import { CGMConfig, UserProfileDT1 } from '../../types';
-import { DEFAULT_USER_PROFILE, loadSavedMeals } from '../storage';
+import { CGMConfig, UserProfileDT1, AnalyzedMeal } from '../../types';
+import { DEFAULT_USER_PROFILE, loadSavedMeals, saveMeals } from '../storage';
 
 describe('Service CGM & Évaluation Post-Prandiale', () => {
   describe('evaluatePostPrandialResult (Normes & Sécurité Clinique)', () => {
@@ -64,6 +64,22 @@ describe('Service CGM & Évaluation Post-Prandiale', () => {
   });
 
   describe('savePostPrandialMeasurement', () => {
+    const testMeal: AnalyzedMeal = {
+      id: 'test-meal-cgm-1',
+      user_id: 'user-test',
+      meal_name: 'Couscous test',
+      created_at: new Date().toISOString(),
+      input_type: 'photo',
+      total_carbs: 60,
+      overall_confidence: 'high',
+      confidence_score: 90,
+      items: [],
+    };
+
+    beforeEach(() => {
+      saveMeals([testMeal]);
+    });
+
     it('met à jour correctement un repas sans générer de delta NaN', () => {
       const meals = loadSavedMeals();
       const targetId = meals[0].id;

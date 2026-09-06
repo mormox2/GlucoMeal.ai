@@ -267,7 +267,7 @@ export const DoctorPortalView: React.FC<DoctorPortalViewProps> = ({
             <div className="p-5 rounded-3xl bg-amber-50/70 border border-amber-200/80 shadow-xs">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-amber-900 uppercase tracking-wider">
-                  Au-dessus de la Cible (TAR)
+                  En Hyperglycémie (TAR)
                 </span>
                 <span className="text-[10px] font-black bg-amber-200/60 text-amber-900 px-2 py-0.5 rounded">
                   Cible &lt; 25%
@@ -275,7 +275,7 @@ export const DoctorPortalView: React.FC<DoctorPortalViewProps> = ({
               </div>
               <div className="mt-3 flex items-baseline gap-2">
                 <span className="text-3xl sm:text-4xl font-black text-amber-800">{tarPct}%</span>
-                <span className="text-xs text-amber-700 font-medium">&gt; 1.80 g/L</span>
+                <span className="text-xs text-amber-700 font-medium">&gt; 1.40 g/L</span>
               </div>
               <p className="text-[11px] text-amber-700 mt-2">
                 Pics hyperglycémiques constatés sur les repas à charge glucidique élevée.
@@ -302,103 +302,47 @@ export const DoctorPortalView: React.FC<DoctorPortalViewProps> = ({
             </div>
           </div>
 
-          {/* Clinical Auto-Titration Section for the Doctor */}
+          {/* Prescriptions Section */}
           <div className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2.5">
-                <Sparkles className="w-5 h-5 text-teal-600" />
-                <div>
-                  <h3 className="text-base font-black text-slate-900">
-                    Avis Clinique & Titration Algorithmique des Ratios I:G
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    Recommandations calculées à partir de l'analyse rétrospective des contrôles à H+2.
-                  </p>
-                </div>
-              </div>
-              <span className="text-xs font-bold px-3 py-1 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
-                Prescription Médicale Directe
-              </span>
-            </div>
-
+            <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-teal-600" />
+              Ajustements Thérapeutiques (Titration Ratios I:G)
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {slotKeys.map((slot) => {
                 const info = report?.slots?.[slot];
                 if (!info) return null;
-                const isPrescribed = prescribedSlots[slot];
                 const hasRecommendation = info.status === 'increase_insulin' || info.status === 'decrease_insulin';
 
                 return (
                   <div
                     key={slot}
-                    className="p-4 rounded-2xl border border-slate-200/90 bg-slate-50/50 space-y-3"
+                    className="p-4 rounded-2xl bg-slate-50 border border-slate-200/90 flex flex-col justify-between gap-3"
                   >
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className="text-sm font-bold text-slate-900">{info.slotLabel}</h4>
-                        <span className="text-[11px] text-slate-500">
-                          {info.totalRecordedPostPrandial} contrôles H+2 • Cible : {info.targetPercentage}%
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold uppercase text-slate-700">
+                          Créneau : {info.slotLabel}
+                        </span>
+                        <span className="text-xs font-mono font-bold text-slate-900">
+                          Actuel : 1 UI / {userProfile.icRatios[slot]} g
                         </span>
                       </div>
-                      <span
-                        className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
-                          info.status === 'optimal'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : info.status === 'increase_insulin'
-                            ? 'bg-amber-100 text-amber-900'
-                            : info.status === 'decrease_insulin'
-                            ? 'bg-rose-100 text-rose-900'
-                            : 'bg-slate-200 text-slate-700'
-                        }`}
-                      >
+                      <h4 className="text-xs font-bold text-slate-900">
                         {info.recommendationTitle}
-                      </span>
+                      </h4>
+                      <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                        {info.clinicalRationale}
+                      </p>
                     </div>
-
-                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-white border border-slate-200/70 text-xs">
-                      <div>
-                        <span className="text-slate-400 block text-[10px] uppercase font-bold">Ratio prescrit actuel</span>
-                        <span className="font-extrabold text-slate-800">1 UI pour {info.currentRatio} g</span>
-                      </div>
-                      {hasRecommendation && (
-                        <>
-                          <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                          <div>
-                            <span className="text-teal-600 block text-[10px] uppercase font-bold">Suggestion algorithme</span>
-                            <span className="font-extrabold text-teal-800 bg-teal-50 px-2 py-0.5 rounded">
-                              1 UI pour {info.suggestedRatio} g
-                            </span>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    <p className="text-[11px] text-slate-600 leading-relaxed">
-                      {info.clinicalRationale}
-                    </p>
 
                     {hasRecommendation && (
                       <button
                         type="button"
                         onClick={() => handlePrescribeRatio(slot, info.suggestedRatio)}
-                        disabled={isPrescribed}
-                        className={`w-full py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                          isPrescribed
-                            ? 'bg-emerald-600 text-white'
-                            : 'bg-teal-700 hover:bg-teal-800 text-white shadow-xs'
-                        }`}
+                        className="w-full py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold transition-colors cursor-pointer"
                       >
-                        {isPrescribed ? (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>Prescription validée & enregistrée !</span>
-                          </>
-                        ) : (
-                          <>
-                            <Stethoscope className="w-3.5 h-3.5" />
-                            <span>Valider la prescription (1 UI / {info.suggestedRatio} g)</span>
-                          </>
-                        )}
+                        Valider : {info.suggestedRatio}g
                       </button>
                     )}
                   </div>
@@ -407,48 +351,30 @@ export const DoctorPortalView: React.FC<DoctorPortalViewProps> = ({
             </div>
           </div>
 
-          {/* Repas Complexes Tunisiens & Dual-Wave Review */}
-          <div className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-3">
-            <div className="flex items-center gap-2">
-              <Waves className="w-4 h-4 text-indigo-600" />
-              <h3 className="text-sm font-bold text-slate-900">
-                Surveillance des Repas Riches en Lipides / Protéines (Cuisine Tunisienne)
-              </h3>
-            </div>
-            <p className="text-xs text-slate-600">
-              Les plats tunisiens traditionnels cuisinés à l'huile d'olive ou riches en légumineuses (Kafteji, Couscous agneau, Lablabi, Ojja merguez) provoquent une vidange gastrique ralentie. Le bolus Double-Vague (Dual-Wave 60/40 sur 2h30) est recommandé pour neutraliser le pic tardif à H+4.
-            </p>
-          </div>
-
-          {/* Doctor Notes & Consultation Summary */}
+          {/* Notes Section */}
           <div className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-teal-600" />
-                <h3 className="text-sm font-bold text-slate-900">
-                  Notes de Téléconsultation & Prescription Diététique
-                </h3>
-              </div>
+              <h3 className="text-sm font-black text-slate-900">
+                Notes de Consultation & Prescription Diététique
+              </h3>
               {isSavedNotes && (
-                <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  Notes enregistrées !
+                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  Enregistré !
                 </span>
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-700 block mb-1">
-                  Praticien Référent :
-                </label>
-                <input
-                  type="text"
-                  value={doctorName}
-                  onChange={(e) => setDoctorName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-teal-500"
-                />
-              </div>
+            <div>
+              <label className="text-xs font-semibold text-slate-700 block mb-1">
+                Praticien Référent :
+              </label>
+              <input
+                type="text"
+                placeholder="Ex : Dr. Diabétologue-Endocrinologue"
+                value={doctorName}
+                onChange={(e) => setDoctorName(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-teal-500"
+              />
             </div>
 
             <div>
