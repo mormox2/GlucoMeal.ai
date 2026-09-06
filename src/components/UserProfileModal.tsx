@@ -3,32 +3,45 @@ import { User, ShieldCheck, Clock, Activity, Target, Save, X, RotateCcw, Sparkle
 import { UserProfileDT1 } from '../types';
 import { DEFAULT_USER_PROFILE, sanitizeUserProfile } from '../utils/storage';
 import { auth, logoutUser } from '../services/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  profile: UserProfileDT1;
+  profile?: UserProfileDT1;
+  currentProfile?: UserProfileDT1;
   onSave: (updatedProfile: UserProfileDT1) => void;
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   isOpen,
   onClose,
-  profile,
+  profile: propProfile,
+  currentProfile,
   onSave,
 }) => {
+  const profile = propProfile || currentProfile || DEFAULT_USER_PROFILE;
   const [formData, setFormData] = useState<UserProfileDT1>(() => sanitizeUserProfile(profile));
   const [savedFeedback, setSavedFeedback] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(
-    () => auth.currentUser?.email || profile.parentEmail || null
+    () => auth.currentUser?.email || profile?.parentEmail || null
   );
 
   useEffect(() => {
-    if (profile) {
-      setFormData(sanitizeUserProfile(profile));
-      setCurrentUserEmail(auth.currentUser?.email || profile.parentEmail || null);
+    const active = propProfile || currentProfile;
+    if (active) {
+      setFormData(sanitizeUserProfile(active));
+      setCurrentUserEmail(auth.currentUser?.email || active?.parentEmail || null);
     }
-  }, [profile, isOpen]);
+  }, [propProfile, currentProfile, isOpen]);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      const active = propProfile || currentProfile;
+      setCurrentUserEmail(user?.email || active?.parentEmail || null);
+    });
+    return () => unsubscribe();
+  }, [propProfile, currentProfile]);
 
   const handleLogout = async () => {
     try {

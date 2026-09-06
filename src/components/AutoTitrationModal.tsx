@@ -21,7 +21,8 @@ interface AutoTitrationModalProps {
   onClose: () => void;
   meals: AnalyzedMeal[];
   userProfile: UserProfileDT1;
-  onApplyNewRatio: (slot: MealSlot, newRatio: number) => void;
+  onApplyNewRatio?: (slot: MealSlot, newRatio: number) => void;
+  onApplyRatios?: (updatedProfile: UserProfileDT1) => void;
 }
 
 export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
@@ -30,6 +31,7 @@ export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
   meals,
   userProfile,
   onApplyNewRatio,
+  onApplyRatios,
 }) => {
   const [appliedSlots, setAppliedSlots] = useState<Record<string, boolean>>({});
 
@@ -38,7 +40,19 @@ export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
   const report = analyzePatientTitration(meals, userProfile);
 
   const handleApply = (slot: MealSlot, newRatio: number) => {
-    onApplyNewRatio(slot, newRatio);
+    if (onApplyNewRatio) {
+      onApplyNewRatio(slot, newRatio);
+    }
+    if (onApplyRatios) {
+      const updatedProfile: UserProfileDT1 = {
+        ...userProfile,
+        icRatios: {
+          ...userProfile.icRatios,
+          [slot]: newRatio,
+        },
+      };
+      onApplyRatios(updatedProfile);
+    }
     setAppliedSlots((prev) => ({ ...prev, [slot]: true }));
     setTimeout(() => {
       setAppliedSlots((prev) => ({ ...prev, [slot]: false }));

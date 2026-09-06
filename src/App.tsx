@@ -589,6 +589,7 @@ export default function App() {
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
         onSave={handleSaveProfile}
+        profile={userProfile}
         currentProfile={userProfile}
       />
 
@@ -615,6 +616,15 @@ export default function App() {
         meals={savedMeals}
         userProfile={userProfile}
         onApplyRatios={handleApplyTitrationRatios}
+        onApplyNewRatio={(slot, newRatio) => {
+          handleApplyTitrationRatios({
+            ...userProfile,
+            icRatios: {
+              ...userProfile.icRatios,
+              [slot]: newRatio,
+            },
+          });
+        }}
       />
 
       {/* Cloud Synchronization Modal */}
@@ -632,6 +642,7 @@ export default function App() {
           meal={postPrandialMealTarget}
           userProfile={userProfile}
           onSave={handleSavePostPrandial}
+          onSavePostPrandial={handleSavePostPrandial}
         />
       )}
 

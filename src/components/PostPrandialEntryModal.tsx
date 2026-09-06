@@ -17,7 +17,8 @@ interface PostPrandialEntryModalProps {
   onClose: () => void;
   meal: AnalyzedMeal;
   userProfile: UserProfileDT1;
-  onSavePostPrandial: (mealId: string, glucose: number) => void;
+  onSavePostPrandial?: (mealId: string, glucose: number) => void;
+  onSave?: (mealId: string, glucose: number) => void;
 }
 
 export const PostPrandialEntryModal: React.FC<PostPrandialEntryModalProps> = ({
@@ -26,6 +27,7 @@ export const PostPrandialEntryModal: React.FC<PostPrandialEntryModalProps> = ({
   meal,
   userProfile,
   onSavePostPrandial,
+  onSave,
 }) => {
   const [glucoseInput, setGlucoseInput] = useState<string>(
     meal.post_prandial_glucose !== undefined ? String(meal.post_prandial_glucose) : ''
@@ -57,7 +59,12 @@ export const PostPrandialEntryModal: React.FC<PostPrandialEntryModalProps> = ({
 
   const handleSave = () => {
     if (isValidNumber) {
-      onSavePostPrandial(meal.id, numVal);
+      if (onSavePostPrandial) {
+        onSavePostPrandial(meal.id, numVal);
+      }
+      if (onSave) {
+        onSave(meal.id, numVal);
+      }
       onClose();
     }
   };
