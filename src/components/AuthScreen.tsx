@@ -56,6 +56,46 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Construction du profil à partir des champs du formulaire
+  const buildCurrentFormProfile = (): UserProfileDT1 => {
+    const currentProfile = loadUserProfile();
+    const childInfo: ChildProfileInfo | undefined =
+      accountType === 'parent'
+        ? {
+            childName: childName.trim() || 'Enfant',
+            age: Number(childAge) || 8,
+            insulinDeliveryType,
+            schoolName: schoolName.trim() || undefined,
+            emergencyContactPhone: emergencyContactPhone.trim() || undefined,
+            cgmSharingActive: true,
+          }
+        : undefined;
+
+    const roundingStep =
+      accountType === 'parent'
+        ? insulinDeliveryType === 'pen_half_unit'
+          ? 0.5
+          : insulinDeliveryType === 'pump'
+          ? 0.1
+          : 1.0
+        : currentProfile.roundingStep || 0.5;
+
+    return {
+      ...currentProfile,
+      accountType,
+      parentEmail: email.trim() || currentProfile.parentEmail,
+      name: userName.trim() || (accountType === 'parent' ? 'Parent' : 'Patient'),
+      childProfile: childInfo,
+      roundingStep,
+    };
+  };
+
+  const handleContinueLocally = () => {
+    const updatedProfile = buildCurrentFormProfile();
+    saveUserProfile(updatedProfile);
+    onSuccess(updatedProfile);
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -101,38 +141,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           }
         }
 
-        // Préparation du profil
-        const childInfo: ChildProfileInfo | undefined =
-          accountType === 'parent'
-            ? {
-                childName: childName.trim(),
-                age: Number(childAge) || 8,
-                insulinDeliveryType,
-                schoolName: schoolName.trim() || undefined,
-                emergencyContactPhone: emergencyContactPhone.trim() || undefined,
-                cgmSharingActive: true,
-              }
-            : undefined;
-
-        // Arrondi adapté : 0.5 U pour les stylos demi-unités pédiatriques, 0.1 pour les pompes, 1.0 U pour les stylos standard
-        const roundingStep =
-          accountType === 'parent'
-            ? insulinDeliveryType === 'pen_half_unit'
-              ? 0.5
-              : insulinDeliveryType === 'pump'
-              ? 0.1
-              : 1.0
-            : currentProfile.roundingStep || 0.5;
-
-        const updatedProfile: UserProfileDT1 = {
-          ...currentProfile,
-          accountType,
-          parentEmail: email.trim(),
-          name: userName.trim() || (accountType === 'parent' ? 'Parent' : 'Patient'),
-          childProfile: childInfo,
-          roundingStep,
-        };
-
+        // Préparation et sauvegarde du profil
+        const updatedProfile = buildCurrentFormProfile();
         saveUserProfile(updatedProfile);
 
         // Synchroniser le profil et migrer les repas locaux vers Firestore
@@ -304,9 +314,26 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         </div>
 
         {errorMsg && (
-          <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2">
-            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-            <span>{errorMsg}</span>
+          <div className="p-3.5 rounded-lg bg-red-50 border border-red-200 text-red-800 text-xs space-y-2.5">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="flex-1 leading-relaxed">{errorMsg}</div>
+            </div>
+            <div className="pt-2 border-t border-red-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span className="text-[11px] text-slate-700">
+                {isRtl
+                  ? 'يمكنك حفظ هذا الملف والمتابعة محلياً دون انتظار تفعيل Firebase:'
+                  : 'Vous pouvez enregistrer ce profil et continuer en mode local :'}
+              </span>
+              <button
+                type="button"
+                onClick={handleContinueLocally}
+                className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white rounded-md text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+              >
+                <span>{isRtl ? 'المتابعة محلياً بهذا الملف' : 'Continuer en mode local'}</span>
+                <ArrowRight className={`w-3.5 h-3.5 ${isRtl ? 'rotate-180' : ''}`} />
+              </button>
+            </div>
           </div>
         )}
 
