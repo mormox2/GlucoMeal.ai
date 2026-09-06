@@ -1,6 +1,7 @@
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
 import { loadSavedMeals, saveMeals, loadUserProfile, saveUserProfile } from './storage';
 import { loadPatientCustomPortions, savePatientCustomPortions } from './activeLearning';
+import { pushSyncCodeToFirestore, pullSyncCodeFromFirestore } from '../services/firebase';
 
 const STORAGE_KEYS = {
   SYNC_CODE: 'glucomal_cloud_sync_code_v1',
@@ -30,7 +31,7 @@ export function getLastSyncTime(): string | null {
 }
 
 /**
- * Pousse les données locales (profil, repas, portions apprises) vers le serveur Cloud
+ * Pousse les données locales (profil, repas, portions apprises) vers le Cloud Firestore (et serveur Node en miroir)
  */
 export async function pushDataToCloud(
   customCode?: string
@@ -40,6 +41,42 @@ export async function pushDataToCloud(
   const meals = loadSavedMeals();
   const learnedPortions = loadPatientCustomPortions();
 
+  // 1. Sauvegarde prioritaire dans Cloud Firestore (Persistance garantie)
+  try {
+    const firestoreRes = await pushSyncCodeToFirestore(syncCode, {
+      userProfile,
+      meals,
+      learnedPortions,
+    });
+
+    if (firestoreRes.success && firestoreRes.syncCode) {
+      setStoredSyncCode(firestoreRes.syncCode);
+      localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, firestoreRes.lastUpdated);
+
+      // Sauvegarde miroir en arrière-plan vers l'API Express
+      fetch('/api/sync/push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          syncCode: firestoreRes.syncCode,
+          userProfile,
+          meals,
+          learnedPortions,
+        }),
+      }).catch(() => {});
+
+      return {
+        success: true,
+        syncCode: firestoreRes.syncCode,
+        lastUpdated: firestoreRes.lastUpdated,
+        message: `Synchronisé avec succès dans le cloud (${firestoreRes.totalMeals} repas).`,
+      };
+    }
+  } catch (firestoreErr) {
+    console.warn('Fallback synchro serveur Node:', firestoreErr);
+  }
+
+  // 2. Fallback vers le serveur Node si Firestore indisponible
   try {
     const res = await fetch('/api/sync/push', {
       method: 'POST',
@@ -79,13 +116,36 @@ export async function pushDataToCloud(
 }
 
 /**
- * Récupère les données depuis le Cloud à partir d'un code de synchronisation
+ * Récupère les données depuis le Cloud (Firestore en priorité, serveur Node en fallback)
  */
 export async function pullDataFromCloud(
   syncCode: string
 ): Promise<{ success: boolean; message: string; record?: any }> {
+  const cleanCode = syncCode.trim().toUpperCase();
+
+  // 1. Recherche prioritaire dans Firestore
   try {
-    const cleanCode = syncCode.trim().toUpperCase();
+    const firestoreRes = await pullSyncCodeFromFirestore(cleanCode);
+    if (firestoreRes.success && firestoreRes.record) {
+      const record = firestoreRes.record;
+      if (record.userProfile) saveUserProfile(record.userProfile);
+      if (record.meals) saveMeals(record.meals);
+      if (record.learnedPortions) savePatientCustomPortions(record.learnedPortions);
+      setStoredSyncCode(cleanCode);
+      localStorage.setItem(STORAGE_KEYS.LAST_SYNC_TIME, record.lastUpdated || new Date().toISOString());
+
+      return {
+        success: true,
+        message: `Dossier synchronisé depuis Firestore ! (${record.meals?.length || 0} repas restaurés).`,
+        record,
+      };
+    }
+  } catch (firestoreErr) {
+    console.warn('Recherche fallback serveur Node:', firestoreErr);
+  }
+
+  // 2. Fallback vers le serveur Node
+  try {
     const res = await fetch(`/api/sync/pull/${encodeURIComponent(cleanCode)}`);
     if (!res.ok) {
       if (res.status === 404) {

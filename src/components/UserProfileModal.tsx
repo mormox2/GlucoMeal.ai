@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { User, ShieldCheck, Clock, Activity, Target, Save, X, RotateCcw, Sparkles, CheckCircle2, Moon, AlertTriangle } from 'lucide-react';
+import { User, ShieldCheck, Clock, Activity, Target, Save, X, RotateCcw, Sparkles, CheckCircle2, Moon, AlertTriangle, LogOut, Cloud } from 'lucide-react';
 import { UserProfileDT1 } from '../types';
 import { DEFAULT_USER_PROFILE, sanitizeUserProfile } from '../utils/storage';
+import { auth, logoutUser } from '../services/firebase';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -18,12 +19,29 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 }) => {
   const [formData, setFormData] = useState<UserProfileDT1>(() => sanitizeUserProfile(profile));
   const [savedFeedback, setSavedFeedback] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(
+    () => auth.currentUser?.email || profile.parentEmail || null
+  );
 
   useEffect(() => {
     if (profile) {
       setFormData(sanitizeUserProfile(profile));
+      setCurrentUserEmail(auth.currentUser?.email || profile.parentEmail || null);
     }
-  }, [profile]);
+  }, [profile, isOpen]);
+
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+      setCurrentUserEmail(null);
+      const cleared = { ...formData, parentEmail: undefined };
+      setFormData(cleared);
+      onSave(cleared);
+      onClose();
+    } catch (err) {
+      console.error('Erreur déconnexion:', err);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -646,6 +664,39 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <span className="text-[9px] text-emerald-200 block">arrondi {formData.roundingStep} UI</span>
               </div>
             </div>
+          </div>
+
+          {/* Section 4: Statut du compte Firebase & Déconnexion */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-sky-100 border border-sky-200 flex items-center justify-center shrink-0">
+                <Cloud className="w-5 h-5 text-sky-700" />
+              </div>
+              <div>
+                <span className="text-xs font-bold text-slate-800 block">
+                  {currentUserEmail ? 'Compte Cloud Firebase Connecté' : 'Mode Local / Anonyme Sécurisé'}
+                </span>
+                <span className="text-[11px] text-slate-500 block truncate max-w-[220px] sm:max-w-xs">
+                  {currentUserEmail ? currentUserEmail : 'Données synchronisées sur Firestore & cache IndexedDB'}
+                </span>
+              </div>
+            </div>
+
+            {currentUserEmail ? (
+              <button
+                type="button"
+                onClick={handleLogout}
+                className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Se déconnecter</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Zero-Trust Actif</span>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}

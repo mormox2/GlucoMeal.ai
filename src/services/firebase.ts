@@ -2,6 +2,7 @@ import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
 import {
   initializeFirestore,
   persistentLocalCache,
+  memoryLocalCache,
   persistentMultipleTabManager,
   getFirestore,
   Firestore,
@@ -25,6 +26,14 @@ import {
   signOut,
   User,
 } from 'firebase/auth';
+import {
+  getStorage,
+  ref,
+  uploadString,
+  getDownloadURL,
+  FirebaseStorage,
+} from 'firebase/storage';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
 
@@ -42,6 +51,18 @@ if (!getApps().length) {
   app = getApp();
 }
 
+// Initialisation sécurisée App Check si recaptchaSiteKey est configuré
+if (typeof window !== 'undefined' && firebaseConfig.recaptchaSiteKey) {
+  try {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(firebaseConfig.recaptchaSiteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch (err) {
+    console.warn('App Check notice:', err);
+  }
+}
+
 // Database ID spécifique provisionné par AI Studio
 const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
 
@@ -57,11 +78,23 @@ try {
     dbId
   );
 } catch (err) {
-  // Fallback si déjà initialisé
-  db = getFirestore(app, dbId);
+  try {
+    // Fallback mémoire vive si IndexedDB est désactivé (ex: navigation privée stricte)
+    db = initializeFirestore(
+      app,
+      {
+        localCache: memoryLocalCache(),
+      },
+      dbId
+    );
+  } catch {
+    // Fallback si déjà initialisé
+    db = getFirestore(app, dbId);
+  }
 }
 
 export const auth: Auth = getAuth(app);
+export const storage: FirebaseStorage = getStorage(app, firebaseConfig.storageBucket);
 export { db };
 
 /**
@@ -251,3 +284,110 @@ export async function syncBatchMealsToFirestore(meals: AnalyzedMeal[]): Promise<
     console.warn('Erreur synchronisation par lot repas Firestore:', err);
   }
 }
+
+/**
+ * Téléverse une photo de repas en base64 vers Firebase Storage (évite de saturer Firestore avec des chaînes > 1 Mo)
+ */
+export async function uploadMealPhoto(
+  userId: string,
+  mealId: string,
+  base64DataUrl: string
+): Promise<string> {
+  if (!base64DataUrl || !base64DataUrl.startsWith('data:')) {
+    return base64DataUrl;
+  }
+  try {
+    const photoRef = ref(storage, `users/${userId}/meals/${mealId}_photo.webp`);
+    await uploadString(photoRef, base64DataUrl, 'data_url', {
+      contentType: 'image/webp',
+    });
+    const downloadUrl = await getDownloadURL(photoRef);
+    return downloadUrl;
+  } catch (err) {
+    console.warn('Erreur téléversement image Storage, conservation locale:', err);
+    return base64DataUrl;
+  }
+}
+
+export interface CloudSyncPayload {
+  userProfile: UserProfileDT1;
+  meals: AnalyzedMeal[];
+  learnedPortions?: any[];
+}
+
+/**
+ * Sauvegarde le dossier complet sous un code de synchronisation haute entropie directement dans Firestore
+ */
+export async function pushSyncCodeToFirestore(
+  customCode?: string,
+  payload?: CloudSyncPayload
+): Promise<{ success: boolean; syncCode: string; lastUpdated: string; totalMeals: number }> {
+  try {
+    const user = await ensureAuthenticatedUser();
+    let syncCode = customCode?.trim().toUpperCase();
+    if (!syncCode) {
+      const p1 = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const p2 = Math.random().toString(36).substring(2, 6).toUpperCase();
+      syncCode = `GLUCO-${p1}-${p2}`;
+    }
+
+    const docRef = doc(db, 'syncCodes', syncCode);
+    const now = new Date().toISOString();
+    const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(); // 7 jours de validité
+
+    await setDoc(docRef, {
+      syncCode,
+      creatorUid: user.uid,
+      userProfile: payload?.userProfile || {},
+      meals: payload?.meals || [],
+      learnedPortions: payload?.learnedPortions || [],
+      lastUpdated: now,
+      expiresAt,
+    });
+
+    return {
+      success: true,
+      syncCode,
+      lastUpdated: now,
+      totalMeals: payload?.meals?.length || 0,
+    };
+  } catch (err) {
+    console.error('Erreur pushSyncCodeToFirestore:', err);
+    throw err;
+  }
+}
+
+/**
+ * Récupère le dossier complet depuis un code de synchronisation Firestore
+ */
+export async function pullSyncCodeFromFirestore(
+  syncCode: string
+): Promise<{ success: boolean; message: string; record?: any }> {
+  try {
+    await ensureAuthenticatedUser();
+    const cleanCode = syncCode.trim().toUpperCase();
+    const docRef = doc(db, 'syncCodes', cleanCode);
+    const snap = await getDoc(docRef);
+
+    if (!snap.exists()) {
+      return {
+        success: false,
+        message: 'Code de synchronisation introuvable ou expiré.',
+      };
+    }
+
+    const data = snap.data();
+    return {
+      success: true,
+      message: `Synchronisation réussie (${data.meals?.length || 0} repas restaurés).`,
+      record: data,
+    };
+  } catch (err: any) {
+    console.error('Erreur pullSyncCodeFromFirestore:', err);
+    return {
+      success: false,
+      message: err.message || 'Erreur lors de la récupération Firestore.',
+    };
+  }
+}
+

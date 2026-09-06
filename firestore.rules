@@ -11,6 +11,14 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isDelegate(userId) {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(userId)/delegates/$(request.auth.uid));
+    }
+
+    function canReadPatient(userId) {
+      return isOwner(userId) || isDelegate(userId);
+    }
+
     function isValidId(id) {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
@@ -41,7 +49,7 @@ service cloud.firestore {
 
     // Profil utilisateur patient
     match /users/{userId} {
-      allow get: if isOwner(userId) && isValidId(userId);
+      allow get: if canReadPatient(userId) && isValidId(userId);
       allow list: if isOwner(userId);
       allow create: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming(), userId);
       allow update: if isOwner(userId) && isValidId(userId) && isValidUserProfile(incoming(), userId);
@@ -49,7 +57,7 @@ service cloud.firestore {
 
       // Repas et calculs de bolus
       match /meals/{mealId} {
-        allow get, list: if isOwner(userId);
+        allow get, list: if canReadPatient(userId);
         allow create: if isOwner(userId) && isValidId(mealId) && isValidMeal(incoming(), userId);
         allow update: if isOwner(userId) && isValidId(mealId) && isValidMeal(incoming(), userId);
         allow delete: if isOwner(userId) && isValidId(mealId);
@@ -57,9 +65,25 @@ service cloud.firestore {
 
       // Configuration et snapshots CGM
       match /cgm/{cgmDocId} {
-        allow get, list: if isOwner(userId);
+        allow get, list: if canReadPatient(userId);
         allow create, update, delete: if isOwner(userId) && isValidId(cgmDocId);
       }
+
+      // Délégations d'accès pour médecins et soignants (accès révocable)
+      match /delegates/{delegateId} {
+        allow get, list: if isOwner(userId) || (isSignedIn() && request.auth.uid == delegateId);
+        allow create, update, delete: if isOwner(userId) && isValidId(delegateId);
+      }
+    }
+
+    // Codes de transfert et de liaison inter-appareils haute entropie (ex: GLUCO-7K2X-9B4F)
+    match /syncCodes/{code} {
+      allow get: if isSignedIn() && isValidId(code);
+      allow create, update: if isSignedIn() && isValidId(code)
+        && incoming().syncCode == code
+        && incoming().userProfile is map
+        && incoming().meals is list;
+      allow delete: if isSignedIn() && isValidId(code);
     }
 
     // Interdiction stricte de toute autre collection non déclarée

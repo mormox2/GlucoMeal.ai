@@ -24,8 +24,11 @@ import { BottomNav } from './components/BottomNav';
 import { LandingPageView } from './components/LandingPageView';
 import { AuthScreen } from './components/AuthScreen';
 import { AnalyzedMeal, InputMode, UserProfileDT1 } from './types';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth, subscribeToMeals } from './services/firebase';
 import {
   loadSavedMeals,
+  saveMeals,
   saveSingleMeal,
   toggleFavoriteMeal,
   deleteMealFromHistory,
@@ -77,6 +80,32 @@ export default function App() {
     };
     window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  // Écoute temps réel des repas depuis Firestore dès que l'utilisateur est authentifié
+  useEffect(() => {
+    let unsubscribeSnapshot: (() => void) | null = null;
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        if (unsubscribeSnapshot) unsubscribeSnapshot();
+        unsubscribeSnapshot = subscribeToMeals(user.uid, (remoteMeals) => {
+          if (remoteMeals && remoteMeals.length > 0) {
+            setSavedMeals((prev) => {
+              const remoteIds = new Set(remoteMeals.map((m) => m.id));
+              const localUnsynced = prev.filter((m) => !remoteIds.has(m.id));
+              const merged = [...remoteMeals, ...localUnsynced];
+              saveMeals(merged);
+              return merged;
+            });
+          }
+        });
+      }
+    });
+
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeSnapshot) unsubscribeSnapshot();
+    };
   }, []);
 
   // Saved Meals persistence with LocalStorage & Cloud Sync capability
