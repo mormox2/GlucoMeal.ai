@@ -12,6 +12,8 @@ import {
   query,
   orderBy,
   deleteDoc,
+  getDoc,
+  getDocs,
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -66,18 +68,21 @@ export { db };
  * Assure qu'un utilisateur est authentifié (authentification anonyme transparente par défaut si non connecté)
  */
 export async function ensureAuthenticatedUser(): Promise<User> {
+  // Si déjà en session, retourner directement pour éviter la création répétée de listeners
+  if (auth.currentUser) {
+    return auth.currentUser;
+  }
+
   return new Promise((resolve, reject) => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      unsubscribe();
       if (user) {
-        unsubscribe();
         resolve(user);
       } else {
         try {
           const cred = await signInAnonymously(auth);
-          unsubscribe();
           resolve(cred.user);
         } catch (error) {
-          unsubscribe();
           reject(error);
         }
       }
@@ -189,4 +194,60 @@ export async function registerWithEmail(email: string, pass: string): Promise<Us
 
 export async function logoutUser(): Promise<void> {
   await signOut(auth);
+}
+
+export interface RemoteUserData {
+  profile: UserProfileDT1 | null;
+  meals: AnalyzedMeal[];
+}
+
+/**
+ * Récupère le profil médical et l'historique des repas stockés sur Firestore pour l'utilisateur
+ */
+export async function fetchUserDataFromFirestore(userId: string): Promise<RemoteUserData> {
+  try {
+    const userDocRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userDocRef);
+    let profile: UserProfileDT1 | null = null;
+    if (userSnap.exists()) {
+      profile = userSnap.data() as UserProfileDT1;
+    }
+
+    const mealsColRef = collection(db, 'users', userId, 'meals');
+    const q = query(mealsColRef, orderBy('created_at', 'desc'));
+    const mealsSnap = await getDocs(q);
+    const meals: AnalyzedMeal[] = [];
+    mealsSnap.forEach((docSnap) => {
+      meals.push(docSnap.data() as AnalyzedMeal);
+    });
+
+    return { profile, meals };
+  } catch (err) {
+    console.warn('Erreur récupération données Firestore:', err);
+    return { profile: null, meals: [] };
+  }
+}
+
+/**
+ * Synchronise une liste de repas (ex: locaux) vers Firestore pour l'utilisateur connecté
+ */
+export async function syncBatchMealsToFirestore(meals: AnalyzedMeal[]): Promise<void> {
+  if (!meals || meals.length === 0) return;
+  try {
+    const user = await ensureAuthenticatedUser();
+    for (const meal of meals) {
+      const mealDocRef = doc(db, 'users', user.uid, 'meals', meal.id);
+      await setDoc(
+        mealDocRef,
+        {
+          ...meal,
+          userId: user.uid,
+          updatedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
+    }
+  } catch (err) {
+    console.warn('Erreur synchronisation par lot repas Firestore:', err);
+  }
 }

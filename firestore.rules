@@ -33,7 +33,10 @@ service cloud.firestore {
       return data.userId == userId
         && data.meal_name is string && data.meal_name.size() > 0 && data.meal_name.size() <= 250
         && data.total_carbs is number && data.total_carbs >= 0 && data.total_carbs <= 1000
-        && data.created_at is string;
+        && (
+          ('created_at' in data && data.created_at is string) ||
+          ('timestamp' in data && data.timestamp is string)
+        );
     }
 
     // Profil utilisateur patient

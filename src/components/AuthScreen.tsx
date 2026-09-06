@@ -11,9 +11,15 @@ import {
   ArrowLeft,
   HeartPulse,
 } from 'lucide-react';
-import { registerWithEmail, loginWithEmail, syncProfileToFirestore } from '../services/firebase';
+import {
+  registerWithEmail,
+  loginWithEmail,
+  syncProfileToFirestore,
+  fetchUserDataFromFirestore,
+  syncBatchMealsToFirestore,
+} from '../services/firebase';
 import { UserProfileDT1, AccountType, ChildProfileInfo } from '../types';
-import { saveUserProfile, loadUserProfile } from '../utils/storage';
+import { saveUserProfile, loadUserProfile, loadSavedMeals, saveMeals } from '../utils/storage';
 import { useLanguage } from '../i18n/LanguageContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
 
@@ -68,8 +74,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         }
 
         // Inscription Firebase
+        let newRegisteredUser: any;
         try {
-          await registerWithEmail(email, password);
+          newRegisteredUser = await registerWithEmail(email, password);
         } catch (firebaseErr: any) {
           if (firebaseErr.code === 'auth/email-already-in-use') {
             throw new Error(isRtl ? 'هذا البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول.' : 'Cet e-mail est déjà associé à un compte. Veuillez vous connecter.');
@@ -119,9 +126,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
         saveUserProfile(updatedProfile);
 
-        // Synchroniser vers Firestore si disponible
+        // Synchroniser le profil et migrer les repas locaux vers Firestore
         try {
           await syncProfileToFirestore(updatedProfile);
+          const localMeals = loadSavedMeals();
+          if (localMeals && localMeals.length > 0) {
+            await syncBatchMealsToFirestore(localMeals);
+          }
         } catch (syncErr) {
           console.warn('Sync notice:', syncErr);
         }
@@ -133,8 +144,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           throw new Error(isRtl ? 'يرجى إدخال البريد الإلكتروني وكلمة المرور.' : 'Veuillez saisir votre e-mail et mot de passe.');
         }
 
+        let loggedUser: any;
         try {
-          await loginWithEmail(email, password);
+          loggedUser = await loginWithEmail(email, password);
         } catch (firebaseErr: any) {
           console.error('Firebase login error:', firebaseErr);
           if (
@@ -161,10 +173,36 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           }
         }
 
-        const updatedProfile: UserProfileDT1 = {
+        let updatedProfile: UserProfileDT1 = {
           ...currentProfile,
           parentEmail: email.trim(),
         };
+
+        // Restauration des données distantes depuis Firestore
+        try {
+          if (loggedUser?.uid) {
+            const remote = await fetchUserDataFromFirestore(loggedUser.uid);
+            if (remote.profile) {
+              updatedProfile = {
+                ...currentProfile,
+                ...remote.profile,
+                parentEmail: email.trim(),
+              };
+            }
+            if (remote.meals && remote.meals.length > 0) {
+              const localMeals = loadSavedMeals();
+              const mergedMeals = [...remote.meals];
+              for (const lm of localMeals) {
+                if (!mergedMeals.some((rm) => rm.id === lm.id)) {
+                  mergedMeals.push(lm);
+                }
+              }
+              saveMeals(mergedMeals);
+            }
+          }
+        } catch (fetchErr) {
+          console.warn('Restauration des données Firestore:', fetchErr);
+        }
 
         saveUserProfile(updatedProfile);
         onSuccess(updatedProfile);

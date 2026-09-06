@@ -21,7 +21,11 @@ import {
   pushDataToCloud,
   pullDataFromCloud,
 } from '../utils/cloudSync';
-import { ensureAuthenticatedUser, syncProfileToFirestore, syncMealToFirestore, auth } from '../services/firebase';
+import {
+  ensureAuthenticatedUser,
+  syncProfileToFirestore,
+  syncBatchMealsToFirestore,
+} from '../services/firebase';
 import { loadSavedMeals, loadUserProfile } from '../utils/storage';
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
 
@@ -60,12 +64,12 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
     setStatusMessage(null);
     try {
       // Synchronisation parallèle avec Firebase Firestore
-      const user = await ensureAuthenticatedUser();
+      await ensureAuthenticatedUser();
       const profile = loadUserProfile();
       const meals = loadSavedMeals();
       await syncProfileToFirestore(profile);
-      for (const m of meals) {
-        await syncMealToFirestore(m);
+      if (meals.length > 0) {
+        await syncBatchMealsToFirestore(meals);
       }
     } catch (err) {
       console.warn('Sync Firestore non-bloquante:', err);

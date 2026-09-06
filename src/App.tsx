@@ -379,6 +379,7 @@ export default function App() {
         initialMode={authInitialMode}
         onSuccess={(updatedProfile) => {
           setUserProfile(updatedProfile);
+          setSavedMeals(loadSavedMeals());
           localStorage.setItem('glucomal_screen_preference_v1', 'app');
           setViewScreen('app');
         }}
