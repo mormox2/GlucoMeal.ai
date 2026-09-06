@@ -402,7 +402,8 @@ Réponds UNIQUEMENT en JSON strict.`;
 Analyse précisément cette photo de repas.
 Consignes cruciales :
 1. Identifie le plat global (ex: "Couscous agneau et légumes", "Lablabi", "Ojja merguez", "Makrouna bel salsa", "Brik à l'œuf", etc.).
-2. Décompose le repas en composants distincts identifiables (ex: semoule de couscous, pois chiches, légumes carottes/courgettes, agneau, pain tabouna).
+2. Décompose le repas en composants distincts identifiables (ex: semoule de couscous, pois chiches, légumes carottes/courgettes, morceau de viande d'agneau ou de bœuf cuit dans la sauce, pain tabouna).
+   - Isole spécifiquement les morceaux ou pièces de protéines (agneau, bœuf, veau, poulet, merguez, kefta, poisson) avec leur mode de cuisson (ex: morceau d'agneau cuit dans le couscous, morceau de bœuf cuit dans la mloukhiya, cuisse de poulet mijotée). Rappel : la viande pure cuite contient 0 g de glucides.
 3. Pour chaque composant, estime son poids visuel en grammes (portion réaliste servie).
 4. Indique pour chaque composant le niveau de confiance ('high', 'medium', 'low') et le nom en français et arabe/dialecte tunisien.
 RÈGLE IMPORTANTE : Ne cherche pas à calculer les glucides toi-même, donne uniquement les composants et l'estimation de portion en grammes. La formule déterministe de GlucoMeal fera le calcul exact avec la base certifiée.

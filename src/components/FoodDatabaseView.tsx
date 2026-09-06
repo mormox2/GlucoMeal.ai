@@ -416,6 +416,7 @@ export const FoodDatabaseView: React.FC = () => {
                   {getGlycemicCategory(inspectedFood.glycemic_index).description}.
                   {inspectedFood.id === 'plat-mloukhiya-01' && " Note DT1 : Les lipides abondants de la mloukhiya ralentissent l'absorption du pain d'accompagnement (bolus carré/mixte recommandé sous pompe)."}
                   {inspectedFood.id === 'plat-makrouna-salsa-01' && " Note DT1 : Teneur glucidique élevée, surveiller la glycémie 2h à 3h après le repas."}
+                  {(inspectedFood.category === 'viandes_proteines' || inspectedFood.carbs_per_100g === 0) && " Note DT1 : Les protéines pures ne contiennent pas de glucides directs. Cependant, un apport protéique et lipidique important retarde la vidange gastrique et peut nécessiter un bolus prolongé (dual-wave) 2h à 4h après le repas."}
                 </p>
               </div>
 

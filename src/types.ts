@@ -6,6 +6,7 @@ export type FoodCategory =
   | 'feculents'
   | 'legumineuses'
   | 'plats'
+  | 'viandes_proteines'
   | 'patisseries'
   | 'fruits_legumes'
   | 'produits_industriels'
