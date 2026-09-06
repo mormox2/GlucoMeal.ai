@@ -79,6 +79,8 @@ export interface CalculatedBolusSummary {
   isCapped?: boolean; // True si plafonné au seuil de sécurité max (20 UI)
   unclampedTotalBolus?: number; // Valeur brute avant plafonnement
   safetyWarning?: string; // Message d'alerte sécurité clinique si détection anomalie
+  isHoneymoonActive?: boolean; // True si le mode rémission partielle / lune de miel est actif
+  honeymoonNotice?: string; // Consigne clinique spécifique à la phase de lune de miel
 }
 
 export interface DualWaveSuggestion {
@@ -194,6 +196,9 @@ export interface UserProfileDT1 {
   customPortions?: PatientCustomPortion[];
   ramadanMode?: boolean;
   activeReminderH2?: ActiveReminderH2 | null;
+  isHoneymoonPhase?: boolean; // Phase de lune de miel (rémission clinique partielle du DT1)
+  diagnosisDate?: string; // Date de découverte du DT1 (ex: '2026-01')
+  honeymoonNotes?: string; // Notes cliniques de suivi lune de miel
 }
 
 export interface AnalyzedMeal {

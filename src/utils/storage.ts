@@ -24,6 +24,7 @@ export const DEFAULT_USER_PROFILE: UserProfileDT1 = {
   },
   roundingStep: 0.5, // Arrondi standard des stylos d'insuline (demi-unités)
   ramadanMode: false,
+  isHoneymoonPhase: false, // Phase de lune de miel désactivée par défaut
 };
 
 // Historique initial vide (aucune donnée fictive de démonstration)
@@ -152,6 +153,9 @@ export function sanitizeUserProfile(profile?: Partial<UserProfileDT1> | null): U
     icRatios,
     roundingStep: profile.roundingStep === 1 || profile.roundingStep === 0.1 ? profile.roundingStep : 0.5,
     ramadanMode: Boolean(profile.ramadanMode),
+    isHoneymoonPhase: Boolean(profile.isHoneymoonPhase),
+    diagnosisDate: typeof profile.diagnosisDate === 'string' ? profile.diagnosisDate : undefined,
+    honeymoonNotes: typeof profile.honeymoonNotes === 'string' ? profile.honeymoonNotes : undefined,
   };
 }
 
@@ -281,6 +285,19 @@ export function calculatePersonalizedBolus(
       `⚠️ ALERTE SÉCURITÉ CLINIQUE : Dose calculée (${roundedTotal.toFixed(1)} UI) plafonnée d'office à ${MAX_SAFE_BOLUS_UNITS} UI max pour prévenir tout surdosage critique.`;
   }
 
+  // Prise en compte clinique de la phase de lune de miel (rémission partielle du DT1)
+  const isHoneymoonActive = Boolean(safeProfile.isHoneymoonPhase);
+  let honeymoonNotice: string | undefined;
+
+  if (isHoneymoonActive) {
+    honeymoonNotice =
+      "🍯 Phase de lune de miel active : vos cellules bêta résiduelles sécrètent encore de l'insuline. Les besoins sont réduits. Surveillez attentivement la glycémie post-prandiale pour prévenir toute hypoglycémie.";
+    if (icRatio < 8) {
+      safetyWarning = (safetyWarning ? `${safetyWarning} ` : '') +
+        `⚠️ Vigilance Lune de Miel : Le ratio paramétré (1 UI / ${icRatio}g) est très concentré pour une rémission partielle. En lune de miel, les ratios habituels sont souvent plus légers (ex: 1 UI pour 15 à 20g) pour éviter les hypoglycémies sévères.`;
+    }
+  }
+
   return {
     slot,
     icRatio,
@@ -291,6 +308,8 @@ export function calculatePersonalizedBolus(
     unclampedTotalBolus: Number(roundedTotal.toFixed(1)),
     isCapped,
     safetyWarning,
+    isHoneymoonActive,
+    honeymoonNotice,
     currentGlucose: normalizedCurrentGlucose,
     targetGlucose: safeProfile.targetGlucose,
     isf: safeProfile.isf,

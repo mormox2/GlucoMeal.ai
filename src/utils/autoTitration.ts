@@ -23,6 +23,13 @@ export interface SlotTitrationAnalysis {
   averagePostPrandial: number | null;
 }
 
+export interface HoneymoonInsight {
+  isHoneymoon: boolean;
+  status: 'active_stable' | 'waning_phase' | 'hypo_risk' | 'not_applicable';
+  title: string;
+  message: string;
+}
+
 export interface GlobalTitrationReport {
   slots: Record<MealSlot, SlotTitrationAnalysis>;
   totalAnalyzedMeals: number;
@@ -30,6 +37,7 @@ export interface GlobalTitrationReport {
   globalTimeInRangePercent: number;
   priorityAlert: string | null;
   clinicalRecommendationCount: number;
+  honeymoonInsight?: HoneymoonInsight;
 }
 
 /**
@@ -146,6 +154,9 @@ export function analyzePatientTitration(
         suggestedRatio = Math.round((currentRatio * 1.15) * 10) / 10;
         recommendationTitle = '⚠️ Risque d’hypoglycémie (+2h)';
         clinicalRationale = `Sur ${countPP} contrôles de ce créneau, ${hypoCount} épisode(s) d'hypoglycémie ont été constatés (${hypoPct}%). Sécurité clinique : il est recommandé d'alléger le bolus en passant de 1 UI pour ${currentRatio}g à 1 UI pour ${suggestedRatio}g de glucides (-15% d'insuline).`;
+        if (safeProfile.isHoneymoonPhase) {
+          clinicalRationale = `🍯 Sécurité Lune de Miel : Sur ${countPP} contrôles, ${hypoCount} épisode(s) d'hypoglycémie constatés (${hypoPct}%). La sécrétion résiduelle amplifie l'effet de l'insuline. Il est impératif d'alléger le bolus en passant à 1 UI pour ${suggestedRatio}g de glucides (-15% d'insuline).`;
+        }
         if (!priorityAlertMessage) {
           priorityAlertMessage = `Hypoglycémies répétées détectées sur le créneau du ${slotLabels[slot].toLowerCase()}. Titration recommandée en priorité.`;
         }
@@ -158,6 +169,10 @@ export function analyzePatientTitration(
         suggestedRatio = Math.max(3, Math.round((currentRatio * 0.86) * 10) / 10);
         recommendationTitle = '📈 Tendance à l’hyperglycémie post-prandiale';
         clinicalRationale = `${hyperPct}% des contrôles à +2h dépassent l'objectif (${hyperCount}/${countPP} repas avec moyenne ${avgPP || ''} ${userProfile.glucoseUnit}). Le bolus actuel sous-estime la charge glucidique. Recommandation : renforcer le ratio à 1 UI pour ${suggestedRatio}g de glucides (augmentation prudente de ~15% de l'insuline repas).`;
+        if (safeProfile.isHoneymoonPhase) {
+          recommendationTitle = '📈 Déclin de rémission (Fin de lune de miel ?)';
+          clinicalRationale = `En phase de lune de miel, ${hyperPct}% de contrôles post-prandiaux élevés (${hyperCount}/${countPP}) signalent souvent un déclin naturel de la sécrétion pancréatique résiduelle. Les besoins en insuline augmentent. Recommandation : ajuster le ratio à 1 UI pour ${suggestedRatio}g et programmer une consultation de titration avec votre diabétologue.`;
+        }
       }
       // Règle 3 : Ratio dans la cible
       else {
@@ -192,6 +207,48 @@ export function analyzePatientTitration(
 
   const globalTIR = totalWithPP > 0 ? Math.round((totalTarget / totalWithPP) * 100) : 0;
 
+  // Détection clinique globale spécifique à la phase de lune de miel
+  let honeymoonInsight: HoneymoonInsight | undefined;
+  if (safeProfile.isHoneymoonPhase) {
+    let totalHypoCount = 0;
+    let totalHyperCount = 0;
+    Object.values(slotsResult).forEach((slot) => {
+      if (slot) {
+        totalHypoCount += slot.evaluations.hypo;
+        totalHyperCount += slot.evaluations.hyper;
+      }
+    });
+
+    const hypoRate = totalWithPP > 0 ? (totalHypoCount / totalWithPP) * 100 : 0;
+    const hyperRate = totalWithPP > 0 ? (totalHyperCount / totalWithPP) * 100 : 0;
+
+    if (totalWithPP >= 3 && hyperRate >= 40) {
+      honeymoonInsight = {
+        isHoneymoon: true,
+        status: 'waning_phase',
+        title: 'Signes de fin progressive de la lune de miel',
+        message: `${Math.round(hyperRate)}% des contrôles post-prandiaux dépassent l'objectif. La sécrétion endogène d'insuline diminue probablement, nécessitant une ré-évaluation des ratios avec votre diabétologue.`,
+      };
+      if (!priorityAlertMessage) {
+        priorityAlertMessage = 'Suspicion clinique de fin de lune de miel : augmentation progressive des besoins en insuline observée.';
+      }
+    } else if (hypoRate >= 15 || totalHypoCount >= 2) {
+      honeymoonInsight = {
+        isHoneymoon: true,
+        status: 'hypo_risk',
+        title: 'Vigilance hypoglycémie en phase de rémission',
+        message: `${totalHypoCount} épisode(s) d'hypoglycémie enregistrés. La production résiduelle d'insuline protège mais rend les bolus trop puissants. Allégez vos ratios repas.`,
+      };
+    } else {
+      honeymoonInsight = {
+        isHoneymoon: true,
+        status: 'active_stable',
+        title: 'Lune de miel active et équilibrée',
+        message: 'Vos glycémies post-prandiales sont stables avec des doses modérées, témoignant d\'une bonne coopération entre sécrétion endogène résiduelle et insulinothérapie.',
+      };
+    }
+  }
+
   return {
     slots: slotsResult as Record<MealSlot, SlotTitrationAnalysis>,
     totalAnalyzedMeals: meals.length,
@@ -199,5 +256,6 @@ export function analyzePatientTitration(
     globalTimeInRangePercent: globalTIR,
     priorityAlert: priorityAlertMessage,
     clinicalRecommendationCount: clinicalAlerts,
+    honeymoonInsight,
   };
 }

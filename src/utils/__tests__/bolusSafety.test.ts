@@ -92,6 +92,31 @@ describe('Calculateur de Bolus & Plafond de Sécurité (DT1)', () => {
     const resPen1 = calculatePersonalizedBolus(53, pen1Profile, 'lunch');
     expect(resPen1.totalBolus).toBe(5.0);
   });
+
+  it('active la surveillance et les consignes de sécurité clinique en phase de lune de miel', () => {
+    const honeymoonProfile: UserProfileDT1 = {
+      ...baseProfile,
+      isHoneymoonPhase: true,
+      icRatios: { ...baseProfile.icRatios, lunch: 15 },
+    };
+    // 45g de glucides au ratio 15 = 3.0 UI
+    const res = calculatePersonalizedBolus(45, honeymoonProfile, 'lunch');
+    expect(res.isHoneymoonActive).toBe(true);
+    expect(res.totalBolus).toBe(3.0);
+    expect(res.honeymoonNotice).toContain('Phase de lune de miel active');
+    expect(res.safetyWarning).toBeUndefined();
+  });
+
+  it('émet une alerte de sécurité si un ratio trop agressif est paramétré en lune de miel', () => {
+    const aggressiveHoneymoonProfile: UserProfileDT1 = {
+      ...baseProfile,
+      isHoneymoonPhase: true,
+      icRatios: { ...baseProfile.icRatios, morning: 6 }, // 1 UI / 6g trop agressif en rémission
+    };
+    const res = calculatePersonalizedBolus(30, aggressiveHoneymoonProfile, 'morning');
+    expect(res.isHoneymoonActive).toBe(true);
+    expect(res.safetyWarning).toContain('Vigilance Lune de Miel');
+  });
 });
 
 describe('Validation et Nettoyage du Profil Thérapeutique (sanitizeUserProfile)', () => {
@@ -113,5 +138,14 @@ describe('Validation et Nettoyage du Profil Thérapeutique (sanitizeUserProfile)
     });
     expect(sanitized.targetGlucose).toBe(1.1);
     expect(sanitized.isf).toBe(0.35);
+  });
+
+  it('préserve et valide les champs de lune de miel (isHoneymoonPhase, diagnosisDate)', () => {
+    const sanitized = sanitizeUserProfile({
+      isHoneymoonPhase: true,
+      diagnosisDate: '2026-02',
+    });
+    expect(sanitized.isHoneymoonPhase).toBe(true);
+    expect(sanitized.diagnosisDate).toBe('2026-02');
   });
 });

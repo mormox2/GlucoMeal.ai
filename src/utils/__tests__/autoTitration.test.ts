@@ -96,4 +96,39 @@ describe('Moteur d’Auto-Titration Clinique DT1 (SFD / ADA)', () => {
     const report = analyzePatientTitration(meals, profile);
     expect(report.slots.lunch.status).toBe('insufficient_data');
   });
+
+  it('génère un audit de sécurité lune de miel avec alerte hypo renforcée', () => {
+    const honeymoonProfile = {
+      ...profile,
+      isHoneymoonPhase: true,
+    };
+    const meals = [
+      createDummyMeal('m1', 'lunch', 'hypo', 0.62),
+      createDummyMeal('m2', 'lunch', 'hypo', 0.58),
+      createDummyMeal('m3', 'lunch', 'target', 1.15),
+    ];
+    const report = analyzePatientTitration(meals, honeymoonProfile);
+
+    expect(report.honeymoonInsight).toBeDefined();
+    expect(report.honeymoonInsight?.status).toBe('hypo_risk');
+    expect(report.slots.lunch.clinicalRationale).toContain('🍯 Sécurité Lune de Miel');
+  });
+
+  it('détecte les signes de fin progressive de lune de miel (waning_phase) en cas d’hyperglycémies post-prandiales', () => {
+    const honeymoonProfile = {
+      ...profile,
+      isHoneymoonPhase: true,
+    };
+    const meals = [
+      createDummyMeal('d1', 'dinner', 'hyper', 2.1),
+      createDummyMeal('d2', 'dinner', 'hyper', 1.95),
+      createDummyMeal('d3', 'dinner', 'hyper', 2.2),
+      createDummyMeal('d4', 'dinner', 'target', 1.3),
+    ];
+    const report = analyzePatientTitration(meals, honeymoonProfile);
+
+    expect(report.honeymoonInsight).toBeDefined();
+    expect(report.honeymoonInsight?.status).toBe('waning_phase');
+    expect(report.slots.dinner.recommendationTitle).toContain('Fin de lune de miel');
+  });
 });

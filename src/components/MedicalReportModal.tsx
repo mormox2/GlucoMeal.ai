@@ -356,6 +356,14 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
                 <p className="text-xs text-slate-600">
                   Patient : <strong className="text-slate-900">{userProfile.name}</strong> • Période analysée : <strong>{periodDays} derniers jours</strong> ({stats.totalMealsCount} repas documentés)
                 </p>
+                {userProfile.isHoneymoonPhase && (
+                  <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-100/90 text-amber-950 text-xs font-bold border border-amber-300">
+                    <span>🍯 Phase de Lune de Miel (Rémission clinique partielle)</span>
+                    {userProfile.diagnosisDate && (
+                      <span className="font-normal opacity-85">• Diagnostic : {userProfile.diagnosisDate}</span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Ratios ITF actifs */}

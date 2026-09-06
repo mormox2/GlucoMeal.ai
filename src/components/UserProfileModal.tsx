@@ -291,6 +291,98 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
           </div>
 
+          {/* Section Période de Lune de Miel (Rémission Clinique Partielle DT1) */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-50 via-amber-50/70 to-orange-50/80 border border-amber-200/90 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="text-2xl">🍯</span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-extrabold text-sm text-amber-950 block">
+                      Phase de Lune de Miel (Nouveau Patient DT1)
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">
+                      Rémission partielle
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-amber-900/80">
+                    Besoins réduits en insuline grâce au reliquat de sécrétion pancréatique post-diagnostic
+                  </p>
+                </div>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={!!formData.isHoneymoonPhase}
+                  onChange={(e) => setFormData({ ...formData, isHoneymoonPhase: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+              </label>
+            </div>
+
+            {formData.isHoneymoonPhase && (
+              <div className="space-y-3 pt-2 border-t border-amber-200/80 animate-in fade-in">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-amber-900 block mb-1">
+                      Mois & Année de découverte du DT1
+                    </label>
+                    <input
+                      type="month"
+                      value={formData.diagnosisDate || ''}
+                      onChange={(e) => setFormData({ ...formData, diagnosisDate: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-amber-200 font-bold text-amber-950 text-xs outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div className="flex flex-col justify-end">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({
+                          ...formData,
+                          icRatios: {
+                            ...formData.icRatios,
+                            morning: 15,
+                            lunch: 18,
+                            dinner: 20,
+                            snack: 18,
+                            ...(formData.ramadanMode ? { iftar: 15, sahriya: 16, shor: 20 } : {}),
+                          },
+                          isf: formData.glucoseUnit === 'g/L' ? 0.6 : 60,
+                        });
+                      }}
+                      className="w-full py-1.5 px-3 rounded-lg bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-950 text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-700" />
+                      <span>Appliquer ratios prudents Lune de Miel (1 UI / 15-20g)</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-white/90 border border-amber-200 text-[11px] text-amber-950 space-y-1.5">
+                  <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                    <span>Consignes Thérapeutiques Cliniques (Consensus ISPAD / SFD) :</span>
+                  </div>
+                  <ul className="list-disc pl-4 space-y-1 text-amber-900/90 leading-relaxed text-[10.5px]">
+                    <li>
+                      <strong>Vigilance Hypoglycémie :</strong> Vos besoins en insuline bolus sont allégés car vos cellules bêta résiduelles couvrent une part des glucides.
+                    </li>
+                    <li>
+                      <strong>Ne jamais stopper la basale :</strong> Même si vos besoins sont très faibles, conservez une insuline basale (lente) minimale selon la prescription de votre médecin pour préserver la fonction bêta et prévenir l'acidocétose.
+                    </li>
+                    <li>
+                      <strong>Fin de phase progressive :</strong> La lune de miel dure généralement plusieurs mois. GlucoMeal détectera toute hausse des glycémies post-prandiales pour vous alerter sur le déclin de la rémission.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Section 1: Ratios Glucides / Insuline (I:C) par moment de la journée */}
           <div>
             <div className="flex items-center gap-2 mb-3">

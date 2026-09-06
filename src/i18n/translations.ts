@@ -110,6 +110,12 @@ export const translations = {
     dual_wave_desc: 'Repas riche en graisses et protéines : étalement conseillé pour éviter les hypoglycémies précoces.',
     medical_disclaimer_title: 'Rappel médical important :',
     medical_disclaimer_text: "Cette proposition de bolus est basée sur vos ratios déclarés. Le patient diabétique reste le décisionnaire final de l'injection en fonction de son activité physique et contexte clinique.",
+    honeymoon_title: 'Phase de Lune de Miel (Nouveau Patient DT1)',
+    honeymoon_desc: 'Besoins réduits en insuline grâce au reliquat de sécrétion pancréatique post-diagnostic',
+    honeymoon_badge: 'Rémission partielle',
+    honeymoon_banner_title: 'Phase de Lune de Miel active (Besoins réduits)',
+    honeymoon_banner_desc: 'Vos cellules bêta résiduelles sécrètent de l’insuline. Les doses de bolus sont modérées pour prévenir les hypoglycémies.',
+    honeymoon_apply_preset: 'Appliquer ratios prudents Lune de Miel (1 UI / 15-20g)',
 
     // Modals
     close: 'Fermer',
@@ -427,6 +433,12 @@ export const translations = {
     dual_wave_desc: 'وجبة غنية بالدهون والبروتينات: يُنصح بتمديد جزء من الجرعة لتفادي هبوط السكر المبكر والارتفاع المتأخر.',
     medical_disclaimer_title: 'تنبيه طبي هام:',
     medical_disclaimer_text: 'هذا الاقتراح للجرعة مبني على معاملاتك المحددة في ملفك العلاجي. المريض هو صاحب القرار النهائي للحقن وفقاً لظروفه ونشاطه وحالته الصحية.',
+    honeymoon_title: 'مرحلة شهر العسل (مريض جديد بالسكري النوع الأول)',
+    honeymoon_desc: 'احتياجات مخفضة للأنسولين بفضل الإفراز المتبقي للبنكرياس بعد التشخيص',
+    honeymoon_badge: 'هدأة سريرية جزئية',
+    honeymoon_banner_title: 'مرحلة شهر العسل نشطة (جرعات مخففة)',
+    honeymoon_banner_desc: 'يقوم البنكرياس بإفراز الأنسولين الداخلي جزئياً. الجرعات مخففة لتفادي هبوط السكر.',
+    honeymoon_apply_preset: 'تطبيق معاملات الأمان لشهر العسل (1 وحدة / 15-20غ)',
 
     // Modals
     close: 'إغلاق',

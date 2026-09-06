@@ -214,11 +214,17 @@ export const DoctorPortalView: React.FC<DoctorPortalViewProps> = ({
                 DT1
               </div>
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h2 className="text-base font-black text-slate-900">{userProfile.name}</h2>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
                     Dossier Actif
                   </span>
+                  {userProfile.isHoneymoonPhase && (
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1">
+                      <span>🍯 Phase Lune de Miel</span>
+                      {userProfile.diagnosisDate && <span className="opacity-80">({userProfile.diagnosisDate})</span>}
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-slate-500 mt-0.5 flex flex-wrap gap-3">
                   <span>Cible : {userProfile.targetGlucose} {userProfile.glucoseUnit}</span>
@@ -301,6 +307,43 @@ export const DoctorPortalView: React.FC<DoctorPortalViewProps> = ({
               </p>
             </div>
           </div>
+
+          {/* Honeymoon Clinical Insight Card */}
+          {report?.honeymoonInsight && (
+            <div className={`p-5 rounded-3xl border flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs ${
+              report.honeymoonInsight.status === 'waning_phase'
+                ? 'bg-amber-50/90 border-amber-300 text-amber-950'
+                : report.honeymoonInsight.status === 'hypo_risk'
+                ? 'bg-rose-50/90 border-rose-300 text-rose-950'
+                : 'bg-amber-50/50 border-amber-200 text-amber-950'
+            }`}>
+              <div className="flex items-start gap-3">
+                <span className="text-2xl mt-0.5">🍯</span>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-black">{report.honeymoonInsight.title}</h4>
+                    <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-md bg-white border border-amber-200 text-amber-900">
+                      Audit Rémission Clinique
+                    </span>
+                  </div>
+                  <p className="text-xs mt-1 leading-relaxed opacity-90">{report.honeymoonInsight.message}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const updated = {
+                    ...userProfile,
+                    isHoneymoonPhase: !userProfile.isHoneymoonPhase,
+                  };
+                  onUpdateProfile(updated);
+                }}
+                className="px-3 py-1.5 text-xs font-bold rounded-xl bg-white border border-amber-300 text-amber-900 hover:bg-amber-100 transition-colors cursor-pointer shrink-0"
+              >
+                {userProfile.isHoneymoonPhase ? 'Désactiver Mode Lune de Miel' : 'Activer Mode Lune de Miel'}
+              </button>
+            </div>
+          )}
 
           {/* Prescriptions Section */}
           <div className="p-6 rounded-3xl bg-white border border-slate-200/80 shadow-xs space-y-4">

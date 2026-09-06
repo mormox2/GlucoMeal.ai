@@ -148,6 +148,9 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         isf: userProfile.isf,
         correctionBolus: bolusCalculation.correctionBolus,
         totalBolus: bolusCalculation.totalBolus,
+        isHoneymoonActive: bolusCalculation.isHoneymoonActive,
+        honeymoonNotice: bolusCalculation.honeymoonNotice,
+        safetyWarning: bolusCalculation.safetyWarning,
       },
     };
 
@@ -662,6 +665,23 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             <span>{t('my_profile_btn')}</span>
           </button>
         </div>
+
+        {/* Honeymoon Banner */}
+        {userProfile.isHoneymoonPhase && (
+          <div className="mb-4 p-3 rounded-2xl bg-amber-500/20 border border-amber-400/40 text-amber-200 flex items-start gap-2.5 text-xs animate-in fade-in">
+            <span className="text-base shrink-0 mt-0.5">🍯</span>
+            <div>
+              <p className="font-extrabold text-amber-200">
+                {language === 'ar' ? 'مرحلة شهر العسل نشطة (إفراز متبقي للأنسولين)' : 'Phase de Lune de Miel active (Besoins réduits)'}
+              </p>
+              <p className="mt-0.5 text-[10.5px] text-amber-200/85 leading-relaxed">
+                {language === 'ar'
+                  ? 'يقوم البنكرياس بإفراز الأنسولين الداخلي جزئياً. الجرعات مخففة لتفادي انخفاض السكر. راقب السكر بعد ساعتين.'
+                  : 'Vos cellules bêta résiduelles sécrètent encore de l’insuline. Les doses de bolus sont modérées pour prévenir les hypoglycémies.'}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Slot selector (Standard or Ramadan) */}
         <div className="mb-4">
