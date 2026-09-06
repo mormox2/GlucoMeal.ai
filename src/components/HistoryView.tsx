@@ -2,12 +2,8 @@ import React, { useState, useRef } from 'react';
 import {
   History,
   Clock,
-  ArrowRight,
   Lightbulb,
-  CheckCircle2,
-  TrendingUp,
   Sparkles,
-  BookOpen,
   Star,
   Download,
   Upload,
@@ -15,7 +11,6 @@ import {
   Syringe,
   RotateCcw,
   FileText,
-  Activity,
   Wifi,
   Waves,
   Target,
@@ -30,6 +25,7 @@ import { AnalyzedMeal, UserProfileDT1 } from '../types';
 import { exportUserDataBackup, importUserDataBackup, DEFAULT_USER_PROFILE } from '../utils/storage';
 import { loadPatientCustomPortions } from '../utils/activeLearning';
 import { exportToExcelWorkbook } from '../utils/excelExport';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface HistoryViewProps {
   meals: AnalyzedMeal[];
@@ -64,6 +60,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   onOpenCloudSync,
   onQuickSelectMeal,
 }) => {
+  const { language } = useLanguage();
+  const isAr = language === 'ar';
+
   const [filterMode, setFilterMode] = useState<'all' | 'favorites'>('all');
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,7 +71,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const displayedMeals = filterMode === 'favorites' ? favoriteMeals : meals;
 
   const handleClearAll = () => {
-    if (window.confirm('Êtes-vous sûr de vouloir supprimer tous les repas de votre historique ? Cette action est irréversible.')) {
+    const confirmMsg = isAr
+      ? 'هل أنت متأكد من رغبتك في حذف جميع الوجبات من سجلك؟ هذا الإجراء لا يمكن التراجع عنه.'
+      : 'Êtes-vous sûr de vouloir supprimer tous les repas de votre historique ? Cette action est irréversible.';
+    if (window.confirm(confirmMsg)) {
       if (onClearAllMeals) {
         onClearAllMeals();
       }
@@ -88,10 +90,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
       const content = event.target?.result as string;
       const res = importUserDataBackup(content);
       if (res.success) {
-        setImportStatus(`✅ ${res.count || 0} repas importés avec succès !`);
+        setImportStatus(isAr ? `✅ تم استيراد ${res.count || 0} وجبة بنجاح!` : `✅ ${res.count || 0} repas importés avec succès !`);
         if (onRefreshHistory) onRefreshHistory();
       } else {
-        setImportStatus(`❌ Erreur : ${res.error}`);
+        setImportStatus(isAr ? `❌ خطأ في الاستيراد: ${res.error}` : `❌ Erreur : ${res.error}`);
       }
       setTimeout(() => setImportStatus(null), 4000);
     };
@@ -103,19 +105,21 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   const patientPortions = loadPatientCustomPortions();
 
   return (
-    <div className="max-w-5xl xl:max-w-6xl mx-auto py-6 sm:py-8 px-4 sm:px-6 lg:px-8">
+    <div className={`max-w-5xl xl:max-w-6xl mx-auto py-6 sm:py-8 px-4 sm:px-6 lg:px-8 ${isAr ? 'font-arabic' : ''}`}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold mb-2">
             <History className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Dossier Thérapeutique DT1 & Télémédecine</span>
+            <span>{isAr ? 'الملف العلاجي للسكري والمتابعة السريرية' : 'Dossier Thérapeutique DT1 & Télémédecine'}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            Historique Clinique & Suivi Diabétologique
+            {isAr ? 'سجل الوجبات والمتابعة الطبية' : 'Historique Clinique & Suivi Diabétologique'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 mt-1">
-            Relevé des repas tunisiens, bolus d'insuline calculés et contrôles post-prandiaux (+2h).
+            {isAr
+              ? 'متابعة الأكلات، الكربوهيدرات المحسوبة، جرعات الإنسولين السريع ومستويات السكر بعد الأكل (+ساعتان).'
+              : 'Relevé des repas tunisiens, bolus d\'insuline calculés et contrôles post-prandiaux (+2h).'}
           </p>
         </div>
 
@@ -125,10 +129,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <button
               onClick={onOpenAutoTitration}
               className="px-3.5 py-2.5 rounded-2xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-indigo-700/20 transition-all cursor-pointer"
-              title="Ajustement algorithmique des ratios Insuline:Glucides selon les glycémies H+2"
+              title={isAr ? 'معايرة نسب الإنسولين / الكربوهيدرات بالذكاء الاصطناعي' : "Ajustement algorithmique des ratios Insuline:Glucides selon les glycémies H+2"}
             >
               <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>Titration Ratios (IA)</span>
+              <span>{isAr ? 'معايرة النسب (ذكاء اصطناعي)' : 'Titration Ratios (IA)'}</span>
             </button>
           )}
 
@@ -136,10 +140,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <button
               onClick={onOpenCloudSync}
               className="px-3.5 py-2.5 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-sky-600/20 transition-all cursor-pointer"
-              title="Synchronisation Cloud Multi-Appareils"
+              title={isAr ? 'المزامنة السحابية عبر الأجهزة' : 'Synchronisation Cloud Multi-Appareils'}
             >
               <Cloud className="w-3.5 h-3.5 text-sky-200" />
-              <span>Cloud Sync</span>
+              <span>{isAr ? 'مزامنة سحابية' : 'Cloud Sync'}</span>
             </button>
           )}
 
@@ -147,10 +151,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <button
               onClick={onOpenMedicalReport}
               className="px-3.5 py-2.5 rounded-2xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-700/20 transition-all cursor-pointer"
-              title="Générer la synthèse imprimable PDF pour votre consultation chez le diabétologue"
+              title={isAr ? 'إنشاء تقرير PDF مطبوع لطبيب السكري' : 'Générer la synthèse imprimable PDF pour votre consultation chez le diabétologue'}
             >
               <FileText className="w-3.5 h-3.5" />
-              <span>Rapport Médecin (PDF)</span>
+              <span>{isAr ? 'تقرير الطبيب (PDF)' : 'Rapport Médecin (PDF)'}</span>
             </button>
           )}
 
@@ -158,29 +162,29 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             <button
               onClick={onOpenCGMSync}
               className="px-3.5 py-2.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-blue-600/20 transition-all cursor-pointer"
-              title="Synchroniser avec capteurs FreeStyle Libre, Dexcom ou Nightscout"
+              title={isAr ? 'الربط بمستشعرات السكر المستمر FreeStyle أو Dexcom' : 'Synchroniser avec capteurs FreeStyle Libre, Dexcom ou Nightscout'}
             >
               <Wifi className="w-3.5 h-3.5" />
-              <span>Capteurs CGM</span>
+              <span>{isAr ? 'مستشعرات CGM' : 'Capteurs CGM'}</span>
             </button>
           )}
 
           <button
             onClick={() => exportToExcelWorkbook(meals, userProfile || DEFAULT_USER_PROFILE)}
             className="px-3.5 py-2.5 rounded-2xl bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-800/20 transition-all cursor-pointer"
-            title="Exporter tout le journal clinique et l'analyse AGP au format Excel (.xlsx)"
+            title={isAr ? 'تصدير السجل الطبي وتحليل AGP إلى ملف إكسيل' : "Exporter tout le journal clinique et l'analyse AGP au format Excel (.xlsx)"}
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-300" />
-            <span>Export Excel (.xlsx)</span>
+            <span>{isAr ? 'تصدير إكسيل (.xlsx)' : 'Export Excel (.xlsx)'}</span>
           </button>
 
           <button
             onClick={() => exportUserDataBackup()}
             className="px-3 py-2.5 rounded-2xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Exporter l'historique et le profil en fichier de sauvegarde JSON"
+            title={isAr ? 'نسخ احتياطي للسجل والملف الشخصي' : "Exporter l'historique et le profil en fichier de sauvegarde JSON"}
           >
             <Download className="w-3.5 h-3.5 text-slate-600" />
-            <span className="hidden sm:inline">Backup JSON</span>
+            <span className="hidden sm:inline">{isAr ? 'نسخ احتياطي' : 'Backup JSON'}</span>
           </button>
 
           <input
@@ -193,17 +197,17 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           <button
             onClick={() => fileInputRef.current?.click()}
             className="px-3 py-2.5 rounded-2xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Restaurer un fichier de sauvegarde"
+            title={isAr ? 'استرجاع ملف النسخة الاحتياطية' : 'Restaurer un fichier de sauvegarde'}
           >
             <Upload className="w-3.5 h-3.5 text-slate-600" />
-            <span className="hidden sm:inline">Restaurer</span>
+            <span className="hidden sm:inline">{isAr ? 'استرجاع' : 'Restaurer'}</span>
           </button>
 
           <button
             onClick={onNewMeal}
             className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md shadow-emerald-600/20 cursor-pointer shrink-0 transition-colors flex items-center gap-1.5"
           >
-            <span>+ Nouveau repas</span>
+            <span>{isAr ? '+ وجبة جديدة' : '+ Nouveau repas'}</span>
           </button>
         </div>
       </div>
@@ -220,11 +224,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           <div className="flex items-center gap-2">
             <Lightbulb className="w-4 h-4 text-amber-600" />
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-800">
-              Références d’habitudes mémorisées (Active Learning)
+              {isAr ? 'التعلم النشط للحصص الشخصية (Active Learning)' : 'Références d’habitudes mémorisées (Active Learning)'}
             </h2>
           </div>
           <span className="text-xs text-slate-500">
-            Ajustements prédictifs auto-calibrés
+            {isAr ? 'تعديلات تلقائية مبنية على اختياراتك السابقة' : 'Ajustements prédictifs auto-calibrés'}
           </span>
         </div>
 
@@ -237,16 +241,18 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
               >
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded">
-                    ✨ Appris ({lp.correction_count} corrections)
+                    {isAr ? `✨ تم التعلم (${lp.correction_count} تعديلات)` : `✨ Appris (${lp.correction_count} corrections)`}
                   </span>
                 </div>
                 <h3 className="text-sm font-black text-slate-900 mt-1">{lp.food_name}</h3>
                 <div className="mt-3 pt-3 border-t border-emerald-200/60 flex items-baseline justify-between">
-                  <span className="text-xs text-slate-600">Portion personnalisée :</span>
-                  <span className="text-xs font-black text-emerald-900">{lp.custom_portion_g} g</span>
+                  <span className="text-xs text-slate-600">{isAr ? 'حصتك المعتادة:' : 'Portion personnalisée :'}</span>
+                  <span className="text-xs font-black text-emerald-900">{lp.custom_portion_g} {isAr ? 'غ' : 'g'}</span>
                 </div>
                 <p className="text-[11px] text-slate-600 mt-1.5">
-                  Proposé automatiquement à la place des {lp.default_portion_g}g standards de l'INNT.
+                  {isAr
+                    ? `تُقترح تلقائياً بدلاً من حصة المعهد القياسية (${lp.default_portion_g} غ).`
+                    : `Proposé automatiquement à la place des ${lp.default_portion_g}g standards de l'INNT.`}
                 </p>
               </div>
             ))}
@@ -258,10 +264,12 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             </div>
             <div>
               <h4 className="text-xs font-bold text-slate-800">
-                Apprentissage actif de vos portions réelles
+                {isAr ? 'التعلم النشط للحصص الواقعية' : 'Apprentissage actif de vos portions réelles'}
               </h4>
               <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
-                Aucune habitude encore mémorisée. Lorsque vous ajusterez manuellement les portions de vos aliments lors d'un repas (ex. semoule, pain tabouna, pâtes), l'application mémorisera vos quantités habituelles pour les proposer automatiquement.
+                {isAr
+                  ? 'لم يتم حفظ أي عادة بعد. عندما تقوم بتعديل الحصص يدوياً أثناء حساب وجباتك (مثل الكسكسي أو الخبز أو المقرونة)، سيتعلم النظام مقاديرك المعتادة ويقترحها تلقائياً في المرات القادمة.'
+                  : 'Aucune habitude encore mémorisée. Lorsque vous ajusterez manuellement les portions de vos aliments lors d\'un repas (ex. semoule, pain tabouna, pâtes), l\'application mémorisera vos quantités habituelles pour les proposer automatiquement.'}
               </p>
             </div>
           </div>
@@ -274,7 +282,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-slate-500" />
             <h2 className="text-sm font-bold uppercase tracking-wider text-slate-800">
-              Journal des repas ({displayedMeals.length})
+              {isAr ? `سجل الوجبات (${displayedMeals.length})` : `Journal des repas (${displayedMeals.length})`}
             </h2>
           </div>
 
@@ -289,7 +297,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                Tous les repas ({meals.length})
+                {isAr ? `جميع الوجبات (${meals.length})` : `Tous les repas (${meals.length})`}
               </button>
               <button
                 onClick={() => setFilterMode('favorites')}
@@ -300,7 +308,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 }`}
               >
                 <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
-                <span>Favoris ({favoriteMeals.length})</span>
+                <span>{isAr ? `المفضلة (${favoriteMeals.length})` : `Favoris (${favoriteMeals.length})`}</span>
               </button>
             </div>
 
@@ -309,10 +317,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                 type="button"
                 onClick={handleClearAll}
                 className="px-3 py-1.5 rounded-xl border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
-                title="Supprimer définitivement tous les repas de l'historique"
+                title={isAr ? 'حذف جميع الوجبات من السجل' : "Supprimer définitivement tous les repas de l'historique"}
               >
                 <Trash2 className="w-3.5 h-3.5" />
-                <span>Vider l'historique</span>
+                <span>{isAr ? 'مسح السجل' : 'Vider l\'historique'}</span>
               </button>
             )}
           </div>
@@ -335,7 +343,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         if (onToggleFavorite) onToggleFavorite(meal.id);
                       }}
                       className="text-slate-300 hover:text-amber-400 transition-colors p-1 -ml-1 cursor-pointer"
-                      title={meal.is_favorite ? 'Retirer des favoris' : 'Ajouter aux repas favoris'}
+                      title={isAr ? (meal.is_favorite ? 'إزالة من المفضلة' : 'إضافة إلى المفضلة') : (meal.is_favorite ? 'Retirer des favoris' : 'Ajouter aux repas favoris')}
                     >
                       <Star
                         className={`w-4 h-4 ${
@@ -350,7 +358,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       onClick={() => onSelectMeal(meal)}
                       className="text-sm font-bold text-slate-900 hover:text-emerald-700 cursor-pointer"
                     >
-                      {meal.meal_name}
+                      {isAr ? (meal.meal_name_ar || meal.meal_name) : meal.meal_name}
                     </h3>
 
                     <span
@@ -360,12 +368,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           : 'bg-amber-50 text-amber-800'
                       }`}
                     >
-                      {meal.overall_confidence === 'high' ? '🟢 Élevée' : '🟡 Moyenne'}
+                      {meal.overall_confidence === 'high'
+                        ? (isAr ? '🟢 دقة عالية' : '🟢 Élevée')
+                        : (isAr ? '🟡 متوسطة' : '🟡 Moyenne')}
                     </span>
 
                     {meal.created_at && (
                       <span className="text-[11px] text-slate-400">
-                        {new Date(meal.created_at).toLocaleDateString('fr-FR', {
+                        {new Date(meal.created_at).toLocaleDateString(isAr ? 'ar-TN' : 'fr-FR', {
                           day: 'numeric',
                           month: 'short',
                           hour: '2-digit',
@@ -381,7 +391,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         key={item.id}
                         className="text-[11px] px-2 py-0.5 rounded bg-slate-100 text-slate-700"
                       >
-                        {item.name_fr} ({item.confirmed_weight_g} g → ≈ {item.calculated_carbs} g)
+                        {isAr
+                          ? `${item.name_ar || item.name_fr} (${item.confirmed_weight_g || item.estimated_weight_g} غ ← ≈ ${item.calculated_carbs} غ)`
+                          : `${item.name_fr} (${item.confirmed_weight_g || item.estimated_weight_g} g → ≈ ${item.calculated_carbs} g)`}
                       </span>
                     ))}
                   </div>
@@ -391,12 +403,19 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     <div className="mt-2 flex items-center gap-2 text-xs text-slate-600">
                       <span className="inline-flex items-center gap-1 font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
                         <Syringe className="w-3 h-3" />
-                        Bolus : {meal.bolus_calculated.totalBolus} UI
+                        {isAr
+                          ? `الجرعة: ${meal.bolus_calculated.totalBolus} وحدة`
+                          : `Bolus : ${meal.bolus_calculated.totalBolus} UI`}
                       </span>
                       <span className="text-[11px] text-slate-400">
-                        (Repas : {meal.bolus_calculated.mealBolus} UI
+                        (
+                        {isAr
+                          ? `طعام: ${meal.bolus_calculated.mealBolus} و`
+                          : `Repas : ${meal.bolus_calculated.mealBolus} UI`}
                         {meal.bolus_calculated.correctionBolus > 0 &&
-                          ` • Corr. : +${meal.bolus_calculated.correctionBolus} UI`}
+                          (isAr
+                            ? ` • تصحيح: +${meal.bolus_calculated.correctionBolus} و`
+                            : ` • Corr. : +${meal.bolus_calculated.correctionBolus} UI`)}
                         )
                       </span>
                     </div>
@@ -416,14 +435,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                             ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
                             : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
                         }`}
-                        title="Modifier le contrôle post-prandial"
+                        title={isAr ? 'تعديل قياس سكر ما بعد الأكل' : 'Modifier le contrôle post-prandial'}
                       >
                         <Target className="w-3.5 h-3.5" />
                         <span>
-                          +2h : {meal.post_prandial_glucose} {userProfile?.glucoseUnit || 'g/L'}
-                          {meal.post_prandial_evaluation === 'target' && ' (Cible 🎯)'}
-                          {meal.post_prandial_evaluation === 'hyper' && ' (Hyper ⚠️)'}
-                          {meal.post_prandial_evaluation === 'hypo' && ' (Hypo 🚨)'}
+                          {isAr ? '+2 س :' : '+2h :'} {meal.post_prandial_glucose} {userProfile?.glucoseUnit || (isAr ? 'غ/ل' : 'g/L')}
+                          {meal.post_prandial_evaluation === 'target' && (isAr ? ' (الهدف 🎯)' : ' (Cible 🎯)')}
+                          {meal.post_prandial_evaluation === 'hyper' && (isAr ? ' (مرتفع ⚠️)' : ' (Hyper ⚠️)')}
+                          {meal.post_prandial_evaluation === 'hypo' && (isAr ? ' (منخفض 🚨)' : ' (Hypo 🚨)')}
                         </span>
                       </button>
                     ) : (
@@ -434,7 +453,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-600 text-xs font-semibold transition-all cursor-pointer"
                         >
                           <Clock className="w-3.5 h-3.5 text-blue-600" />
-                          <span>+ Saisir contrôle (+2h)</span>
+                          <span>{isAr ? '+ تسجيل سكر ما بعد الأكل (+2س)' : '+ Saisir contrôle (+2h)'}</span>
                         </button>
                       )
                     )}
@@ -452,9 +471,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 text-amber-800 font-bold text-[11px] border border-amber-200/60">
                         <Dumbbell className="w-3 h-3 text-amber-600" />
                         <span>
-                          {meal.activity_level === 'light_walk' && 'Marche (-15%)'}
-                          {meal.activity_level === 'moderate' && 'Sport modéré (-30%)'}
-                          {meal.activity_level === 'intense' && 'Sport intense (-50%)'}
+                          {meal.activity_level === 'light_walk' && (isAr ? 'مشي خفيف (-15%)' : 'Marche (-15%)')}
+                          {meal.activity_level === 'moderate' && (isAr ? 'رياضة معتدلة (-30%)' : 'Sport modéré (-30%)')}
+                          {meal.activity_level === 'intense' && (isAr ? 'رياضة مكثفة (-50%)' : 'Sport intense (-50%)')}
                         </span>
                       </span>
                     )}
@@ -463,26 +482,30 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     {meal.ramadan_slot && (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-purple-50 text-purple-800 font-bold text-[11px] border border-purple-200/60">
                         <Moon className="w-3 h-3 text-purple-600" />
-                        <span className="capitalize">{meal.ramadan_slot}</span>
+                        <span>
+                          {meal.ramadan_slot === 'iftar' ? (isAr ? 'الإفطار' : 'Iftar') :
+                           meal.ramadan_slot === 'sahriya' ? (isAr ? 'السهرية' : 'Sahriya') :
+                           meal.ramadan_slot === 'shor' ? (isAr ? 'السحور' : 'Shor') : (isAr ? 'وجبة خفيفة' : 'Collation')}
+                        </span>
                       </span>
                     )}
 
                     {/* IG & CG metrics */}
                     {meal.average_glycemic_index && (
                       <span className="text-[11px] text-slate-500 font-medium">
-                        IG {meal.average_glycemic_index} • CG {meal.total_glycemic_load || '—'}
+                        {isAr ? `مؤشر السكر ${meal.average_glycemic_index} • الحمل السكري ${meal.total_glycemic_load || '—'}` : `IG ${meal.average_glycemic_index} • CG ${meal.total_glycemic_load || '—'}`}
                       </span>
                     )}
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-right">
+                  <div className={isAr ? 'text-left' : 'text-right'}>
                     <span className="text-xs font-bold text-slate-500 block">
-                      Total glucides
+                      {isAr ? 'إجمالي الكربوهيدرات' : 'Total glucides'}
                     </span>
                     <span className="text-base font-black text-emerald-800 bg-emerald-50 px-3 py-1 rounded-xl border border-emerald-200/70 inline-block">
-                      ≈ {meal.total_carbs} g
+                      ≈ {meal.total_carbs} {isAr ? 'غ' : 'g'}
                     </span>
                   </div>
 
@@ -490,7 +513,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                   <button
                     onClick={() => onSelectMeal(meal)}
                     className="p-2 rounded-xl bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 text-slate-600 transition-colors cursor-pointer"
-                    title="Ré-estimer ou ajuster ce repas"
+                    title={isAr ? 'إعادة تقدير أو تعديل هذه الوجبة' : 'Ré-estimer ou ajuster ce repas'}
                   >
                     <RotateCcw className="w-4 h-4" />
                   </button>
@@ -500,7 +523,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     <button
                       onClick={() => onDeleteMeal(meal.id)}
                       className="p-2 rounded-xl hover:bg-rose-50 text-slate-300 hover:text-rose-600 transition-colors cursor-pointer"
-                      title="Supprimer ce repas de l'historique"
+                      title={isAr ? 'حذف هذه الوجبة من السجل' : "Supprimer ce repas de l'historique"}
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -514,16 +537,20 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
             {filterMode === 'favorites' ? (
               <div className="space-y-3">
                 <Star className="w-8 h-8 text-amber-400 fill-amber-300 mx-auto" />
-                <h3 className="text-base font-extrabold text-slate-800">Aucun repas favori pour le moment</h3>
+                <h3 className="text-base font-extrabold text-slate-800">
+                  {isAr ? 'لا توجد وجبات مفضلة حتى الآن' : 'Aucun repas favori pour le moment'}
+                </h3>
                 <p className="text-xs text-slate-500 max-w-md mx-auto">
-                  Cliquez sur l'étoile à côté du nom de n'importe quel repas enregistré pour le retrouver instantanément dans vos favoris.
+                  {isAr
+                    ? 'انقر على النجمة بجانب أي وجبة مسجلة لحفظها في المفضلة والوصول إليها بسرعة.'
+                    : 'Cliquez sur l\'étoile à côté du nom de n\'importe quel repas enregistré pour le retrouver instantanément dans vos favoris.'}
                 </p>
                 <button
                   type="button"
                   onClick={() => setFilterMode('all')}
                   className="mt-2 inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors cursor-pointer"
                 >
-                  Voir tous les repas
+                  {isAr ? 'عرض جميع الوجبات' : 'Voir tous les repas'}
                 </button>
               </div>
             ) : (
@@ -534,62 +561,64 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
 
                 <div className="space-y-1.5 max-w-lg mx-auto">
                   <h3 className="text-base font-black text-slate-900">
-                    Votre carnet de repas est prêt
+                    {isAr ? 'دفتر وجباتك جاهز لتسجيل وجبتك الأولى' : 'Votre carnet de repas est prêt'}
                   </h3>
                   <p className="text-xs text-slate-500 leading-relaxed">
-                    Testez immédiatement l'analyse des glucides et le calcul de bolus d'insuline personnalisé en 1 clic grâce aux suggestions de plats tunisiens typiques :
+                    {isAr
+                      ? 'اختبر فوراً حساب الكربوهيدرات وجرعة الإنسولين السريع بنقرة واحدة عبر باقة من أشهر الأكلات التونسية:'
+                      : 'Testez immédiatement l\'analyse des glucides et le calcul de bolus d\'insuline personnalisé en 1 clic grâce aux suggestions de plats tunisiens typiques :'}
                   </p>
                 </div>
 
                 {/* Interactive quick chips */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-w-2xl mx-auto pt-1 text-left">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-w-2xl mx-auto pt-1 text-left rtl:text-right">
                   {[
                     {
-                      name: 'Couscous au poisson',
-                      nameTn: 'Kskousi bel hout',
-                      desc: 'Semoule, daurade, carotte, courgette',
+                      name: isAr ? 'كسكسي بالسمك والخضار' : 'Couscous au poisson',
+                      nameTn: isAr ? 'كسكسي بالحوت' : 'Kskousi bel hout',
+                      desc: isAr ? 'سميد مطبوخ بالبخار، سمك وراتة، جزر، قرع' : 'Semoule, daurade, carotte, courgette',
                       carbs: 68,
-                      ig: 'IG 55',
+                      ig: isAr ? 'مؤشر 55' : 'IG 55',
                       icon: '🐟',
                     },
                     {
-                      name: "Brik à l'oeuf & thon",
-                      nameTn: 'Brika bel aadhma',
-                      desc: 'Feuille malsouka, oeuf, persil, thon',
+                      name: isAr ? 'بريكة بالبيض والتونة' : "Brik à l'oeuf & thon",
+                      nameTn: isAr ? 'بريكة بالعظمة والتن' : 'Brika bel aadhma',
+                      desc: isAr ? 'ورقة ملسوقة مقلية، بيضة، بقدونس، تونة' : 'Feuille malsouka, oeuf, persil, thon',
                       carbs: 24,
-                      ig: 'IG 45',
+                      ig: isAr ? 'مؤشر 45' : 'IG 45',
                       icon: '🍳',
                     },
                     {
-                      name: 'Plat Tunisien traditionnel',
-                      nameTn: 'Sahn Tounsi',
-                      desc: 'Salade méchouia, thon, oeuf dur, olives, pain',
+                      name: isAr ? 'صحن تونسي تقليدي' : 'Plat Tunisien traditionnel',
+                      nameTn: isAr ? 'صحن تونسي' : 'Sahn Tounsi',
+                      desc: isAr ? 'سلاطة مشوية، تونة، بيض مسلوق، زيتون، خبز' : 'Salade méchouia, thon, oeuf dur, olives, pain',
                       carbs: 32,
-                      ig: 'IG 40',
+                      ig: isAr ? 'مؤشر 40' : 'IG 40',
                       icon: '🥗',
                     },
                     {
-                      name: 'Fricassé tunisien (2 pièces)',
-                      nameTn: '2 Fricassés',
-                      desc: 'Pain frit garni pomme de terre, thon, harissa',
+                      name: isAr ? 'فريكاسي تونسي (قطعتان)' : 'Fricassé tunisien (2 pièces)',
+                      nameTn: isAr ? '2 كعبات فريكاسي' : '2 Fricassés',
+                      desc: isAr ? 'خبز مقلي، بطاطا، تونة، هريسة عربي' : 'Pain frit garni pomme de terre, thon, harissa',
                       carbs: 45,
-                      ig: 'IG 65',
+                      ig: isAr ? 'مؤشر 65' : 'IG 65',
                       icon: '🥪',
                     },
                     {
-                      name: 'Kafteji tunisien',
-                      nameTn: 'Kafteji bel aadhma',
-                      desc: 'Légumes hachés, courge, piments, oeufs',
+                      name: isAr ? 'كفتاجي تونسي بالبيض' : 'Kafteji tunisien',
+                      nameTn: isAr ? 'كفتاجي بالعظمة' : 'Kafteji bel aadhma',
+                      desc: isAr ? 'قرع، فلفل، طماطم مقلية مع بيض مقلي' : 'Légumes hachés, courge, piments, oeufs',
                       carbs: 22,
-                      ig: 'IG 45',
+                      ig: isAr ? 'مؤشر 45' : 'IG 45',
                       icon: '🌶️',
                     },
                     {
-                      name: 'Ojja merguez tunisienne',
-                      nameTn: 'Ojja bel merguez',
-                      desc: 'Tomate, oeufs, merguez épicées, huile olive',
+                      name: isAr ? 'عجة تونسية بالمرقاز' : 'Ojja merguez tunisienne',
+                      nameTn: isAr ? 'عجة بالمرقاز' : 'Ojja bel merguez',
+                      desc: isAr ? 'صلصة طماطم فواحة، بيض، مرقاز، زيت زيتون' : 'Tomate, oeufs, merguez épicées, huile olive',
                       carbs: 18,
-                      ig: 'IG 35',
+                      ig: isAr ? 'مؤشر 35' : 'IG 35',
                       icon: '🥘',
                     },
                   ].map((preset) => (
@@ -620,7 +649,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       </div>
                       <p className="text-[10px] text-slate-500 line-clamp-1">{preset.desc}</p>
                       <div className="flex items-center justify-between pt-1 border-t border-slate-200/50 text-[10px]">
-                        <span className="font-extrabold text-emerald-700">≈ {preset.carbs} g glucides</span>
+                        <span className="font-extrabold text-emerald-700">≈ {preset.carbs} {isAr ? 'غ كربوهيدرات' : 'g glucides'}</span>
                         <span className="text-slate-400 font-semibold">{preset.ig}</span>
                       </div>
                     </button>
@@ -634,7 +663,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                     className="inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
                   >
                     <Plus className="w-4 h-4" />
-                    <span>Prendre une photo ou saisir un autre repas</span>
+                    <span>{isAr ? 'تصوير أو إدخال وجبة أخرى' : 'Prendre une photo ou saisir un autre repas'}</span>
                   </button>
                 </div>
               </div>
@@ -645,4 +674,3 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
     </div>
   );
 };
-

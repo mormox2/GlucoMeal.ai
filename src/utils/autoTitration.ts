@@ -60,17 +60,19 @@ export function getMealSlotFromMeal(meal: AnalyzedMeal): MealSlot {
  */
 export function analyzePatientTitration(
   meals: AnalyzedMeal[],
-  userProfile: UserProfileDT1
+  userProfile: UserProfileDT1,
+  language: 'fr' | 'ar' = 'fr'
 ): GlobalTitrationReport {
   const safeProfile = sanitizeUserProfile(userProfile);
+  const isAr = language === 'ar';
   const slotLabels: Record<MealSlot, string> = {
-    morning: 'Petit-déjeuner (Matin)',
-    lunch: 'Déjeuner (Midi)',
-    dinner: 'Dîner (Soir)',
-    snack: 'Collation / Goûter',
-    iftar: 'Iftar (Rupture du Jeûne)',
-    sahriya: 'Sahriya (Soirée)',
-    shor: "Shor (Repas de l'Aube)",
+    morning: isAr ? 'فطور الصباح' : 'Petit-déjeuner (Matin)',
+    lunch: isAr ? 'الغداء' : 'Déjeuner (Midi)',
+    dinner: isAr ? 'العشاء' : 'Dîner (Soir)',
+    snack: isAr ? 'لمجة / وجبة خفيفة' : 'Collation / Goûter',
+    iftar: isAr ? 'الإفطار (رمضان)' : 'Iftar (Rupture du Jeûne)',
+    sahriya: isAr ? 'السهرية' : 'Sahriya (Soirée)',
+    shor: isAr ? 'السحور' : "Shor (Repas de l'Aube)",
   };
 
   const slotsMap: Record<MealSlot, AnalyzedMeal[]> = {
@@ -134,14 +136,18 @@ export function analyzePatientTitration(
     const currentRatio = safeProfile.icRatios[slot] || 10;
     let suggestedRatio = currentRatio;
     let status: SlotTitrationAnalysis['status'] = 'optimal';
-    let recommendationTitle = 'Ratio équilibré';
-    let clinicalRationale = 'Les glycémies post-prandiales à 2h sont stables et conformes aux cibles thérapeutiques.';
+    let recommendationTitle = isAr ? 'معامل متوازن' : 'Ratio équilibré';
+    let clinicalRationale = isAr
+      ? 'مستويات السكر بعد الأكل بساعتين مستقرة ومطابقة تماماً للأهداف العلاجية المحددة.'
+      : 'Les glycémies post-prandiales à 2h sont stables et conformes aux cibles thérapeutiques.';
     let confidence: SlotTitrationAnalysis['confidenceLevel'] = 'low';
 
     if (countPP < 2) {
       status = 'insufficient_data';
-      recommendationTitle = 'Données insuffisantes';
-      clinicalRationale = `Enregistrez au moins 2 à 3 contrôles post-prandiaux (+2h) sur ce créneau pour activer l'analyse prédictive d'auto-titration.`;
+      recommendationTitle = isAr ? 'بيانات غير كافية' : 'Données insuffisantes';
+      clinicalRationale = isAr
+        ? 'سجل ما لا يقل عن قياسين أو ثلاثة (+2س بعد الأكل) في هذه الفترة لتفعيل التحليل التنبؤي للمعايرة الذكية.'
+        : `Enregistrez au moins 2 à 3 contrôles post-prandiaux (+2h) sur ce créneau pour activer l'analyse prédictive d'auto-titration.`;
       confidence = 'low';
     } else {
       confidence = countPP >= 5 ? 'high' : 'moderate';
@@ -152,13 +158,19 @@ export function analyzePatientTitration(
         clinicalAlerts++;
         // Diminuer l'insuline = 1 UI couvre PLUS de grammes de glucides (+15%)
         suggestedRatio = Math.round((currentRatio * 1.15) * 10) / 10;
-        recommendationTitle = '⚠️ Risque d’hypoglycémie (+2h)';
-        clinicalRationale = `Sur ${countPP} contrôles de ce créneau, ${hypoCount} épisode(s) d'hypoglycémie ont été constatés (${hypoPct}%). Sécurité clinique : il est recommandé d'alléger le bolus en passant de 1 UI pour ${currentRatio}g à 1 UI pour ${suggestedRatio}g de glucides (-15% d'insuline).`;
+        recommendationTitle = isAr ? '⚠️ خطر هبوط السكر (+2س)' : '⚠️ Risque d’hypoglycémie (+2h)';
+        clinicalRationale = isAr
+          ? `من بين ${countPP} قياسات في هذه الفترة، لوحظت ${hypoCount} نوبة هبوط سكر (${hypoPct}%). للسلامة الطبية: يُنصح بتخفيف الجرعة بزيادة المعامل من 1 وحدة لكل ${currentRatio}غ إلى 1 وحدة لكل ${suggestedRatio}غ كربوهيدرات (-15% إنسولين).`
+          : `Sur ${countPP} contrôles de ce créneau, ${hypoCount} épisode(s) d'hypoglycémie ont été constatés (${hypoPct}%). Sécurité clinique : il est recommandé d'alléger le bolus en passant de 1 UI pour ${currentRatio}g à 1 UI pour ${suggestedRatio}g de glucides (-15% d'insuline).`;
         if (safeProfile.isHoneymoonPhase) {
-          clinicalRationale = `🍯 Sécurité Lune de Miel : Sur ${countPP} contrôles, ${hypoCount} épisode(s) d'hypoglycémie constatés (${hypoPct}%). La sécrétion résiduelle amplifie l'effet de l'insuline. Il est impératif d'alléger le bolus en passant à 1 UI pour ${suggestedRatio}g de glucides (-15% d'insuline).`;
+          clinicalRationale = isAr
+            ? `🍯 أمان مرحلة شهر العسل: من بين ${countPP} قياسات، تم تسجيل ${hypoCount} نوبة هبوط سكر (${hypoPct}%). الإفراز الداخلي المتبقي يضاعف مفعول الإنسولين. من الضروري تخفيف الجرعة بالانتقال إلى 1 وحدة لكل ${suggestedRatio}غ كربوهيدرات (-15% إنسولين).`
+            : `🍯 Sécurité Lune de Miel : Sur ${countPP} contrôles, ${hypoCount} épisode(s) d'hypoglycémie constatés (${hypoPct}%). La sécrétion résiduelle amplifie l'effet de l'insuline. Il est impératif d'alléger le bolus en passant à 1 UI pour ${suggestedRatio}g de glucides (-15% d'insuline).`;
         }
         if (!priorityAlertMessage) {
-          priorityAlertMessage = `Hypoglycémies répétées détectées sur le créneau du ${slotLabels[slot].toLowerCase()}. Titration recommandée en priorité.`;
+          priorityAlertMessage = isAr
+            ? `تم رصد هبوط سكر متكرر في فترة ${slotLabels[slot]}. يوصى بتعديل المعامل كأولوية قصوى.`
+            : `Hypoglycémies répétées détectées sur le créneau du ${slotLabels[slot].toLowerCase()}. Titration recommandée en priorité.`;
         }
       }
       // Règle 2 : Hyperglycémie répétée (> 50% des repas)
@@ -167,18 +179,24 @@ export function analyzePatientTitration(
         clinicalAlerts++;
         // Renforcer l'insuline = 1 UI couvre MOINS de grammes de glucides (-12 à -15%)
         suggestedRatio = Math.max(3, Math.round((currentRatio * 0.86) * 10) / 10);
-        recommendationTitle = '📈 Tendance à l’hyperglycémie post-prandiale';
-        clinicalRationale = `${hyperPct}% des contrôles à +2h dépassent l'objectif (${hyperCount}/${countPP} repas avec moyenne ${avgPP || ''} ${userProfile.glucoseUnit}). Le bolus actuel sous-estime la charge glucidique. Recommandation : renforcer le ratio à 1 UI pour ${suggestedRatio}g de glucides (augmentation prudente de ~15% de l'insuline repas).`;
+        recommendationTitle = isAr ? '📈 ميل لارتفاع السكر بعد الأكل' : '📈 Tendance à l’hyperglycémie post-prandiale';
+        clinicalRationale = isAr
+          ? `${hyperPct}% من القياسات بعد ساعتين تتجاوز الهدف (${hyperCount}/${countPP} وجبة بمتوسط ${avgPP || ''} ${userProfile.glucoseUnit}). الجرعة الحالية تقلل من تقدير كمية الكربوهيدرات. التوصية: تعزيز المعامل إلى 1 وحدة لكل ${suggestedRatio}غ كربوهيدرات (زيادة محسوبة بنحو 15% من إنسولين الوجبة).`
+          : `${hyperPct}% des contrôles à +2h dépassent l'objectif (${hyperCount}/${countPP} repas avec moyenne ${avgPP || ''} ${userProfile.glucoseUnit}). Le bolus actuel sous-estime la charge glucidique. Recommandation : renforcer le ratio à 1 UI pour ${suggestedRatio}g de glucides (augmentation prudente de ~15% de l'insuline repas).`;
         if (safeProfile.isHoneymoonPhase) {
-          recommendationTitle = '📈 Déclin de rémission (Fin de lune de miel ?)';
-          clinicalRationale = `En phase de lune de miel, ${hyperPct}% de contrôles post-prandiaux élevés (${hyperCount}/${countPP}) signalent souvent un déclin naturel de la sécrétion pancréatique résiduelle. Les besoins en insuline augmentent. Recommandation : ajuster le ratio à 1 UI pour ${suggestedRatio}g et programmer une consultation de titration avec votre diabétologue.`;
+          recommendationTitle = isAr ? '📈 تراجع الهدأة (نهاية مرحلة شهر العسل؟)' : '📈 Déclin de rémission (Fin de lune de miel ?)';
+          clinicalRationale = isAr
+            ? `في مرحلة شهر العسل، يشير تسجيل ${hyperPct}% من الارتفاعات بعد الأكل (${hyperCount}/${countPP}) إلى التراجع الطبيعي للإفراز البنكرياسي المتبقي. احتياجات الإنسولين في تزايد. التوصية: تعديل المعامل إلى 1 وحدة لكل ${suggestedRatio}غ واستشارة طبيب السكري للمعايرة.`
+            : `En phase de lune de miel, ${hyperPct}% de contrôles post-prandiaux élevés (${hyperCount}/${countPP}) signalent souvent un déclin naturel de la sécrétion pancréatique résiduelle. Les besoins en insuline augmentent. Recommandation : ajuster le ratio à 1 UI pour ${suggestedRatio}g et programmer une consultation de titration avec votre diabétologue.`;
         }
       }
       // Règle 3 : Ratio dans la cible
       else {
         status = 'optimal';
-        recommendationTitle = '🎯 Ratio optimal validé';
-        clinicalRationale = `${targetPct}% des glycémies post-prandiales sont parfaitement dans la cible (moyenne : ${avgPP || '—'} ${userProfile.glucoseUnit}). Maintenir le ratio actuel de 1 UI / ${currentRatio}g.`;
+        recommendationTitle = isAr ? '🎯 معامل مثالي معتمد' : '🎯 Ratio optimal validé';
+        clinicalRationale = isAr
+          ? `${targetPct}% من قياسات السكر بعد الأكل في النطاق المستهدف بدقة (المتوسط: ${avgPP || '—'} ${userProfile.glucoseUnit}). الاستمرار بالمعامل الحالي: 1 وحدة / ${currentRatio}غ.`
+          : `${targetPct}% des glycémies post-prandiales sont parfaitement dans la cible (moyenne : ${avgPP || '—'} ${userProfile.glucoseUnit}). Maintenir le ratio actuel de 1 UI / ${currentRatio}g.`;
       }
     }
 
@@ -226,25 +244,33 @@ export function analyzePatientTitration(
       honeymoonInsight = {
         isHoneymoon: true,
         status: 'waning_phase',
-        title: 'Signes de fin progressive de la lune de miel',
-        message: `${Math.round(hyperRate)}% des contrôles post-prandiaux dépassent l'objectif. La sécrétion endogène d'insuline diminue probablement, nécessitant une ré-évaluation des ratios avec votre diabétologue.`,
+        title: isAr ? 'مؤشرات الانحسار التدريجي لشهر العسل' : 'Signes de fin progressive de la lune de miel',
+        message: isAr
+          ? `${Math.round(hyperRate)}% من قياسات بعد الأكل تتجاوز الهدف. يبدو أن الإفراز الداخلي للإنسولين ينخفض، مما يستدعي إعادة تقييم المعاملات مع طبيبك.`
+          : `${Math.round(hyperRate)}% des contrôles post-prandiaux dépassent l'objectif. La sécrétion endogène d'insuline diminue probablement, nécessitant une ré-évaluation des ratios avec votre diabétologue.`,
       };
       if (!priorityAlertMessage) {
-        priorityAlertMessage = 'Suspicion clinique de fin de lune de miel : augmentation progressive des besoins en insuline observée.';
+        priorityAlertMessage = isAr
+          ? 'اشتباه سريري بقرب نهاية شهر العسل: لوحظت زيادة تدريجية في احتياجات الإنسولين.'
+          : 'Suspicion clinique de fin de lune de miel : augmentation progressive des besoins en insuline observée.';
       }
     } else if (hypoRate >= 15 || totalHypoCount >= 2) {
       honeymoonInsight = {
         isHoneymoon: true,
         status: 'hypo_risk',
-        title: 'Vigilance hypoglycémie en phase de rémission',
-        message: `${totalHypoCount} épisode(s) d'hypoglycémie enregistrés. La production résiduelle d'insuline protège mais rend les bolus trop puissants. Allégez vos ratios repas.`,
+        title: isAr ? 'يقظة من هبوط السكر خلال مرحلة الهدأة' : 'Vigilance hypoglycémie en phase de rémission',
+        message: isAr
+          ? `تم تسجيل ${totalHypoCount} نوبة هبوط سكر. الإفراز البنكرياسي المتبقي يحمي ولكن يجعل الجرعات قوية جداً. خفف معاملات الوجبات.`
+          : `${totalHypoCount} épisode(s) d'hypoglycémie enregistrés. La production résiduelle d'insuline protège mais rend les bolus trop puissants. Allégez vos ratios repas.`,
       };
     } else {
       honeymoonInsight = {
         isHoneymoon: true,
         status: 'active_stable',
-        title: 'Lune de miel active et équilibrée',
-        message: 'Vos glycémies post-prandiales sont stables avec des doses modérées, témoignant d\'une bonne coopération entre sécrétion endogène résiduelle et insulinothérapie.',
+        title: isAr ? 'مرحلة شهر العسل نشطة ومستقرة' : 'Lune de miel active et équilibrée',
+        message: isAr
+          ? 'مستويات السكر بعد الأكل مستقرة بجرعات معتدلة، مما يعكس تآزراً ممتازاً بين الإفراز البنكرياسي المتبقي والعلاج بالإنسولين.'
+          : 'Vos glycémies post-prandiales sont stables avec des doses modérées, témoignant d\'une bonne coopération entre sécrétion endogène résiduelle et insulinothérapie.',
       };
     }
   }

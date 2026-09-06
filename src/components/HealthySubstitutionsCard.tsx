@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { AnalyzedMeal } from '../types';
 import { getTunisianHealthySubstitutions, MealSubstitutionAdvice } from '../utils/healthySubstitutions';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface HealthySubstitutionsCardProps {
   meal: AnalyzedMeal;
@@ -24,6 +25,7 @@ export const HealthySubstitutionsCard: React.FC<HealthySubstitutionsCardProps> =
   meal,
   onApplyOptimizedRecipe,
 }) => {
+  const { language, isRtl } = useLanguage();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isApplied, setIsApplied] = useState(false);
   const advice: MealSubstitutionAdvice = getTunisianHealthySubstitutions(meal);
@@ -39,8 +41,44 @@ export const HealthySubstitutionsCard: React.FC<HealthySubstitutionsCardProps> =
     }
   };
 
+  const getLocalizedTitle = () => {
+    if (language !== 'ar') return advice.title;
+    switch (advice.dishCategory) {
+      case 'couscous':
+        return 'كسكسي صحي: سميد الشعير أو الملثوث بالخضار';
+      case 'pasta':
+        return 'المقرونة والمعجنات: طهي نصف استواء وسلطة ألياف';
+      case 'lablabi':
+        return 'لبلابي متوازن: خبز أقل وحمص كامل أكثر مع زيت زيتون';
+      case 'fried':
+        return 'الكفتاجي والبريك: طهي في الفرن بدون زيت غزير';
+      case 'bread':
+        return 'الخبز: خبز الشعير أو طابونة قمح كامل';
+      default:
+        return 'تحسين غذائي وخفض المؤشر السكري (المطبخ التونسي)';
+    }
+  };
+
+  const getLocalizedSequencingTip = () => {
+    if (language !== 'ar') return advice.foodSequencingTip;
+    switch (advice.dishCategory) {
+      case 'couscous':
+        return 'ابدأ بمرق الخضار المطهوة على البخار (قرع، لفت، كوسة) قبل الكسكسي لتبطئ امتصاص السكريات في الأمعاء وتفادي الارتفاع السريع.';
+      case 'pasta':
+        return 'تناول 3 ملاعق من السلطة المشوية أو أمك حورية كمقبلات قبل المقرونة لتبطن جدار المعدة بالألياف وتخفض ذروة السكر.';
+      case 'lablabi':
+        return 'أضف ملعقة كبيرة من زيت الزيتون البكر والكمون المرحي لتنشيط الهضم وإبطاء إفراغ المعدة واستقرار منحنى السكر.';
+      case 'fried':
+        return 'تناول معه قطعة كبدة مشوية أو بيضة مصلوقة لموازنة البروتينات وتثبيت امتصاص السكر وتجنب الارتفاع المتأخر.';
+      case 'bread':
+        return 'اغمس الخبز الكامل في زيت الزيتون البكر عوضاً عن أكله جافاً لخفض المؤشر السكري وتأخير الامتصاص.';
+      default:
+        return 'نصيحة الترتيب: ابدأ بتناول سلطة خضراء (سلطة تونسية، مشوية) قبل النشويات بـ 10 دقائق لتقليل ذروة السكر بنسبة 30%.';
+    }
+  };
+
   return (
-    <div className="rounded-3xl border border-emerald-200/90 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/50 p-4 sm:p-5 shadow-xs transition-all">
+    <div className={`rounded-3xl border border-emerald-200/90 bg-gradient-to-br from-emerald-50/70 via-white to-teal-50/50 p-4 sm:p-5 shadow-xs transition-all ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Clickable Header Accordion Toggle */}
       <button
         type="button"
@@ -55,24 +93,28 @@ export const HealthySubstitutionsCard: React.FC<HealthySubstitutionsCardProps> =
           <div>
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-200/70 text-emerald-900 px-2 py-0.5 rounded">
-                Nutrition Tunisienne Saine
+                {language === 'ar' ? 'تغذية تونسية صحية' : 'Nutrition Tunisienne Saine'}
               </span>
               <span className="text-[10px] font-bold text-emerald-700 underline decoration-emerald-400">
-                {isExpanded ? 'Réduire' : 'Afficher les conseils & alternatives'}
+                {isExpanded
+                  ? (language === 'ar' ? 'طي النصائح' : 'Réduire')
+                  : (language === 'ar' ? 'عرض النصائح والبدائل الصحية' : 'Afficher les conseils & alternatives')}
               </span>
             </div>
             <h3 className="text-sm font-black text-slate-900 mt-0.5 group-hover:text-emerald-900 transition-colors">
-              {advice.title}
+              {getLocalizedTitle()}
             </h3>
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
           {advice.projectedCarbsSavings > 0 && (
-            <div className="text-right">
-              <span className="text-[10px] uppercase font-bold text-emerald-700 hidden sm:block">Économie</span>
+            <div className={isRtl ? 'text-left' : 'text-right'}>
+              <span className="text-[10px] uppercase font-bold text-emerald-700 hidden sm:block">
+                {language === 'ar' ? 'توفير' : 'Économie'}
+              </span>
               <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md inline-block">
-                -{advice.projectedCarbsSavings} g
+                -{advice.projectedCarbsSavings} {language === 'ar' ? 'غ' : 'g'}
               </span>
             </div>
           )}
@@ -89,10 +131,12 @@ export const HealthySubstitutionsCard: React.FC<HealthySubstitutionsCardProps> =
           <div className="p-3 rounded-2xl bg-white border border-emerald-100/90 text-xs text-slate-700 space-y-1">
             <div className="flex items-center gap-1.5 font-bold text-emerald-900">
               <Clock className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Règle de Séquençage (Lissage du Pic Glycémique)</span>
+              <span>
+                {language === 'ar' ? 'قاعدة الترتيب الغذائي (لتفادي الارتفاع الحاد للسكر)' : 'Règle de Séquençage (Lissage du Pic Glycémique)'}
+              </span>
             </div>
             <p className="text-[11px] text-slate-600 leading-relaxed">
-              {advice.foodSequencingTip}
+              {getLocalizedSequencingTip()}
             </p>
           </div>
 
@@ -107,16 +151,16 @@ export const HealthySubstitutionsCard: React.FC<HealthySubstitutionsCardProps> =
                   <div>
                     <span className="text-slate-400 line-through text-[11px] block">{sub.originalFoodName}</span>
                     <span className="font-extrabold text-emerald-950 text-xs flex items-center gap-1">
-                      <ArrowRight className="w-3 h-3 text-emerald-600 inline shrink-0" />
-                      {sub.substituteFoodName}
+                      <ArrowRight className={`w-3 h-3 text-emerald-600 inline shrink-0 ${isRtl ? 'rotate-180' : ''}`} />
+                      {language === 'ar' ? (sub.substituteFoodNameAr || sub.substituteFoodName) : sub.substituteFoodName}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-[11px] font-bold text-slate-500">
-                      {sub.originalCarbs}g → <strong className="text-emerald-700">{sub.newCarbs}g</strong>
+                      {sub.originalCarbs}{language === 'ar' ? 'غ' : 'g'} → <strong className="text-emerald-700">{sub.newCarbs}{language === 'ar' ? 'غ' : 'g'}</strong>
                     </span>
                     <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-teal-50 text-teal-800">
-                      IG {sub.newGI}
+                      {language === 'ar' ? `المؤشر السكري ${sub.newGI}` : `IG ${sub.newGI}`}
                     </span>
                   </div>
                 </div>
@@ -144,12 +188,20 @@ export const HealthySubstitutionsCard: React.FC<HealthySubstitutionsCardProps> =
                 {isApplied ? (
                   <>
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Recette optimisée appliquée (≈ {advice.projectedNewTotalCarbs} g) !</span>
+                    <span>
+                      {language === 'ar'
+                        ? `تم تطبيق الوصفة الصحية المحسوبة (≈ ${advice.projectedNewTotalCarbs} غ)!`
+                        : `Recette optimisée appliquée (≈ ${advice.projectedNewTotalCarbs} g) !`}
+                    </span>
                   </>
                 ) : (
                   <>
                     <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                    <span>Simuler la variante saine (≈ {advice.projectedNewTotalCarbs} g de glucides)</span>
+                    <span>
+                      {language === 'ar'
+                        ? `محاكاة البديل الصحي (≈ ${advice.projectedNewTotalCarbs} غ كربوهيدرات)`
+                        : `Simuler la variante saine (≈ ${advice.projectedNewTotalCarbs} g de glucides)`}
+                    </span>
                   </>
                 )}
               </button>

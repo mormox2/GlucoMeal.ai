@@ -28,6 +28,7 @@ import {
 } from '../services/firebase';
 import { loadSavedMeals, loadUserProfile } from '../utils/storage';
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface CloudSyncModalProps {
   isOpen: boolean;
@@ -40,6 +41,9 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
   onClose,
   onSyncComplete,
 }) => {
+  const { language, isRtl } = useLanguage();
+  const isAr = language === 'ar';
+
   const [currentCode, setCurrentCode] = useState<string>('');
   const [inputCode, setInputCode] = useState<string>('');
   const [lastSync, setLastSync] = useState<string | null>(null);
@@ -79,10 +83,18 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
     if (res.success) {
       setCurrentCode(res.syncCode);
       setLastSync(res.lastUpdated || new Date().toISOString());
-      setStatusMessage({ text: 'Sauvegarde cloud Firebase Firestore & Code de liaison réussie !', type: 'success' });
+      setStatusMessage({
+        text: isAr
+          ? 'تم حفظ البيانات بنجاح على سحابة فايربيس وتحديث رمز الربط!'
+          : 'Sauvegarde cloud Firebase Firestore & Code de liaison réussie !',
+        type: 'success',
+      });
       if (onSyncComplete) onSyncComplete();
     } else {
-      setStatusMessage({ text: res.message || 'Erreur de sauvegarde.', type: 'error' });
+      setStatusMessage({
+        text: res.message || (isAr ? 'حدث خطأ أثناء الحفظ السحابي.' : 'Erreur de sauvegarde.'),
+        type: 'error',
+      });
     }
   };
 
@@ -101,7 +113,10 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
       setStatusMessage({ text: res.message, type: 'success' });
       if (onSyncComplete) onSyncComplete();
     } else {
-      setStatusMessage({ text: res.message, type: 'error' });
+      setStatusMessage({
+        text: res.message || (isAr ? 'رمز غير صالح أو لم يتم العثور على بيانات.' : 'Erreur.'),
+        type: 'error',
+      });
     }
   };
 
@@ -113,7 +128,12 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in overflow-y-auto ${
+        isRtl ? 'font-arabic' : ''
+      }`}
+      dir={isRtl ? 'rtl' : 'ltr'}
+    >
       <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col my-auto max-h-[92vh]">
         {/* Header */}
         <div className="p-5 bg-gradient-to-r from-sky-800 to-indigo-900 text-white flex items-center justify-between shrink-0">
@@ -124,17 +144,18 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-black uppercase tracking-wider bg-sky-500/30 text-sky-200 px-2 py-0.5 rounded-full border border-sky-400/30">
-                  Multi-Appareils
+                  {isAr ? 'متعدد الأجهزة' : 'Multi-Appareils'}
                 </span>
               </div>
               <h2 className="text-base sm:text-lg font-black tracking-tight mt-0.5">
-                Synchronisation Cloud Sécurisée
+                {isAr ? 'مزامنة سحابية آمنة ومحمية' : 'Synchronisation Cloud Sécurisée'}
               </h2>
             </div>
           </div>
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+            title={isAr ? 'إغلاق' : 'Fermer'}
           >
             <X className="w-4 h-4" />
           </button>
@@ -163,34 +184,45 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
           <div className="p-4 rounded-2xl bg-sky-50/70 border border-sky-100 flex items-center justify-around text-center text-xs">
             <div className="flex flex-col items-center">
               <Smartphone className="w-5 h-5 text-sky-700 mb-1" />
-              <span className="font-bold text-slate-800">Smartphone</span>
-              <span className="text-[10px] text-slate-500">Prise photo / repas</span>
+              <span className="font-bold text-slate-800">{isAr ? 'الهاتف الذكي' : 'Smartphone'}</span>
+              <span className="text-[10px] text-slate-500">
+                {isAr ? 'تصوير الوجبة والحساب' : 'Prise photo / repas'}
+              </span>
             </div>
             <div className="flex flex-col items-center px-2">
               <RefreshCw className="w-4 h-4 text-sky-500 animate-spin" style={{ animationDuration: '6s' }} />
-              <span className="text-[10px] text-sky-700 font-bold mt-1">Code Unique</span>
+              <span className="text-[10px] text-sky-700 font-bold mt-1">
+                {isAr ? 'رمز موحد' : 'Code Unique'}
+              </span>
             </div>
             <div className="flex flex-col items-center">
               <Laptop className="w-5 h-5 text-indigo-700 mb-1" />
-              <span className="font-bold text-slate-800">Ordinateur / Diabéto</span>
-              <span className="text-[10px] text-slate-500">Rapports & consultation</span>
+              <span className="font-bold text-slate-800">
+                {isAr ? 'الحاسوب / طبيب السكري' : 'Ordinateur / Diabéto'}
+              </span>
+              <span className="text-[10px] text-slate-500">
+                {isAr ? 'التقارير والمتابعة' : 'Rapports & consultation'}
+              </span>
             </div>
           </div>
 
           {/* Current Sync Code Box */}
           <div className="p-4 rounded-2xl border border-slate-200/90 bg-white space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-700">Votre Code Cloud Actuel :</span>
+              <span className="text-xs font-bold text-slate-700">
+                {isAr ? 'رمز السحابة الخاص بك :' : 'Votre Code Cloud Actuel :'}
+              </span>
               {lastSync && (
                 <span className="text-[10px] text-slate-400">
-                  Dernier envoi : {new Date(lastSync).toLocaleTimeString('fr-FR')}
+                  {isAr ? 'آخر إرسال : ' : 'Dernier envoi : '}
+                  {new Date(lastSync).toLocaleTimeString(isAr ? 'ar-TN' : 'fr-FR')}
                 </span>
               )}
             </div>
 
             <div className="flex items-center gap-2">
               <div className="flex-1 px-4 py-2.5 rounded-xl bg-slate-100 font-mono font-black text-slate-900 text-sm tracking-wider text-center select-all">
-                {currentCode || 'AUCUN CODE GÉNÉRÉ'}
+                {currentCode || (isAr ? 'لم يُولّد رمز بعد' : 'AUCUN CODE GÉNÉRÉ')}
               </div>
 
               {currentCode && (
@@ -198,10 +230,10 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
                   type="button"
                   onClick={handleCopyCode}
                   className="px-3.5 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors"
-                  title="Copier le code"
+                  title={isAr ? 'نسخ الرمز' : 'Copier le code'}
                 >
                   {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
-                  <span>{copied ? 'Copié !' : 'Copier'}</span>
+                  <span>{copied ? (isAr ? 'تم النسخ!' : 'Copié !') : (isAr ? 'نسخ' : 'Copier')}</span>
                 </button>
               )}
             </div>
@@ -213,26 +245,32 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
               className="w-full py-2.5 px-4 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm"
             >
               <CloudUpload className={`w-4 h-4 ${isPushing ? 'animate-bounce' : ''}`} />
-              <span>{isPushing ? 'Téléversement en cours...' : 'Envoyer mes données vers le Cloud'}</span>
+              <span>
+                {isPushing
+                  ? (isAr ? 'جاري الرفع على السحابة...' : 'Téléversement en cours...')
+                  : (isAr ? 'إرسال وحفظ بياناتي على السحابة' : 'Envoyer mes données vers le Cloud')}
+              </span>
             </button>
           </div>
 
           {/* Import with existing Sync Code */}
           <div className="p-4 rounded-2xl border border-slate-200/90 bg-slate-50/50 space-y-2.5">
             <span className="text-xs font-bold text-slate-800 block">
-              Synchroniser depuis un autre appareil :
+              {isAr ? 'المزامنة والاسترجاع من جهاز آخر :' : 'Synchroniser depuis un autre appareil :'}
             </span>
-            <p className="text-[11px] text-slate-500">
-              Saisissez le code affiché sur votre autre appareil pour restaurer instantanément tous vos repas et votre profil DT1 :
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              {isAr
+                ? 'أدخل الرمز الظاهر على جهازك الآخر لاسترجاع كافة وجباتك وملفك العلاجي فوراً:'
+                : 'Saisissez le code affiché sur votre autre appareil pour restaurer instantanément tous vos repas et votre profil DT1 :'}
             </p>
 
             <form onSubmit={handlePull} className="flex gap-2">
               <input
                 type="text"
-                placeholder="Ex : TN-8924"
+                placeholder={isAr ? 'مثال: TN-8924' : 'Ex : TN-8924'}
                 value={inputCode}
                 onChange={(e) => setInputCode(e.target.value.toUpperCase())}
-                className="flex-1 px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-xs uppercase font-bold focus:outline-none focus:border-sky-500 bg-white"
+                className="flex-1 px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-xs uppercase font-bold focus:outline-none focus:border-sky-500 bg-white text-center"
               />
               <button
                 type="submit"
@@ -240,7 +278,11 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
                 className="px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shadow-xs"
               >
                 <CloudDownload className="w-4 h-4" />
-                <span>{isPulling ? 'Import...' : 'Importer'}</span>
+                <span>
+                  {isPulling
+                    ? (isAr ? 'جاري الاستيراد...' : 'Import...')
+                    : (isAr ? 'استيراد' : 'Importer')}
+                </span>
               </button>
             </form>
           </div>
@@ -250,26 +292,32 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 font-bold text-amber-950">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Base Cloud Firebase Firestore Active</span>
+                <span>
+                  {isAr ? 'سحابة Google Firebase Firestore نشطة' : 'Base Cloud Firebase Firestore Active'}
+                </span>
               </div>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-950 border border-amber-300">
                 GlucoMeal AI
               </span>
             </div>
             <div className="flex items-center justify-between text-[10px] text-amber-800/80 font-mono">
-              <span>Projet : GlucoMeal AI</span>
-              <span className="opacity-75" title="ID technique Google Cloud: glucomeal-ai">ID: glucomeal-ai</span>
+              <span>{isAr ? 'المشروع : GlucoMeal AI' : 'Projet : GlucoMeal AI'}</span>
+              <span className="opacity-75" title="ID: glucomeal-ai">ID: glucomeal-ai</span>
             </div>
             <p className="text-[11px] text-amber-900/80 leading-relaxed">
-              Vos repas et paramètres d'insuline bénéficient du cache hors-ligne persistant (IndexedDB) et de la synchronisation sécurisée Google Firebase (Zero-Trust Rules).
+              {isAr
+                ? 'تستفيد وجباتك ومعاملات الإنسولين من التخزين المحلي الدائم (IndexedDB) والمزامنة السحابية الآمنة مع جوجل فايربيس (قواعد Zero-Trust).'
+                : "Vos repas et paramètres d'insuline bénéficient du cache hors-ligne persistant (IndexedDB) et de la synchronisation sécurisée Google Firebase (Zero-Trust Rules)."}
             </p>
           </div>
 
           {/* Privacy info */}
           <div className="flex items-start gap-2 text-[11px] text-slate-500 pt-1">
             <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-            <span>
-              Vos données restent stockées localement en priorité (PWA hors-ligne). La synchronisation cloud permet la continuité sur tous vos écrans.
+            <span className="leading-relaxed">
+              {isAr
+                ? 'تبقى بياناتك مخزنة محلياً على جهازك أولاً للعمل دون إنترنت. تتيح المزامنة السحابية متابعة مستمرة على جميع أجهزتك.'
+                : 'Vos données restent stockées localement en priorité (PWA hors-ligne). La synchronisation cloud permet la continuité sur tous vos écrans.'}
             </span>
           </div>
         </div>
@@ -280,7 +328,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 text-xs font-bold transition-colors cursor-pointer"
           >
-            Fermer
+            {isAr ? 'إغلاق' : 'Fermer'}
           </button>
         </div>
       </div>

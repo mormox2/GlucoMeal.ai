@@ -43,8 +43,12 @@ import {
   CGMConfig,
 } from './utils/cgmService';
 import { Sparkles, RefreshCw } from 'lucide-react';
+import { useLanguage } from './i18n/LanguageContext';
 
 export default function App() {
+  const { language, isRtl, t } = useLanguage();
+  const isAr = language === 'ar';
+
   // Screen views: 'landing' (SaaS marketing & parental reassurance) | 'auth' (Login/Signup parent or patient) | 'app' (Main meal & bolus tool)
   const [viewScreen, setViewScreen] = useState<'landing' | 'auth' | 'app'>(() => {
     const pref = localStorage.getItem('glucomal_screen_preference_v1');
@@ -56,7 +60,9 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<'app' | 'history' | 'database' | 'benchmark' | 'doctor'>('app');
   const [activeInputModal, setActiveInputModal] = useState<InputMode | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisStepLabel, setAnalysisStepLabel] = useState('Identification visuelle des aliments…');
+  const [analysisStepLabel, setAnalysisStepLabel] = useState(() =>
+    isAr ? 'التعرف البصري على الأطعمة…' : 'Identification visuelle des aliments…'
+  );
   const [currentMealDraft, setCurrentMealDraft] = useState<AnalyzedMeal | null>(null);
   const [mealFlowState, setMealFlowState] = useState<'idle' | 'analyzing' | 'review' | 'success'>('idle');
 
@@ -163,17 +169,23 @@ export default function App() {
   // Handle Photo Analysis
   const handleAnalyzePhoto = async (imageData: string, presetName?: string) => {
     setIsAnalyzing(true);
-    setAnalysisStepLabel('Identification visuelle des aliments…');
+    setAnalysisStepLabel(
+      isAr ? 'التعرف البصري على الأطعمة…' : 'Identification visuelle des aliments…'
+    );
     setActiveInputModal(null);
     setMealFlowState('analyzing');
 
     try {
       setTimeout(() => {
-        setAnalysisStepLabel('Estimation des volumes et portions…');
+        setAnalysisStepLabel(
+          isAr ? 'تقدير الأحجام والحصص في الصحن…' : 'Estimation des volumes et portions…'
+        );
       }, 500);
 
       setTimeout(() => {
-        setAnalysisStepLabel('Interrogation de la base certifiée tunisienne…');
+        setAnalysisStepLabel(
+          isAr ? 'الربط مع قاعدة الأطعمة التونسية المعتمدة…' : 'Interrogation de la base certifiée tunisienne…'
+        );
       }, 1000);
 
       const response = await fetch('/api/analyze-meal', {
@@ -190,7 +202,7 @@ export default function App() {
       const analyzedMeal: AnalyzedMeal = {
         id: `meal-${Date.now()}`,
         user_id: auth.currentUser?.uid || 'user-local',
-        meal_name: data.meal_name || presetName || 'Repas photographié',
+        meal_name: data.meal_name || presetName || (isAr ? 'وجبة مصورة' : 'Repas photographié'),
         meal_name_ar: data.meal_name_ar || '',
         created_at: new Date().toISOString(),
         input_type: 'photo',
@@ -213,7 +225,9 @@ export default function App() {
   // Handle Text Analysis
   const handleAnalyzeText = async (text: string) => {
     setIsAnalyzing(true);
-    setAnalysisStepLabel('Analyse du texte et extraction des quantités…');
+    setAnalysisStepLabel(
+      isAr ? 'تحليل النص واستخراج الكميات والمكونات…' : 'Analyse du texte et extraction des quantités…'
+    );
     setActiveInputModal(null);
     setMealFlowState('analyzing');
 
@@ -228,7 +242,7 @@ export default function App() {
       const analyzedMeal: AnalyzedMeal = {
         id: `meal-${Date.now()}`,
         user_id: auth.currentUser?.uid || 'user-local',
-        meal_name: data.meal_name || 'Repas décrit',
+        meal_name: data.meal_name || (isAr ? 'وجبة مكتوبة' : 'Repas décrit'),
         meal_name_ar: data.meal_name_ar || '',
         created_at: new Date().toISOString(),
         input_type: 'text',
@@ -251,7 +265,11 @@ export default function App() {
   // Handle Voice Analysis
   const handleAnalyzeVoice = async (transcript: string) => {
     setIsAnalyzing(true);
-    setAnalysisStepLabel('Transcription Derja / Français et extraction nutritionnelle…');
+    setAnalysisStepLabel(
+      isAr
+        ? 'التعرف على الصوت واستخراج القيم الغذائية…'
+        : 'Transcription Derja / Français et extraction nutritionnelle…'
+    );
     setActiveInputModal(null);
     setMealFlowState('analyzing');
 
@@ -266,7 +284,7 @@ export default function App() {
       const analyzedMeal: AnalyzedMeal = {
         id: `meal-${Date.now()}`,
         user_id: auth.currentUser?.uid || 'user-local',
-        meal_name: data.meal_name || 'Repas dicté',
+        meal_name: data.meal_name || (isAr ? 'وجبة مسجلة صوتياً' : 'Repas dicté'),
         meal_name_ar: data.meal_name_ar || '',
         created_at: new Date().toISOString(),
         input_type: 'voice',
@@ -289,7 +307,11 @@ export default function App() {
   // Handle Barcode
   const handleAnalyzeBarcode = async (code: string) => {
     setIsAnalyzing(true);
-    setAnalysisStepLabel('Interrogation du code EAN et extraction nutritionnelle…');
+    setAnalysisStepLabel(
+      isAr
+        ? 'البحث عن رمز EAN وقراءة الحقائق الغذائية للمنتج…'
+        : 'Interrogation du code EAN et extraction nutritionnelle…'
+    );
     setActiveInputModal(null);
     setMealFlowState('analyzing');
 
@@ -304,7 +326,7 @@ export default function App() {
       const analyzedMeal: AnalyzedMeal = {
         id: `meal-${Date.now()}`,
         user_id: auth.currentUser?.uid || 'user-local',
-        meal_name: data.meal_name || 'Produit industriel',
+        meal_name: data.meal_name || (isAr ? 'منتج غذائي' : 'Produit industriel'),
         meal_name_ar: data.meal_name_ar || '',
         created_at: new Date().toISOString(),
         input_type: 'barcode',
@@ -328,7 +350,11 @@ export default function App() {
   const handleAnalyzeLabel = async (imageOrText: string, isImage?: boolean) => {
     if (isImage || imageOrText.startsWith('data:image')) {
       setIsAnalyzing(true);
-      setAnalysisStepLabel("Lecture OCR de l'étiquette nutritionnelle par IA…");
+      setAnalysisStepLabel(
+        isAr
+          ? 'قراءة جدول القيمة الغذائية بالذكاء الاصطناعي (OCR)…'
+          : "Lecture OCR de l'étiquette nutritionnelle par IA…"
+      );
       setActiveInputModal(null);
       setMealFlowState('analyzing');
 
@@ -343,7 +369,7 @@ export default function App() {
         const analyzedMeal: AnalyzedMeal = {
           id: `meal-${Date.now()}`,
           user_id: auth.currentUser?.uid || 'user-local',
-          meal_name: data.meal_name || 'Produit scanné (Étiquette)',
+          meal_name: data.meal_name || (isAr ? 'منتج ممسوح (البطاقة الغذائية)' : 'Produit scanné (Étiquette)'),
           meal_name_ar: data.meal_name_ar || '',
           created_at: new Date().toISOString(),
           input_type: 'barcode',
@@ -437,7 +463,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50/50 text-slate-900 flex flex-col font-sans selection:bg-emerald-100 selection:text-emerald-900">
+    <div className={`min-h-screen bg-slate-50/50 text-slate-900 flex flex-col font-sans selection:bg-emerald-100 selection:text-emerald-900 ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       {/* PWA offline alert & install banner */}
       <PWAInstallBanner onOpenInstallModal={() => setIsPWAInstallModalOpen(true)} />
 
@@ -496,25 +522,25 @@ export default function App() {
                   <RefreshCw className="w-8 h-8 animate-spin" />
                 </div>
                 <h2 className="text-xl font-black text-slate-900 tracking-tight">
-                  Analyse de votre repas en cours…
+                  {isAr ? 'جاري تحليل وجبتك وحساب الكربوهيدرات…' : 'Analyse de votre repas en cours…'}
                 </h2>
                 <p className="text-xs text-slate-500 mt-1 mb-6">
                   {analysisStepLabel}
                 </p>
 
                 {/* Progress Indicators */}
-                <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-2.5 text-left text-xs text-slate-600">
+                <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-2.5 text-left rtl:text-right text-xs text-slate-600">
                   <div className="flex items-center gap-2 font-medium">
                     <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping" />
-                    <span>Décomposition des ingrédients visuels</span>
+                    <span>{isAr ? 'تفكيك المكونات البصرية للمكونات' : 'Décomposition des ingrédients visuels'}</span>
                   </div>
                   <div className="flex items-center gap-2 font-medium">
                     <span className="w-2 h-2 rounded-full bg-emerald-600" />
-                    <span>Estimation des volumes en assiette (diamètre 24 cm)</span>
+                    <span>{isAr ? 'تقدير الكميات والأحجام في الصحن (قطر 24 سم)' : 'Estimation des volumes en assiette (diamètre 24 cm)'}</span>
                   </div>
                   <div className="flex items-center gap-2 font-medium">
                     <span className="w-2 h-2 rounded-full bg-emerald-600" />
-                    <span>Calcul déterministe avec la base tunisienne</span>
+                    <span>{isAr ? 'حساب دقيق بالاعتماد على القاعدة التونسية' : 'Calcul déterministe avec la base tunisienne'}</span>
                   </div>
                 </div>
               </div>

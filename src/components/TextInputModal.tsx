@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Keyboard, X, Sparkles, RefreshCw, ChevronRight, CornerDownLeft } from 'lucide-react';
+import { Keyboard, X, Sparkles, RefreshCw, CornerDownLeft } from 'lucide-react';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface TextInputModalProps {
   isOpen: boolean;
@@ -14,11 +15,12 @@ export const TextInputModal: React.FC<TextInputModalProps> = ({
   onAnalyze,
   isAnalyzing,
 }) => {
+  const { language, isRtl } = useLanguage();
   const [textInput, setTextInput] = useState('');
 
   if (!isOpen) return null;
 
-  const samplePhrases = [
+  const samplePhrasesFr = [
     '2 tranches de pain + omelette + une pomme',
     'Un plat de couscous agneau, deux morceaux de pain et une orange',
     'Lablabi complet avec œuf poché, thon et un morceau de pain',
@@ -26,6 +28,17 @@ export const TextInputModal: React.FC<TextInputModalProps> = ({
     'Ojja merguez avec 2 œufs et 1/2 pain tabouna',
     'Brik à l’œuf et au thon avec salade méchouia',
   ];
+
+  const samplePhrasesAr = [
+    '2 شرائح خبز طابونة + عجة بيض + تفاحة',
+    'صحن كسكسي بلحم الخروف، قطعتين خبز وبرتقالة',
+    'لبلابي كامل مع عظمة مروبة، تن وشوية خبز',
+    'مقرونة بالصلصة الحارة، دجاج وربع باقات',
+    'عجة مرقاز مع زوز عظمات ونصف خبزة طابونة',
+    'بريكة بالعظمة والتن مع سلاطة مشوية',
+  ];
+
+  const samplePhrases = language === 'ar' ? samplePhrasesAr : samplePhrasesFr;
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -35,7 +48,7 @@ export const TextInputModal: React.FC<TextInputModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200 ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
@@ -45,10 +58,10 @@ export const TextInputModal: React.FC<TextInputModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900">
-                Écrire mon repas
+                {language === 'ar' ? 'كتابة الوجبة' : 'Écrire mon repas'}
               </h2>
               <p className="text-xs text-slate-500">
-                Décrivez les aliments et quantités consommées
+                {language === 'ar' ? 'صف الأطعمة والكميات المتناولة في الوجبة' : 'Décrivez les aliments et quantités consommées'}
               </p>
             </div>
           </div>
@@ -64,14 +77,18 @@ export const TextInputModal: React.FC<TextInputModalProps> = ({
         <form onSubmit={handleSubmit} className="p-5 flex flex-col gap-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-              Description du repas :
+              {language === 'ar' ? 'وصف الوجبة :' : 'Description du repas :'}
             </label>
             <textarea
               id="input-meal-text"
               rows={3}
               value={textInput}
               onChange={(e) => setTextInput(e.target.value)}
-              placeholder="Ex : 2 tranches de pain tabouna, une ojja merguez et une orange..."
+              placeholder={
+                language === 'ar'
+                  ? 'مثال: 2 شرائح خبز طابونة، عجة مرقاز، وتفاحة أو برتقالة...'
+                  : 'Ex : 2 tranches de pain tabouna, une ojja merguez et une orange...'
+              }
               className="w-full p-3.5 rounded-2xl border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 text-sm text-slate-800 resize-none outline-none"
               autoFocus
             />
@@ -80,7 +97,7 @@ export const TextInputModal: React.FC<TextInputModalProps> = ({
           {/* Quick Suggestions */}
           <div>
             <span className="text-[11px] font-semibold text-slate-500 block mb-2">
-              Exemples fréquents à tester en 1 clic :
+              {language === 'ar' ? 'أمثلة شائعة للاختبار بنقرة واحدة :' : 'Exemples fréquents à tester en 1 clic :'}
             </span>
             <div className="flex flex-wrap gap-1.5">
               {samplePhrases.map((phrase, i) => (
@@ -104,7 +121,7 @@ export const TextInputModal: React.FC<TextInputModalProps> = ({
             onClick={onClose}
             className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
           >
-            Annuler
+            {language === 'ar' ? 'إلغاء' : 'Annuler'}
           </button>
 
           <button
@@ -121,13 +138,13 @@ export const TextInputModal: React.FC<TextInputModalProps> = ({
             {isAnalyzing ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Analyse du texte…</span>
+                <span>{language === 'ar' ? 'جاري تحليل النص…' : 'Analyse du texte…'}</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                <span>Calculer les glucides</span>
-                <CornerDownLeft className="w-3.5 h-3.5 ml-1" />
+                <span>{language === 'ar' ? 'حساب الكربوهيدرات' : 'Calculer les glucides'}</span>
+                <CornerDownLeft className="w-3.5 h-3.5" />
               </>
             )}
           </button>

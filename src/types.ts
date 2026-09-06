@@ -91,6 +91,7 @@ export interface DualWaveSuggestion {
   extended_units: number;
   duration_hours: number; // ex: 2.5 heures
   reason: string;
+  reason_ar?: string;
 }
 
 export interface CGMReading {

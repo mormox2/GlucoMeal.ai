@@ -180,16 +180,22 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         setCurrentGlucoseInput(String(reading.glucose));
         setCgmFeedback({
           type: 'success',
-          message: `Glycémie réelle synchronisée (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${userProfile.glucoseUnit}.`,
+          message: language === 'ar'
+            ? `تمت مزامنة قراءة السكر الحقيقية (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${userProfile.glucoseUnit}.`
+            : `Glycémie réelle synchronisée (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${userProfile.glucoseUnit}.`,
         });
       } else {
-        throw new Error("Aucune mesure réelle valide reçue.");
+        throw new Error(language === 'ar' ? "لم يتم استلام أي قياس حقيقي صالح." : "Aucune mesure réelle valide reçue.");
       }
     } catch (err: any) {
       setCgmFeedback({
         type: 'error',
-        message: `Échec de lecture du capteur CGM : ${err?.message || 'Capteur non joignable'}.`,
-        hint: 'Aucune simulation autorisée. Saisissez votre glycémie manuellement ci-contre pour calculer votre bolus en toute sécurité.',
+        message: language === 'ar'
+          ? `تعذر قراءة مستشعر CGM : ${err?.message || 'المستشعر غير متاح'}.`
+          : `Échec de lecture du capteur CGM : ${err?.message || 'Capteur non joignable'}.`,
+        hint: language === 'ar'
+          ? 'المحاكاة غير مسموحة. يرجى إدخال قياس السكر يدوياً بجانب هذا الحقل لحساب الجرعة بأمان تام.'
+          : 'Aucune simulation autorisée. Saisissez votre glycémie manuellement ci-contre pour calculer votre bolus en toute sécurité.',
       });
     } finally {
       setIsReadingCGM(false);
@@ -356,7 +362,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
   };
 
   return (
-    <div className={`max-w-6xl 2xl:max-w-7xl mx-auto py-8 sm:py-10 px-4 sm:px-6 lg:px-8 pb-32 sm:pb-36 ${isHighContrastMode ? 'contrast-125' : ''}`}>
+    <div className={`max-w-6xl 2xl:max-w-7xl mx-auto py-8 sm:py-10 px-4 sm:px-6 lg:px-8 pb-32 sm:pb-36 ${isHighContrastMode ? 'contrast-125' : ''} ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       {/* Top back action & Accessibility controls */}
       <div className="flex items-center justify-between mb-5">
         <button
@@ -375,7 +381,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                 ? 'bg-amber-400 text-slate-950 border-amber-500 shadow-xs'
                 : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
             }`}
-            title="Mode Grand Affichage / Contraste Élevé pour tremblements ou vue troublée"
+            title={language === 'ar' ? 'نمط التباين الفائق لكبار السن وضعف الرؤية' : 'Mode Grand Affichage / Contraste Élevé pour tremblements ou vue troublée'}
           >
             {isHighContrastMode ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
             <span>{isHighContrastMode ? t('contrast_toggle_on') : t('contrast_toggle_off')}</span>
@@ -399,7 +405,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             </span>
             <div className="flex items-baseline gap-2">
               <span className="text-4xl sm:text-5xl font-black text-emerald-800 tracking-tight">
-                ≈ {meal.total_carbs} g
+                ≈ {meal.total_carbs} {language === 'ar' ? 'غ' : 'g'}
               </span>
               <span className="text-sm font-semibold text-slate-500">
                 {t('total_carbs_label')}
@@ -412,14 +418,24 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             {/* Index Glycémique et Charge Glycémique du repas */}
             <div className="flex flex-wrap items-center gap-2 mt-2.5 pt-2.5 border-t border-slate-100">
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-slate-100 text-slate-800 text-xs font-bold">
-                <span className="text-slate-500 font-normal">Absorption :</span>
-                <span className="text-emerald-800">{glycemicMetrics.speedLabel}</span>
+                <span className="text-slate-500 font-normal">{language === 'ar' ? 'سرعة الامتصاص :' : 'Absorption :'}</span>
+                <span className="text-emerald-800">
+                  {language === 'ar'
+                    ? (glycemicMetrics.speedLabel.toLowerCase().includes('rapid')
+                        ? 'سريع'
+                        : glycemicMetrics.speedLabel.toLowerCase().includes('lent')
+                        ? 'بطيء'
+                        : 'معتدل')
+                    : glycemicMetrics.speedLabel}
+                </span>
               </span>
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg bg-emerald-50 text-emerald-900 text-xs font-bold border border-emerald-200/60">
-                <span className="text-slate-500 font-normal">Charge Glycémique :</span>
+                <span className="text-slate-500 font-normal">{language === 'ar' ? 'الحمل السكري :' : 'Charge Glycémique :'}</span>
                 <span>{glycemicMetrics.totalGlycemicLoad}</span>
                 <span className="text-[10px] text-slate-400 font-normal">
-                  ({glycemicMetrics.totalGlycemicLoad > 20 ? 'Élevée' : glycemicMetrics.totalGlycemicLoad >= 11 ? 'Moyenne' : 'Basse'})
+                  ({language === 'ar'
+                    ? (glycemicMetrics.totalGlycemicLoad > 20 ? 'مرتفع' : glycemicMetrics.totalGlycemicLoad >= 11 ? 'متوسط' : 'منخفض')
+                    : (glycemicMetrics.totalGlycemicLoad > 20 ? 'Élevée' : glycemicMetrics.totalGlycemicLoad >= 11 ? 'Moyenne' : 'Basse')})
                 </span>
               </span>
             </div>
@@ -428,7 +444,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           <div className="flex flex-col sm:items-end gap-2">
             {confidenceBadge()}
             <span className="text-[11px] text-slate-500">
-              Formule déterministe certifiée INNT Tunis
+              {language === 'ar' ? 'معادلة دقيقة معتمدة وفق المعهد الوطني للتغذية بتونس (INNT)' : 'Formule déterministe certifiée INNT Tunis'}
             </span>
           </div>
         </div>
@@ -439,14 +455,17 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             <div className="flex items-start gap-2 text-xs text-teal-900">
               <Lightbulb className="w-4 h-4 text-teal-600 shrink-0 mt-0.5" />
               <div>
-                <strong>Ce plat ressemble à votre repas habituel :</strong> Couscous maison (habituellement 285 g total, 65–70 g de glucides).
+                <strong>{language === 'ar' ? 'هذا الطبق يطابق وجبتك المعتادة :' : 'Ce plat ressemble à votre repas habituel :'}</strong>{' '}
+                {language === 'ar'
+                  ? 'كسكسي منزلي (المعتاد إجمالاً 285 غ، 65–70 غ كربوهيدرات).'
+                  : 'Couscous maison (habituellement 285 g total, 65–70 g de glucides).'}
               </div>
             </div>
             <button
               onClick={handleApplyHabit}
               className="px-2.5 py-1 rounded-lg bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold shrink-0 cursor-pointer shadow-xs"
             >
-              Appliquer ma portion habituelle
+              {language === 'ar' ? 'تطبيق حصتي المعتادة' : 'Appliquer ma portion habituelle'}
             </button>
           </div>
         )}
@@ -454,7 +473,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         {appliedHabitPreset && (
           <div className="mt-3 text-xs text-teal-700 font-semibold flex items-center gap-1.5">
             <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />
-            Portion habituelle appliquée (240 g semoule).
+            {language === 'ar' ? 'تم تطبيق الحصة المعتادة (240 غ سميد كسكسي).' : 'Portion habituelle appliquée (240 g semoule).'}
           </div>
         )}
       </div>
@@ -659,7 +678,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             type="button"
             onClick={onOpenProfileModal}
             className="px-2.5 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Modifier mes ratios et sensibilités"
+            title={language === 'ar' ? 'تعديل المعاملات والجرعات في ملفي العلاجي' : 'Modifier mes ratios et sensibilités'}
           >
             <Settings className="w-3.5 h-3.5 text-emerald-400" />
             <span>{t('my_profile_btn')}</span>
@@ -798,7 +817,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                 onClick={handleQuickCGMRead}
                 disabled={isReadingCGM}
                 className="px-2.5 py-1.5 rounded-xl bg-blue-600/30 hover:bg-blue-600/50 border border-blue-400/40 text-blue-200 text-xs font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                title="Lire la glycémie actuelle depuis le capteur CGM"
+                title={language === 'ar' ? 'قراءة السكر المباشر من مستشعر CGM' : 'Lire la glycémie actuelle depuis le capteur CGM'}
               >
                 <Wifi className={`w-3.5 h-3.5 ${isReadingCGM ? 'animate-spin' : ''}`} />
                 <span>{isReadingCGM ? '...' : t('cgm_quick_read')}</span>
@@ -846,7 +865,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                 type="button"
                 onClick={() => setCgmFeedback(null)}
                 className="text-current opacity-60 hover:opacity-100 p-0.5 cursor-pointer"
-                aria-label="Fermer l'alerte CGM"
+                aria-label={language === 'ar' ? 'إغلاق تنبيه المستشعر' : "Fermer l'alerte CGM"}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -859,34 +878,56 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                 <div className="p-3.5 rounded-xl bg-rose-950/90 border-2 border-rose-500 text-white space-y-2 animate-in fade-in">
                   <div className="flex items-center gap-2 text-rose-300 font-black text-xs sm:text-sm">
                     <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 animate-bounce" />
-                    <span>🚨 ALERTE HYPOGLYCÉMIE PRÉ-PRANDIALE ({currentGlucoseNum} {userProfile.glucoseUnit})</span>
+                    <span>
+                      {language === 'ar'
+                        ? `🚨 تنبيه هبوط السكر قبل الأكل (${currentGlucoseNum} ${userProfile.glucoseUnit})`
+                        : `🚨 ALERTE HYPOGLYCÉMIE PRÉ-PRANDIALE (${currentGlucoseNum} ${userProfile.glucoseUnit})`}
+                    </span>
                   </div>
 
                   <div className="p-2.5 rounded-lg bg-white/10 border border-white/10 text-[11px] text-rose-100 space-y-1">
-                    <p className="font-extrabold text-white">⚡ Protocole vital : Règle des 15 g de sucre rapide</p>
-                    <p>Prenez immédiatement l'un des équivalents suivants :</p>
+                    <p className="font-extrabold text-white">
+                      {language === 'ar' ? '⚡ بروتوكول حيوي : قاعدة 15 غرام من السكر السريع' : '⚡ Protocole vital : Règle des 15 g de sucre rapide'}
+                    </p>
+                    <p>{language === 'ar' ? 'تناول فوراً أحد الخيارات التالية :' : "Prenez immédiatement l'un des équivalents suivants :"}</p>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-1 pt-1 font-semibold text-white">
-                      <div className="p-1.5 rounded bg-rose-900/80 text-center">🥤 150 ml de jus d'orange / soda</div>
-                      <div className="p-1.5 rounded bg-rose-900/80 text-center">🍬 3 morceaux de sucre n°4</div>
-                      <div className="p-1.5 rounded bg-rose-900/80 text-center">🍯 1 c. à soupe de miel</div>
+                      <div className="p-1.5 rounded bg-rose-900/80 text-center">
+                        {language === 'ar' ? '🥤 150 مل عصير برتقال / صودا' : "🥤 150 ml de jus d'orange / soda"}
+                      </div>
+                      <div className="p-1.5 rounded bg-rose-900/80 text-center">
+                        {language === 'ar' ? '🍬 3 قطع سكر رقم 4' : '🍬 3 morceaux de sucre n°4'}
+                      </div>
+                      <div className="p-1.5 rounded bg-rose-900/80 text-center">
+                        {language === 'ar' ? '🍯 1 ملعقة طعام عسل' : '🍯 1 c. à soupe de miel'}
+                      </div>
                     </div>
                   </div>
 
                   <p className="text-[11px] text-rose-200 bg-rose-900/50 p-2 rounded-lg border border-rose-400/40">
-                    ⚠️ <strong>Consigne de sécurité stricte :</strong> Reposez-vous 15 min, recontrôlez la glycémie. <strong>Ne réalisez PAS l'injection de bolus</strong> tant que la glycémie n'est pas revenue ≥ 0.80 g/L (80 mg/dL).
+                    ⚠️ <strong>{language === 'ar' ? 'تعليمات أمان صارمة :' : 'Consigne de sécurité stricte :'}</strong>{' '}
+                    {language === 'ar'
+                      ? <>استرح لمدة 15 دقيقة ثم أعد فحص السكر. <strong>لا تحقن جرعة الإنسولين السريع (البولوس)</strong> أبداً حتى يعود السكر ≥ 0.80 غ/ل (80 مغ/دل).</>
+                      : <>Reposez-vous 15 min, recontrôlez la glycémie. <strong>Ne réalisez PAS l'injection de bolus</strong> tant que la glycémie n'est pas revenue ≥ 0.80 g/L (80 mg/dL).</>}
                   </p>
                 </div>
               ) : isCautionLow ? (
                 <div className="p-2.5 rounded-xl bg-amber-500/20 border border-amber-400/50 text-amber-200 text-xs">
-                  ⚠️ <strong>Glycémie basse de prudence ({currentGlucoseNum} {userProfile.glucoseUnit}) :</strong> Risque d'hypoglycémie pendant la digestion. Surveillez vos symptômes et envisagez de scinder ou différer le bolus.
+                  ⚠️ <strong>{language === 'ar' ? `سكر منخفض يستوجب الحذر (${currentGlucoseNum} ${userProfile.glucoseUnit}) :` : `Glycémie basse de prudence (${currentGlucoseNum} ${userProfile.glucoseUnit}) :`}</strong>{' '}
+                  {language === 'ar'
+                    ? 'خطر هبوط السكر أثناء الهضم. راقب أعراضك وفكر في تجزئة الجرعة أو تأخيرها بعد الأكل.'
+                    : 'Risque d\'hypoglycémie pendant la digestion. Surveillez vos symptômes et envisagez de scinder ou différer le bolus.'}
                 </div>
               ) : currentGlucoseNum > userProfile.targetGlucose ? (
                 <span className="text-amber-300 font-medium">
-                  ⚠️ Glycémie supérieure à la cible (+{(currentGlucoseNum - userProfile.targetGlucose).toFixed(2)} {userProfile.glucoseUnit}) : correction calculée (+{bolusCalculation.correctionBolus} UI).
+                  {language === 'ar'
+                    ? `⚠️ السكر أعلى من الهدف المرجو (+${(currentGlucoseNum - userProfile.targetGlucose).toFixed(2)} ${userProfile.glucoseUnit}) : جرعة التصحيح المحسوبة (+${bolusCalculation.correctionBolus} وحدة).`
+                    : `⚠️ Glycémie supérieure à la cible (+${(currentGlucoseNum - userProfile.targetGlucose).toFixed(2)} ${userProfile.glucoseUnit}) : correction calculée (+${bolusCalculation.correctionBolus} UI).`}
                 </span>
               ) : (
                 <span className="text-emerald-300 font-medium">
-                  ✅ Glycémie dans la cible, aucune correction nécessaire.
+                  {language === 'ar'
+                    ? '✅ السكر في النطاق المستهدف، لا داعي لجرعة تصحيح.'
+                    : '✅ Glycémie dans la cible, aucune correction nécessaire.'}
                 </span>
               )}
             </div>
@@ -974,7 +1015,9 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               <span>{t('dual_wave_title')}</span>
             </div>
             <p className="text-[11px] text-slate-300 mb-2 leading-relaxed">
-              {dualWaveSuggestion.reason}
+              {language === 'ar'
+                ? 'وجبة تونسية غنية بالدهون والبروتينات تؤخر إفراغ المعدة وتسبب ارتفاعاً سكرياً متأخراً (بعد 2 إلى 4 ساعات). يُنصح بجرعة ثنائية ممتدة.'
+                : dualWaveSuggestion.reason}
             </p>
             <div className="grid grid-cols-2 gap-2 text-center text-xs">
               <div className="p-2 rounded-xl bg-white/10 border border-white/10">

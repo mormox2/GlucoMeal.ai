@@ -9,12 +9,11 @@ import {
   ChevronRight,
   Focus,
   Compass,
-  Layers,
   HelpCircle,
-  Eye,
   Info,
 } from 'lucide-react';
 import { SAMPLE_MEAL_PRESETS, PresetMealSample } from '../data/sampleMeals';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface PhotoInputModalProps {
   isOpen: boolean;
@@ -29,6 +28,9 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
   onAnalyze,
   isAnalyzing,
 }) => {
+  const { language } = useLanguage();
+  const isAr = language === 'ar';
+
   const [activeSubTab, setActiveSubTab] = useState<'presets' | 'camera' | 'upload'>('presets');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [selectedPreset, setSelectedPreset] = useState<PresetMealSample | null>(null);
@@ -86,7 +88,11 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
       }
     } catch (err: any) {
       console.warn('Camera access error:', err);
-      setCameraError("Impossible d'accéder à la caméra de l'appareil. Vous pouvez téléverser une photo ou choisir un repas type ci-dessous.");
+      setCameraError(
+        isAr
+          ? 'تعذر الوصول إلى كاميرا الجهاز. يمكنك رفع صورة من الهاتف أو اختيار طبق من النماذج الجاهزة.'
+          : "Impossible d'accéder à la caméra de l'appareil. Vous pouvez téléverser une photo ou choisir un repas type ci-dessous."
+      );
     }
   };
 
@@ -133,7 +139,7 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200 ${isAr ? 'font-arabic' : ''}`}>
       <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="flex items-center justify-between p-5 border-b border-slate-100">
@@ -143,10 +149,12 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900">
-                Photographier mon repas
+                {isAr ? 'تصوير طبق الوجبة' : 'Photographier mon repas'}
               </h2>
               <p className="text-xs text-slate-500">
-                L’IA identifie les composants et estime les portions en grammes
+                {isAr
+                  ? 'يتعرف الذكاء الاصطناعي على المكونات ويقدر الأحجام والحصص بالغرام'
+                  : 'L’IA identifie les composants et estime les portions en grammes'}
               </p>
             </div>
           </div>
@@ -165,39 +173,39 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
               setActiveSubTab('presets');
               setCameraError(null);
             }}
-            className={`flex-1 py-2 rounded-xl transition-all ${
+            className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
               activeSubTab === 'presets'
                 ? 'bg-white text-emerald-800 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            Plats tunisiens types (Démo)
+            {isAr ? 'أطباق تونسية جاهزة' : 'Plats tunisiens types (Démo)'}
           </button>
           <button
             onClick={() => {
               setActiveSubTab('camera');
               startCamera();
             }}
-            className={`flex-1 py-2 rounded-xl transition-all ${
+            className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
               activeSubTab === 'camera'
                 ? 'bg-white text-emerald-800 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            Appareil photo
+            {isAr ? 'الكاميرا الحية' : 'Appareil photo'}
           </button>
           <button
             onClick={() => {
               setActiveSubTab('upload');
               setCameraError(null);
             }}
-            className={`flex-1 py-2 rounded-xl transition-all ${
+            className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
               activeSubTab === 'upload'
                 ? 'bg-white text-emerald-800 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            Importer photo
+            {isAr ? 'رفع صورة' : 'Importer photo'}
           </button>
         </div>
 
@@ -207,7 +215,9 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
           {activeSubTab === 'presets' && (
             <div>
               <p className="text-xs text-slate-600 mb-3">
-                Sélectionnez un repas tunisien typique pour tester immédiatement l’analyse d’image et le calcul déterministe :
+                {isAr
+                  ? 'اختر وجبة تونسية شائعة لتجربة التحليل البصري والحساب المعتمد فوراً:'
+                  : 'Sélectionnez un repas tunisien typique pour tester immédiatement l’analyse d’image et le calcul déterministe :'}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">
                 {SAMPLE_MEAL_PRESETS.map((preset) => {
@@ -240,10 +250,10 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                       </div>
                       <div className="p-2.5 bg-white">
                         <h4 className="text-xs font-bold text-slate-900 line-clamp-1">
-                          {preset.name}
+                          {isAr ? (preset.name_ar || preset.name) : preset.name}
                         </h4>
                         <p className="text-[11px] text-slate-500 line-clamp-1 mt-0.5">
-                          {preset.name_ar}
+                          {isAr ? preset.name : preset.name_ar}
                         </p>
                       </div>
                     </div>
@@ -263,7 +273,7 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                     onClick={() => setActiveSubTab('presets')}
                     className="px-3 py-1.5 rounded-xl bg-amber-600 text-white text-xs font-semibold cursor-pointer"
                   >
-                    Essayer avec un plat type
+                    {isAr ? 'تجربة وجبة نموذجية' : 'Essayer avec un plat type'}
                   </button>
                 </div>
               ) : previewImage && !cameraStream ? (
@@ -276,7 +286,7 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                     />
                     <div className="absolute top-2.5 left-2.5 px-2.5 py-1 rounded-full bg-slate-900/80 backdrop-blur-xs text-[11px] font-bold text-white flex items-center gap-1.5">
                       <Focus className="w-3 h-3 text-emerald-400" />
-                      <span>Calibré angle {guidedAngle}°</span>
+                      <span>{isAr ? `معاير بزاوية ${guidedAngle}°` : `Calibré angle ${guidedAngle}°`}</span>
                     </div>
                   </div>
                   <button
@@ -284,7 +294,7 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                     className="inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 font-medium cursor-pointer"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
-                    Reprendre une autre photo
+                    <span>{isAr ? 'التقاط صورة أخرى' : 'Reprendre une autre photo'}</span>
                   </button>
                 </div>
               ) : (
@@ -300,9 +310,9 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                             ? 'bg-emerald-600 text-white shadow-xs'
                             : 'text-slate-600 hover:text-slate-900'
                         }`}
-                        title="Recommandé pour plats pyramidaux & étagés (Couscous, Tajines, Ojja)"
+                        title={isAr ? 'موصى به للأطباق الهرمية والمأكولات مثل الكسكسي والطواجن' : 'Recommandé pour plats pyramidaux & étagés (Couscous, Tajines, Ojja)'}
                       >
-                        <span>📐 45° Latérale (Relief)</span>
+                        <span>{isAr ? '📐 45° زاوية جانبية' : '📐 45° Latérale (Relief)'}</span>
                       </button>
                       <button
                         onClick={() => setGuidedAngle('90')}
@@ -311,9 +321,9 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                             ? 'bg-emerald-600 text-white shadow-xs'
                             : 'text-slate-600 hover:text-slate-900'
                         }`}
-                        title="Recommandé pour surfaces planes & bols (Lablabi, Soupe Chorba)"
+                        title={isAr ? 'موصى به للأطباق المسطحة والشوربة واللبلابي' : 'Recommandé pour surfaces planes & bols (Lablabi, Soupe Chorba)'}
                       >
-                        <span>🧭 90° Zénithale (Bols)</span>
+                        <span>{isAr ? '🧭 90° زاوية عمودية' : '🧭 90° Zénithale (Bols)'}</span>
                       </button>
                     </div>
 
@@ -328,13 +338,13 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                         }`}
                       >
                         <Focus className="w-3 h-3 text-emerald-600" />
-                        <span>Gabarit 24 cm</span>
+                        <span>{isAr ? 'شبكة الصحن (24 سم)' : 'Gabarit 24 cm'}</span>
                       </button>
 
                       <button
                         onClick={() => setShowGuidanceInfo(!showGuidanceInfo)}
                         className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-white transition-colors cursor-pointer"
-                        title="Conseils optiques pour diabétiques"
+                        title={isAr ? 'إرشادات التصوير لمرضى السكري' : 'Conseils optiques pour diabétiques'}
                       >
                         <HelpCircle className="w-4 h-4" />
                       </button>
@@ -346,14 +356,22 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                     <div className="p-3 rounded-2xl bg-blue-50/80 border border-blue-200 text-xs text-blue-900 space-y-1 animate-in fade-in duration-150">
                       <div className="font-bold flex items-center gap-1.5">
                         <Info className="w-3.5 h-3.5 text-blue-600" />
-                        <span>Pourquoi l'angle de prise de vue est crucial pour le DT1 :</span>
+                        <span>{isAr ? 'أهمية زاوية التصوير لدقة حساب الإنسولين:' : 'Pourquoi l\'angle de prise de vue est crucial pour le DT1 :'}</span>
                       </div>
                       <p className="text-[11px] leading-relaxed text-blue-800">
-                        • <strong>Vue à 45°</strong> : Permet au modèle d'estimer le relief 3D et l'épaisseur de semoule de couscous ou la sauce.
-                        <br />
-                        • <strong>Vue à 90°</strong> : Indispensable pour voir l'intégralité du bol de lablabi et identifier le pain au fond.
-                        <br />
-                        • <strong>Règle d'or</strong> : Cadrez toujours le pain tabouna et les verres de boisson dans le même cliché.
+                        {isAr ? (
+                          <>
+                            • <strong>زاوية 45°</strong>: تسمح للذكاء الاصطناعي بتقدير العمق وحجم السميد والصلصة ثلاثي الأبعاد.<br />
+                            • <strong>زاوية 90°</strong>: ضرورية لرؤية كامل صحن اللبلابي وتحديد الخبز في القاع.<br />
+                            • <strong>قاعدة أساسية</strong>: صوّر دائماً قطع الخبز والمشروبات مع الطبق في نفس الإطار.
+                          </>
+                        ) : (
+                          <>
+                            • <strong>Vue à 45°</strong> : Permet au modèle d'estimer le relief 3D et l'épaisseur de semoule de couscous ou la sauce.<br />
+                            • <strong>Vue à 90°</strong> : Indispensable pour voir l'intégralité du bol de lablabi et identifier le pain au fond.<br />
+                            • <strong>Règle d'or</strong> : Cadrez toujours le pain tabouna et les verres de boisson dans le même cliché.
+                          </>
+                        )}
                       </p>
                     </div>
                   )}
@@ -371,12 +389,12 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                     <div className="absolute top-3 inset-x-3 flex items-center justify-between pointer-events-none">
                       <div className="px-2.5 py-1 rounded-full bg-slate-900/80 backdrop-blur-xs text-white text-[11px] font-mono flex items-center gap-1.5 border border-white/10">
                         <Compass className="w-3 h-3 text-emerald-400" />
-                        <span>Angle cible : {guidedAngle}°</span>
-                        <span className="text-emerald-400 font-bold">● Alignement OK</span>
+                        <span>{isAr ? `الزاوية: ${guidedAngle}°` : `Angle cible : ${guidedAngle}°`}</span>
+                        <span className="text-emerald-400 font-bold">{isAr ? '● التوجيه مضبوط' : '● Alignement OK'}</span>
                       </div>
 
                       <div className="px-2 py-0.5 rounded-full bg-emerald-950/80 backdrop-blur-xs text-emerald-300 text-[10px] font-mono border border-emerald-500/30">
-                        Échelle : Assiette 24 cm
+                        {isAr ? 'المعيار: صحن 24 سم' : 'Échelle : Assiette 24 cm'}
                       </div>
                     </div>
 
@@ -390,7 +408,7 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                             <div className="absolute inset-x-0 h-px bg-emerald-400/30" />
                             <div className="absolute inset-y-0 w-px bg-emerald-400/30" />
                             <div className="px-3 py-1 rounded-full bg-slate-900/80 text-[10px] font-bold text-emerald-300 backdrop-blur-xs border border-emerald-500/40">
-                              Assiette étalon ~24 cm (Vue 45°)
+                              {isAr ? 'صحن قياسي 24 سم (زاوية 45°)' : 'Assiette étalon ~24 cm (Vue 45°)'}
                             </div>
                           </div>
                         ) : (
@@ -400,7 +418,7 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                             <div className="absolute inset-x-0 h-px bg-emerald-400/30" />
                             <div className="absolute inset-y-0 w-px bg-emerald-400/30" />
                             <div className="px-3 py-1 rounded-full bg-slate-900/80 text-[10px] font-bold text-emerald-300 backdrop-blur-xs border border-emerald-500/40">
-                              Bol / Assiette zénithale (90°)
+                              {isAr ? 'صحن عمودي أو زبدية (90°)' : 'Bol / Assiette zénithale (90°)'}
                             </div>
                           </div>
                         )}
@@ -410,9 +428,9 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                     {/* Bottom DT1 Guidance Ribbon */}
                     <div className="absolute bottom-20 inset-x-4 flex justify-center pointer-events-none">
                       <div className="px-3 py-1 rounded-full bg-slate-900/85 backdrop-blur-xs text-[10px] text-amber-200 border border-amber-500/40 flex items-center gap-1.5 shadow-lg">
-                        <span>🥖 Inclure le pain / boissons</span>
+                        <span>{isAr ? '🥖 أظهر الخبز والمشروبات' : '🥖 Inclure le pain / boissons'}</span>
                         <span className="text-slate-500">•</span>
-                        <span>💡 Éviter les ombres portées</span>
+                        <span>{isAr ? '💡 تجنب الظلال الكثيفة' : '💡 Éviter les ombres portées'}</span>
                       </div>
                     </div>
 
@@ -421,7 +439,7 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                       <button
                         onClick={capturePhotoFromCamera}
                         className="w-16 h-16 rounded-full bg-white border-4 border-emerald-500 shadow-xl flex items-center justify-center cursor-pointer hover:scale-105 active:scale-95 transition-transform"
-                        title="Capturer le repas"
+                        title={isAr ? 'التقاط صورة الوجبة' : 'Capturer le repas'}
                       >
                         <div className="w-11 h-11 rounded-full bg-emerald-600" />
                       </button>
@@ -430,8 +448,8 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
 
                   <p className="text-center text-[11px] text-slate-500">
                     {guidedAngle === '45'
-                      ? 'Vue 45° active : Idéale pour le couscous, le tajine tunisien et les plats à relief.'
-                      : 'Vue 90° active : Idéale pour le lablabi, les soupes, la salade méchouia et les bols.'}
+                      ? (isAr ? 'زاوية 45° نشطة: مثالية للكسكسي والطواجن والأطباق الهرمية.' : 'Vue 45° active : Idéale pour le couscous, le tajine tunisien et les plats à relief.')
+                      : (isAr ? 'زاوية 90° نشطة: مثالية للبلابي، الشوربة، السلاطة المشوية والصحون.' : 'Vue 90° active : Idéale pour le lablabi, les soupes, la salade méchouia et les bols.')}
                   </p>
                 </div>
               )}
@@ -460,7 +478,7 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                     className="mt-3 inline-flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 font-medium cursor-pointer"
                   >
                     <Upload className="w-3.5 h-3.5" />
-                    Changer de photo
+                    <span>{isAr ? 'تغيير الصورة' : 'Changer de photo'}</span>
                   </button>
                 </div>
               ) : (
@@ -472,10 +490,10 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                     <Upload className="w-6 h-6" />
                   </div>
                   <span className="text-sm font-semibold text-slate-800 block">
-                    Glissez-déposez ou cliquez pour importer une photo
+                    {isAr ? 'انقر أو اسحب الصورة لرفعها من هاتفك أو حاسوبك' : 'Glissez-déposez ou cliquez pour importer une photo'}
                   </span>
                   <span className="text-xs text-slate-500 mt-1 block">
-                    JPG, PNG ou HEIC (photo de votre repas)
+                    {isAr ? 'صيغ مدعومة: JPG أو PNG أو HEIC' : 'JPG, PNG ou HEIC (photo de votre repas)'}
                   </span>
                 </div>
               )}
@@ -493,10 +511,12 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
                 />
                 <div>
                   <span className="text-xs font-bold text-emerald-950 block">
-                    {selectedPreset ? selectedPreset.name : 'Photo prête pour analyse'}
+                    {selectedPreset
+                      ? (isAr ? (selectedPreset.name_ar || selectedPreset.name) : selectedPreset.name)
+                      : (isAr ? 'الصورة جاهزة للتحليل' : 'Photo prête pour analyse')}
                   </span>
                   <span className="text-[11px] text-emerald-700">
-                    Prêt pour décomposition et calcul des glucides
+                    {isAr ? 'جاهزة للتفكيك وحساب الكربوهيدرات والجرعة' : 'Prêt pour décomposition et calcul des glucides'}
                   </span>
                 </div>
               </div>
@@ -510,7 +530,7 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
             onClick={onClose}
             className="px-4 py-2.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
           >
-            Annuler
+            {isAr ? 'إلغاء' : 'Annuler'}
           </button>
 
           <button
@@ -526,13 +546,13 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
             {isAnalyzing ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                <span>Analyse de votre repas…</span>
+                <span>{isAr ? 'جاري تحليل محتوى الطبق…' : 'Analyse de votre repas…'}</span>
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                <span>Analyser le repas</span>
-                <ChevronRight className="w-3.5 h-3.5 ml-1" />
+                <span>{isAr ? 'تحليل محتوى الصحن' : 'Analyser le repas'}</span>
+                <ChevronRight className={`w-3.5 h-3.5 ml-1 ${isAr ? 'rotate-180' : ''}`} />
               </>
             )}
           </button>

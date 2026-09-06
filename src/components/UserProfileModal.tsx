@@ -4,6 +4,7 @@ import { UserProfileDT1 } from '../types';
 import { DEFAULT_USER_PROFILE, sanitizeUserProfile } from '../utils/storage';
 import { auth, logoutUser } from '../services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -20,6 +21,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   currentProfile,
   onSave,
 }) => {
+  const { language, isRtl } = useLanguage();
   const profile = propProfile || currentProfile || DEFAULT_USER_PROFILE;
   const [formData, setFormData] = useState<UserProfileDT1>(() => sanitizeUserProfile(profile));
   const [savedFeedback, setSavedFeedback] = useState(false);
@@ -105,20 +107,22 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     Math.round(demoTotalRaw / (formData.roundingStep || 0.5)) * (formData.roundingStep || 0.5);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+    <div className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in overflow-y-auto ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="bg-white rounded-3xl max-w-xl w-full my-6 overflow-hidden shadow-2xl border border-slate-200 flex flex-col">
         {/* Modal Header */}
         <div className="p-5 sm:p-6 bg-gradient-to-r from-emerald-700 to-teal-800 text-white flex items-start justify-between">
           <div>
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/30 text-emerald-100 text-[11px] font-semibold mb-2">
               <ShieldCheck className="w-3.5 h-3.5" />
-              Insulinothérapie Fonctionnelle (ITF)
+              {language === 'ar' ? 'العلاج بالإنسولين الوظيفي (ITF)' : 'Insulinothérapie Fonctionnelle (ITF)'}
             </span>
             <h2 className="text-xl sm:text-2xl font-black tracking-tight">
-              Profil Thérapeutique Diabète Type 1
+              {language === 'ar' ? 'الملف العلاجي للسكري النوع الأول' : 'Profil Thérapeutique Diabète Type 1'}
             </h2>
             <p className="text-xs text-emerald-100/90 mt-1 max-w-md">
-              Ratios glucides/insuline selon le moment de la journée, sensibilité (ISF) et bolus de correction.
+              {language === 'ar'
+                ? 'معاملات الكربوهيدرات/الإنسولين حسب أوقات اليوم، وحساسية الإنسولين (ISF) وجرعات التصحيح.'
+                : 'Ratios glucides/insuline selon le moment de la journée, sensibilité (ISF) et bolus de correction.'}
             </p>
           </div>
           <button
@@ -138,10 +142,16 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <span className="text-base">👨‍👩‍👧</span>
                 <div>
                   <span className="font-extrabold text-sm text-rose-950 block">
-                    Mode Utilisateur : {formData.accountType === 'parent' ? "Parent d'un enfant DT1" : 'Patient Autonome'}
+                    {language === 'ar'
+                      ? `نوع الحساب : ${formData.accountType === 'parent' ? 'ولي أمر طفل سكري' : 'مريض سكري مستقل'}`
+                      : `Mode Utilisateur : ${formData.accountType === 'parent' ? "Parent d'un enfant DT1" : 'Patient Autonome'}`}
                   </span>
                   <p className="text-[11px] text-rose-900/80">
-                    {formData.accountType === 'parent'
+                    {language === 'ar'
+                      ? formData.accountType === 'parent'
+                        ? 'أنت تدير وجبات طفلك وجرعات الإنسولين بأمان ودقة'
+                        : 'أنت تحسب وجباتك وجرعاتك بنفسك'
+                      : formData.accountType === 'parent'
                       ? "Vous gérez les repas et les doses d'insuline pour votre enfant"
                       : "Vous calculez vos propres repas et doses d'insuline"}
                   </p>
@@ -167,7 +177,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   }
                   className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-white border border-rose-300 text-rose-800 hover:bg-rose-100 transition-colors cursor-pointer"
                 >
-                  {formData.accountType === 'parent' ? 'Basculer en Patient Adulte' : "Activer Profil Enfant"}
+                  {language === 'ar'
+                    ? formData.accountType === 'parent'
+                      ? 'التحويل إلى مريض بالغ'
+                      : 'تفعيل ملف طفل سكري'
+                    : formData.accountType === 'parent'
+                    ? 'Basculer en Patient Adulte'
+                    : 'Activer Profil Enfant'}
                 </button>
               </div>
             </div>
@@ -176,7 +192,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <div className="pt-2 border-t border-rose-200/70 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                 <div>
                   <label className="text-[10px] font-bold uppercase text-rose-900 block mb-1">
-                    Prénom de l'enfant
+                    {language === 'ar' ? 'اسم الطفل' : "Prénom de l'enfant"}
                   </label>
                   <input
                     type="text"
@@ -194,14 +210,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         },
                       })
                     }
-                    placeholder="Ex: Sarah"
+                    placeholder={language === 'ar' ? 'مثال: سارة، يوسف' : 'Ex: Sarah'}
                     className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-rose-200 font-bold text-rose-950 text-xs outline-none"
                   />
                 </div>
 
                 <div>
                   <label className="text-[10px] font-bold uppercase text-rose-900 block mb-1">
-                    Âge de l'enfant
+                    {language === 'ar' ? 'عمر الطفل' : "Âge de l'enfant"}
                   </label>
                   <input
                     type="number"
@@ -227,7 +243,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
                 <div>
                   <label className="text-[10px] font-bold uppercase text-rose-900 block mb-1">
-                    Injection Enfant
+                    {language === 'ar' ? 'جهاز حقن الطفل' : 'Injection Enfant'}
                   </label>
                   <select
                     value={formData.childProfile?.insulinDeliveryType || 'pen_half_unit'}
@@ -248,9 +264,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     }}
                     className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-rose-200 font-bold text-rose-950 text-xs outline-none"
                   >
-                    <option value="pen_half_unit">Stylo 0.5 U (NovoPen Echo)</option>
-                    <option value="pump">Pompe à insuline pédiatrique</option>
-                    <option value="standard_pen">Stylo standard 1.0 U</option>
+                    <option value="pen_half_unit">
+                      {language === 'ar' ? 'قلم 0.5 وحدة للأطفال (NovoPen Echo)' : 'Stylo 0.5 U (NovoPen Echo)'}
+                    </option>
+                    <option value="pump">
+                      {language === 'ar' ? 'مضخة إنسولين أطفال (0.1 وحدة)' : 'Pompe à insuline pédiatrique'}
+                    </option>
+                    <option value="standard_pen">
+                      {language === 'ar' ? 'قلم عادي (1.0 وحدة)' : 'Stylo standard 1.0 U'}
+                    </option>
                   </select>
                 </div>
               </div>
@@ -260,9 +282,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           {/* Unit selection */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <span className="font-bold text-slate-800 block text-xs">Unité de mesure glycémique</span>
+              <span className="font-bold text-slate-800 block text-xs">
+                {language === 'ar' ? 'وحدة قياس السكر' : 'Unité de mesure glycémique'}
+              </span>
               <p className="text-[11px] text-slate-500">
-                Format d'affichage de votre lecteur ou capteur de glycémie
+                {language === 'ar' ? 'صيغة العرض المعتمدة في جهازك أو مستشعرك' : "Format d'affichage de votre lecteur ou capteur de glycémie"}
               </p>
             </div>
             <div className="flex items-center gap-2 self-start sm:self-auto">
@@ -275,7 +299,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                 }`}
               >
-                g/L (Tunisie / France)
+                {language === 'ar' ? 'غ/ل (تونس / فرنسا)' : 'g/L (Tunisie / France)'}
               </button>
               <button
                 type="button"
@@ -286,7 +310,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
                 }`}
               >
-                mg/dL (USA / Int.)
+                {language === 'ar' ? 'مغ/دل (أمريكا / دولي)' : 'mg/dL (USA / Int.)'}
               </button>
             </div>
           </div>
@@ -299,14 +323,16 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="font-extrabold text-sm text-amber-950 block">
-                      Phase de Lune de Miel (Nouveau Patient DT1)
+                      {language === 'ar' ? 'مرحلة شهر العسل (تشخيص حديث للسكري)' : 'Phase de Lune de Miel (Nouveau Patient DT1)'}
                     </span>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 border border-amber-300">
-                      Rémission partielle
+                      {language === 'ar' ? 'هدأة سريرية جزئية' : 'Rémission partielle'}
                     </span>
                   </div>
                   <p className="text-[11px] text-amber-900/80">
-                    Besoins réduits en insuline grâce au reliquat de sécrétion pancréatique post-diagnostic
+                    {language === 'ar'
+                      ? 'احتياجات مخفضة للأنسولين بفضل الإفراز المتبقي للبنكرياس بعد التشخيص'
+                      : 'Besoins réduits en insuline grâce au reliquat de sécrétion pancréatique post-diagnostic'}
                   </p>
                 </div>
               </div>
@@ -327,7 +353,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] font-bold uppercase text-amber-900 block mb-1">
-                      Mois & Année de découverte du DT1
+                      {language === 'ar' ? 'شهر وسنة تشخيص السكري' : 'Mois & Année de découverte du DT1'}
                     </label>
                     <input
                       type="month"
@@ -357,7 +383,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       className="w-full py-1.5 px-3 rounded-lg bg-amber-100 hover:bg-amber-200 border border-amber-300 text-amber-950 text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5 shadow-2xs"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-700" />
-                      <span>Appliquer ratios prudents Lune de Miel (1 UI / 15-20g)</span>
+                      <span>{language === 'ar' ? 'تطبيق معاملات الأمان لشهر العسل (1 و / 15-20غ)' : 'Appliquer ratios prudents Lune de Miel (1 UI / 15-20g)'}</span>
                     </button>
                   </div>
                 </div>
@@ -365,17 +391,26 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <div className="p-3 rounded-xl bg-white/90 border border-amber-200 text-[11px] text-amber-950 space-y-1.5">
                   <div className="flex items-center gap-1.5 font-bold text-amber-900">
                     <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                    <span>Consignes Thérapeutiques Cliniques (Consensus ISPAD / SFD) :</span>
+                    <span>{language === 'ar' ? 'التوصيات السريرية العلاجية (توصيات ISPAD / SFD) :' : 'Consignes Thérapeutiques Cliniques (Consensus ISPAD / SFD) :'}</span>
                   </div>
-                  <ul className="list-disc pl-4 space-y-1 text-amber-900/90 leading-relaxed text-[10.5px]">
+                  <ul className={`list-disc ${isRtl ? 'pr-4' : 'pl-4'} space-y-1 text-amber-900/90 leading-relaxed text-[10.5px]`}>
                     <li>
-                      <strong>Vigilance Hypoglycémie :</strong> Vos besoins en insuline bolus sont allégés car vos cellules bêta résiduelles couvrent une part des glucides.
+                      <strong>{language === 'ar' ? 'الحذر من هبوط السكر :' : 'Vigilance Hypoglycémie :'}</strong>{' '}
+                      {language === 'ar'
+                        ? 'احتياجاتك لجرعات الطعام منخفضة لأن خلايا بيتا المتبقية ما زالت تفرز الأنسولين.'
+                        : 'Vos besoins en insuline bolus sont allégés car vos cellules bêta résiduelles couvrent une part des glucides.'}
                     </li>
                     <li>
-                      <strong>Ne jamais stopper la basale :</strong> Même si vos besoins sont très faibles, conservez une insuline basale (lente) minimale selon la prescription de votre médecin pour préserver la fonction bêta et prévenir l'acidocétose.
+                      <strong>{language === 'ar' ? 'عدم إيقاف الإنسولين البطيء أبداً :' : 'Ne jamais stopper la basale :'}</strong>{' '}
+                      {language === 'ar'
+                        ? 'حتى وإن كانت الجرعات خفيفة جداً، حافظ على جرعة الإنسولين القاعدي المحددة من طبيبك لحماية خلايا بيتا وتفادي الحماض الكيتوني.'
+                        : "Même si vos besoins sont très faibles, conservez une insuline basale (lente) minimale selon la prescription de votre médecin pour préserver la fonction bêta et prévenir l'acidocétose."}
                     </li>
                     <li>
-                      <strong>Fin de phase progressive :</strong> La lune de miel dure généralement plusieurs mois. GlucoMeal détectera toute hausse des glycémies post-prandiales pour vous alerter sur le déclin de la rémission.
+                      <strong>{language === 'ar' ? 'نهاية تدريجية للمرحلة :' : 'Fin de phase progressive :'}</strong>{' '}
+                      {language === 'ar'
+                        ? 'تدوم مرحلة شهر العسل عادة عدة أشهر. سيتعرف جلوكوميل على أي ارتفاع متكرر للسكر بعد الأكل لتنبيهك ببدء تراجع الإفراز الطبيعي.'
+                        : 'La lune de miel dure généralement plusieurs mois. GlucoMeal détectera toute hausse des glycémies post-prandiales pour vous alerter sur le déclin de la rémission.'}
                     </li>
                   </ul>
                 </div>
@@ -388,21 +423,23 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <div className="flex items-center gap-2 mb-3">
               <Clock className="w-4 h-4 text-emerald-600" />
               <h3 className="font-extrabold text-sm text-slate-900">
-                1. Ratios Glucides / Insuline (Ratio I:C)
+                {language === 'ar' ? '1. معاملات الكربوهيدرات / الإنسولين (معامل I:C)' : '1. Ratios Glucides / Insuline (Ratio I:C)'}
               </h3>
             </div>
             <p className="text-[11px] text-slate-500 mb-3">
-              Nombre de grammes de glucides couverts par 1 unité d’insuline rapide (ex : 1 UI pour 10 g).
+              {language === 'ar'
+                ? 'كمية الكربوهيدرات بالغرام التي تغطيها 1 وحدة إنسولين سريع (مثال: 1 وحدة لكل 10 غ).'
+                : 'Nombre de grammes de glucides couverts par 1 unité d’insuline rapide (ex : 1 UI pour 10 g).'}
             </p>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {/* Matin */}
               <div className="p-3 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-emerald-300 transition-colors">
                 <span className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
-                  🌅 Matin
+                  🌅 {language === 'ar' ? 'الصباح' : 'Matin'}
                 </span>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-400">1 UI /</span>
+                  <span className="text-xs text-slate-400">{language === 'ar' ? '1 و /' : '1 UI /'}</span>
                   <input
                     type="number"
                     min="2"
@@ -417,18 +454,18 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     }
                     className="w-14 px-2 py-1 rounded-lg border border-slate-200 font-black text-slate-900 text-sm text-center outline-none focus:border-emerald-500"
                   />
-                  <span className="text-xs font-semibold text-slate-600">g</span>
+                  <span className="text-xs font-semibold text-slate-600">{language === 'ar' ? 'غ' : 'g'}</span>
                 </div>
-                <span className="text-[10px] text-slate-400 mt-1 block">Petit-déjeuner</span>
+                <span className="text-[10px] text-slate-400 mt-1 block">{language === 'ar' ? 'فطور الصباح' : 'Petit-déjeuner'}</span>
               </div>
 
               {/* Midi */}
               <div className="p-3 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-emerald-300 transition-colors">
                 <span className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
-                  ☀️ Midi
+                  ☀️ {language === 'ar' ? 'منتصف النهار' : 'Midi'}
                 </span>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-400">1 UI /</span>
+                  <span className="text-xs text-slate-400">{language === 'ar' ? '1 و /' : '1 UI /'}</span>
                   <input
                     type="number"
                     min="2"
@@ -443,18 +480,18 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     }
                     className="w-14 px-2 py-1 rounded-lg border border-slate-200 font-black text-slate-900 text-sm text-center outline-none focus:border-emerald-500"
                   />
-                  <span className="text-xs font-semibold text-slate-600">g</span>
+                  <span className="text-xs font-semibold text-slate-600">{language === 'ar' ? 'غ' : 'g'}</span>
                 </div>
-                <span className="text-[10px] text-slate-400 mt-1 block">Déjeuner</span>
+                <span className="text-[10px] text-slate-400 mt-1 block">{language === 'ar' ? 'الغداء' : 'Déjeuner'}</span>
               </div>
 
               {/* Soir */}
               <div className="p-3 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-emerald-300 transition-colors">
                 <span className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
-                  🌙 Soir
+                  🌙 {language === 'ar' ? 'المساء' : 'Soir'}
                 </span>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-400">1 UI /</span>
+                  <span className="text-xs text-slate-400">{language === 'ar' ? '1 و /' : '1 UI /'}</span>
                   <input
                     type="number"
                     min="2"
@@ -469,18 +506,18 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     }
                     className="w-14 px-2 py-1 rounded-lg border border-slate-200 font-black text-slate-900 text-sm text-center outline-none focus:border-emerald-500"
                   />
-                  <span className="text-xs font-semibold text-slate-600">g</span>
+                  <span className="text-xs font-semibold text-slate-600">{language === 'ar' ? 'غ' : 'g'}</span>
                 </div>
-                <span className="text-[10px] text-slate-400 mt-1 block">Dîner</span>
+                <span className="text-[10px] text-slate-400 mt-1 block">{language === 'ar' ? 'العشاء' : 'Dîner'}</span>
               </div>
 
               {/* Collation */}
               <div className="p-3 rounded-2xl bg-white border border-slate-200 shadow-2xs hover:border-emerald-300 transition-colors">
                 <span className="text-[10px] font-bold uppercase text-slate-500 block mb-1">
-                  🍎 Collation
+                  🍎 {language === 'ar' ? 'وجبة خفيفة' : 'Collation'}
                 </span>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs text-slate-400">1 UI /</span>
+                  <span className="text-xs text-slate-400">{language === 'ar' ? '1 و /' : '1 UI /'}</span>
                   <input
                     type="number"
                     min="2"
@@ -495,9 +532,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     }
                     className="w-14 px-2 py-1 rounded-lg border border-slate-200 font-black text-slate-900 text-sm text-center outline-none focus:border-emerald-500"
                   />
-                  <span className="text-xs font-semibold text-slate-600">g</span>
+                  <span className="text-xs font-semibold text-slate-600">{language === 'ar' ? 'غ' : 'g'}</span>
                 </div>
-                <span className="text-[10px] text-slate-400 mt-1 block">Goûter</span>
+                <span className="text-[10px] text-slate-400 mt-1 block">{language === 'ar' ? 'لمجة' : 'Goûter'}</span>
               </div>
             </div>
           </div>
@@ -511,10 +548,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 </div>
                 <div>
                   <span className="font-extrabold text-sm text-slate-900 block">
-                    Mode Ramadan & Jeûne Intermittent
+                    {language === 'ar' ? 'نظام رمضان والصيام' : 'Mode Ramadan & Jeûne Intermittent'}
                   </span>
                   <p className="text-[11px] text-slate-500">
-                    Adaptation des créneaux aux repas nocturnes (Iftar, Sahriya, Shor)
+                    {language === 'ar' ? 'تعديل الفترات لتناسب الوجبات الليلية (الإفطار، السهرية، السحور)' : 'Adaptation des créneaux aux repas nocturnes (Iftar, Sahriya, Shor)'}
                   </p>
                 </div>
               </div>
@@ -536,10 +573,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   {/* Iftar */}
                   <div className="p-3 rounded-2xl bg-white border border-indigo-200 shadow-2xs">
                     <span className="text-[10px] font-extrabold uppercase text-indigo-700 block mb-1">
-                      🌙 Iftar (Rupture)
+                      🌙 {language === 'ar' ? 'الإفطار (شق الفطر)' : 'Iftar (Rupture)'}
                     </span>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-slate-400">1 UI /</span>
+                      <span className="text-xs text-slate-400">{language === 'ar' ? '1 و /' : '1 UI /'}</span>
                       <input
                         type="number"
                         min="2"
@@ -557,20 +594,20 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         }
                         className="w-14 px-2 py-1 rounded-lg border border-slate-200 font-black text-slate-900 text-sm text-center outline-none focus:border-indigo-500"
                       />
-                      <span className="text-xs font-semibold text-slate-600">g</span>
+                      <span className="text-xs font-semibold text-slate-600">{language === 'ar' ? 'غ' : 'g'}</span>
                     </div>
                     <span className="text-[9px] text-slate-400 mt-1 block">
-                      Chorba, brik, dattes
+                      {language === 'ar' ? 'شربة، بريك، تمر' : 'Chorba, brik, dattes'}
                     </span>
                   </div>
 
                   {/* Sahriya */}
                   <div className="p-3 rounded-2xl bg-white border border-indigo-200 shadow-2xs">
                     <span className="text-[10px] font-extrabold uppercase text-purple-700 block mb-1">
-                      🍵 Sahriya (Soirée)
+                      🍵 {language === 'ar' ? 'السهرية' : 'Sahriya (Soirée)'}
                     </span>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-slate-400">1 UI /</span>
+                      <span className="text-xs text-slate-400">{language === 'ar' ? '1 و /' : '1 UI /'}</span>
                       <input
                         type="number"
                         min="2"
@@ -588,20 +625,20 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         }
                         className="w-14 px-2 py-1 rounded-lg border border-slate-200 font-black text-slate-900 text-sm text-center outline-none focus:border-indigo-500"
                       />
-                      <span className="text-xs font-semibold text-slate-600">g</span>
+                      <span className="text-xs font-semibold text-slate-600">{language === 'ar' ? 'غ' : 'g'}</span>
                     </div>
                     <span className="text-[9px] text-slate-400 mt-1 block">
-                      Pâtisseries & thé
+                      {language === 'ar' ? 'حلويات وشاي' : 'Pâtisseries & thé'}
                     </span>
                   </div>
 
                   {/* Shor */}
                   <div className="p-3 rounded-2xl bg-white border border-indigo-200 shadow-2xs">
                     <span className="text-[10px] font-extrabold uppercase text-amber-700 block mb-1">
-                      🌅 Shor (Aube)
+                      🌅 {language === 'ar' ? 'السحور (أذان الفجر)' : 'Shor (Aube)'}
                     </span>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-slate-400">1 UI /</span>
+                      <span className="text-xs text-slate-400">{language === 'ar' ? '1 و /' : '1 UI /'}</span>
                       <input
                         type="number"
                         min="2"
@@ -619,10 +656,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         }
                         className="w-14 px-2 py-1 rounded-lg border border-slate-200 font-black text-slate-900 text-sm text-center outline-none focus:border-indigo-500"
                       />
-                      <span className="text-xs font-semibold text-slate-600">g</span>
+                      <span className="text-xs font-semibold text-slate-600">{language === 'ar' ? 'غ' : 'g'}</span>
                     </div>
                     <span className="text-[9px] text-slate-400 mt-1 block">
-                      Sucres lents (Bsaissa)
+                      {language === 'ar' ? 'سكريات بطيئة (بسيسة)' : 'Sucres lents (Bsaissa)'}
                     </span>
                   </div>
                 </div>
@@ -630,7 +667,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <div className="p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-[11px] text-amber-900 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                   <span>
-                    <strong>Consigne médicale d'urgence (Consensus DAR / ADA) :</strong> Rompre impérativement le jeûne si votre glycémie descend en dessous de <strong>0.70 g/L (70 mg/dL)</strong> ou dépasse <strong>3.00 g/L</strong> à tout moment de la journée.
+                    <strong>{language === 'ar' ? "تنبيه طبي طارئ (توصيات DAR / ADA) :" : "Consigne médicale d'urgence (Consensus DAR / ADA) :"}</strong>{' '}
+                    {language === 'ar'
+                      ? <>يجب كسر الصيام فوراً إذا انخفض السكر عن <strong>0.70 غ/ل (70 مغ/دل)</strong> أو تجاوز <strong>3.00 غ/ل</strong> في أي وقت خلال اليوم.</>
+                      : <>Rompre impérativement le jeûne si votre glycémie descend en dessous de <strong>0.70 g/L (70 mg/dL)</strong> ou dépasse <strong>3.00 g/L</strong> à tout moment de la journée.</>}
                   </span>
                 </div>
               </div>
@@ -642,7 +682,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <div className="flex items-center gap-2 mb-3">
               <Activity className="w-4 h-4 text-emerald-600" />
               <h3 className="font-extrabold text-sm text-slate-900">
-                2. Sensibilité à l'Insuline (ISF) & Cible Glycémique
+                {language === 'ar' ? "2. حساسية الإنسولين (ISF) والهدف السكري" : "2. Sensibilité à l'Insuline (ISF) & Cible Glycémique"}
               </h3>
             </div>
 
@@ -650,13 +690,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               {/* Facteur de sensibilité (ISF) */}
               <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800">Facteur de Sensibilité (ISF)</span>
+                  <span className="font-bold text-slate-800">
+                    {language === 'ar' ? 'معامل حساسية الإنسولين (ISF)' : 'Facteur de Sensibilité (ISF)'}
+                  </span>
                   <span className="text-[10px] text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold">
-                    Correction
+                    {language === 'ar' ? 'التصحيح' : 'Correction'}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  De combien 1 UI d’insuline fait baisser votre glycémie :
+                  {language === 'ar'
+                    ? 'كم ينخفض السكر بفضل وحدة واحدة من الإنسولين :'
+                    : 'De combien 1 UI d’insuline fait baisser votre glycémie :'}
                 </p>
                 <div className="flex items-center gap-2">
                   <input
@@ -671,7 +715,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     className="w-24 px-3 py-1.5 rounded-xl border border-slate-200 font-black text-slate-900 text-base text-center outline-none focus:border-emerald-500"
                   />
                   <span className="text-xs font-bold text-slate-600">
-                    {formData.glucoseUnit} par unité d’insuline
+                    {language === 'ar'
+                      ? `${formData.glucoseUnit} لكل وحدة إنسولين`
+                      : `${formData.glucoseUnit} par unité d’insuline`}
                   </span>
                 </div>
               </div>
@@ -679,13 +725,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               {/* Cible glycémique */}
               <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800">Cible Glycémique Visée</span>
+                  <span className="font-bold text-slate-800">
+                    {language === 'ar' ? 'الهدف السكري المنشود' : 'Cible Glycémique Visée'}
+                  </span>
                   <span className="text-[10px] text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full font-bold">
-                    Objectif
+                    {language === 'ar' ? 'الهدف' : 'Objectif'}
                   </span>
                 </div>
                 <p className="text-[11px] text-slate-500">
-                  Votre glycémie idéale avant le repas (pré-prandiale) :
+                  {language === 'ar'
+                    ? 'مستوى السكر المثالي المستهدف قبل الأكل (قبل الوجبة) :'
+                    : 'Votre glycémie idéale avant le repas (pré-prandiale) :'}
                 </p>
                 <div className="flex items-center gap-2">
                   <input
@@ -709,17 +759,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <span className="font-bold text-slate-800 block text-xs">
-                Incrément de dose (Stylo / Pompe)
+                {language === 'ar' ? 'تدرج الجرعة (القلم / المضخة)' : "Incrément de dose (Stylo / Pompe)"}
               </span>
               <p className="text-[11px] text-slate-500">
-                Arrondi pratique pour l'injection
+                {language === 'ar' ? 'التقريب العملي لجرعة الحقن' : "Arrondi pratique pour l'injection"}
               </p>
             </div>
             <div className="flex items-center gap-1.5">
               {[
-                { val: 0.5, label: '0.5 UI (Demi-unité)' },
-                { val: 1.0, label: '1.0 UI (Stylo adulte)' },
-                { val: 0.1, label: '0.1 UI (Pompe)' },
+                { val: 0.5, label: language === 'ar' ? '0.5 وحدة (نصف وحدة)' : '0.5 UI (Demi-unité)' },
+                { val: 1.0, label: language === 'ar' ? '1.0 وحدة (قلم عادي)' : '1.0 UI (Stylo adulte)' },
+                { val: 0.1, label: language === 'ar' ? '0.1 وحدة (مضخة)' : '0.1 UI (Pompe)' },
               ].map((step) => (
                 <button
                   key={step.val}
@@ -743,30 +793,52 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-2">
             <span className="font-bold text-emerald-900 block text-xs flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
-              Exemple de calcul personnalisé en direct (Repas du midi) :
+              {language === 'ar' ? 'مثال حي لحساب الجرعة (وجبة الغداء) :' : 'Exemple de calcul personnalisé en direct (Repas du midi) :'}
             </span>
             <p className="text-[11px] text-emerald-800 leading-relaxed">
-              Pour un repas de <strong>60 g de glucides</strong> avec une glycémie pré-prandiale de{' '}
-              <strong>
-                {demoCurrentGlucose.toFixed(2)} {formData.glucoseUnit}
-              </strong>{' '}
-              (cible : {formData.targetGlucose} {formData.glucoseUnit}) :
+              {language === 'ar' ? (
+                <>
+                  لوجبة تحتوي على <strong>60 غ كربوهيدرات</strong> مع سكر قبل الأكل{' '}
+                  <strong>
+                    {demoCurrentGlucose.toFixed(2)} {formData.glucoseUnit}
+                  </strong>{' '}
+                  (الهدف: {formData.targetGlucose} {formData.glucoseUnit}) :
+                </>
+              ) : (
+                <>
+                  Pour un repas de <strong>60 g de glucides</strong> avec une glycémie pré-prandiale de{' '}
+                  <strong>
+                    {demoCurrentGlucose.toFixed(2)} {formData.glucoseUnit}
+                  </strong>{' '}
+                  (cible : {formData.targetGlucose} {formData.glucoseUnit}) :
+                </>
+              )}
             </p>
             <div className="grid grid-cols-3 gap-2 text-center pt-1 font-bold">
               <div className="bg-white/90 p-2 rounded-xl border border-emerald-200">
-                <span className="text-[10px] text-slate-500 block font-medium">Bolus repas</span>
-                <span className="text-emerald-800 text-sm">{demoMealBolus.toFixed(1)} UI</span>
-                <span className="text-[9px] text-slate-400 block">60g ÷ {formData?.icRatios?.lunch ?? 10}</span>
+                <span className="text-[10px] text-slate-500 block font-medium">
+                  {language === 'ar' ? 'جرعة الوجبة' : 'Bolus repas'}
+                </span>
+                <span className="text-emerald-800 text-sm">{demoMealBolus.toFixed(1)} {language === 'ar' ? 'وحدة' : 'UI'}</span>
+                <span className="text-[9px] text-slate-400 block">60{language === 'ar' ? 'غ' : 'g'} ÷ {formData?.icRatios?.lunch ?? 10}</span>
               </div>
               <div className="bg-white/90 p-2 rounded-xl border border-emerald-200">
-                <span className="text-[10px] text-slate-500 block font-medium">Correction</span>
-                <span className="text-blue-800 text-sm">+{demoCorrection.toFixed(1)} UI</span>
-                <span className="text-[9px] text-slate-400 block">Δ glycémie ÷ ISF</span>
+                <span className="text-[10px] text-slate-500 block font-medium">
+                  {language === 'ar' ? 'جرعة التصحيح' : 'Correction'}
+                </span>
+                <span className="text-blue-800 text-sm">+{demoCorrection.toFixed(1)} {language === 'ar' ? 'وحدة' : 'UI'}</span>
+                <span className="text-[9px] text-slate-400 block">
+                  {language === 'ar' ? 'فارق السكر ÷ الحساسية' : 'Δ glycémie ÷ ISF'}
+                </span>
               </div>
               <div className="bg-emerald-600 p-2 rounded-xl text-white">
-                <span className="text-[10px] text-emerald-100 block font-medium">Bolus total</span>
-                <span className="text-sm font-black">{demoTotal.toFixed(1)} UI</span>
-                <span className="text-[9px] text-emerald-200 block">arrondi {formData.roundingStep} UI</span>
+                <span className="text-[10px] text-emerald-100 block font-medium">
+                  {language === 'ar' ? 'الجرعة الإجمالية' : 'Bolus total'}
+                </span>
+                <span className="text-sm font-black">{demoTotal.toFixed(1)} {language === 'ar' ? 'وحدة' : 'UI'}</span>
+                <span className="text-[9px] text-emerald-200 block">
+                  {language === 'ar' ? `تقريب ${formData.roundingStep} وحدة` : `arrondi ${formData.roundingStep} UI`}
+                </span>
               </div>
             </div>
           </div>
@@ -779,10 +851,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               </div>
               <div>
                 <span className="text-xs font-bold text-slate-800 block">
-                  {currentUserEmail ? 'Compte Cloud Firebase Connecté' : 'Mode Local / Anonyme Sécurisé'}
+                  {currentUserEmail
+                    ? (language === 'ar' ? 'الحساب السحابي Firebase متصل' : 'Compte Cloud Firebase Connecté')
+                    : (language === 'ar' ? 'الوضع المحلي والخاص الآمن' : 'Mode Local / Anonyme Sécurisé')}
                 </span>
                 <span className="text-[11px] text-slate-500 block truncate max-w-[220px] sm:max-w-xs">
-                  {currentUserEmail ? currentUserEmail : 'Données synchronisées sur Firestore & cache IndexedDB'}
+                  {currentUserEmail
+                    ? currentUserEmail
+                    : (language === 'ar' ? 'البيانات محفوظة ومزامنة بأمان' : 'Données synchronisées sur Firestore & cache IndexedDB')}
                 </span>
               </div>
             </div>
@@ -794,12 +870,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 className="px-3.5 py-2 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors shrink-0"
               >
                 <LogOut className="w-3.5 h-3.5" />
-                <span>Se déconnecter</span>
+                <span>{language === 'ar' ? 'تسجيل الخروج' : 'Se déconnecter'}</span>
               </button>
             ) : (
               <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Zero-Trust Actif</span>
+                <span>{language === 'ar' ? 'حماية مشفرة نشطة' : 'Zero-Trust Actif'}</span>
               </div>
             )}
           </div>
@@ -812,7 +888,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               className="px-3.5 py-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>Valeurs par défaut</span>
+              <span>{language === 'ar' ? 'القيم الافتراضية' : 'Valeurs par défaut'}</span>
             </button>
 
             <div className="flex items-center gap-2">
@@ -821,7 +897,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 onClick={onClose}
                 className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-bold hover:bg-slate-50 cursor-pointer"
               >
-                Annuler
+                {language === 'ar' ? 'إلغاء' : 'Annuler'}
               </button>
 
               <button
@@ -832,12 +908,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 {savedFeedback ? (
                   <>
                     <CheckCircle2 className="w-4 h-4 text-emerald-200" />
-                    <span>Profil enregistré !</span>
+                    <span>{language === 'ar' ? 'تم حفظ الملف بنجاح!' : 'Profil enregistré !'}</span>
                   </>
                 ) : (
                   <>
                     <Save className="w-4 h-4" />
-                    <span>Enregistrer mon profil</span>
+                    <span>{language === 'ar' ? 'حفظ ملفي العلاجي' : 'Enregistrer mon profil'}</span>
                   </>
                 )}
               </button>

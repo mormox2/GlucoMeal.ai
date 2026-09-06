@@ -40,6 +40,7 @@ import {
   ChineseCGMConnectionResult,
   NFCScanResult,
 } from '../utils/cgmService';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface CGMSyncModalProps {
   isOpen: boolean;
@@ -60,6 +61,8 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
   onSaveConfig,
   onApplyReading,
 }) => {
+  const { language, isRtl } = useLanguage();
+  const isAr = language === 'ar';
   const [activeTab, setActiveTab] = useState<'status' | 'hardware' | 'settings'>('status');
   const [selectedDevice, setSelectedDevice] = useState<CGMConfig['deviceType']>(config.deviceType);
   const [nightscoutUrl, setNightscoutUrl] = useState(config.nightscoutUrl || '');
@@ -410,6 +413,21 @@ interface SyncStatusFeedback {
   };
 
   const getTrendText = (trend: CGMReading['trend']) => {
+    if (isAr) {
+      switch (trend) {
+        case 'up_fast':
+          return 'ارتفاع سريع (> 0.03 غ/ل/دقيقة)';
+        case 'up_slow':
+          return 'ارتفاع طفيف (+0.01 إلى +0.02 غ/ل/دقيقة)';
+        case 'down_fast':
+          return 'انخفاض سريع (> 0.03 غ/ل/دقيقة)';
+        case 'down_slow':
+          return 'انخفاض معتدل';
+        case 'flat':
+        default:
+          return 'مستقر (تغير < 0.01 غ/ل/دقيقة)';
+      }
+    }
     switch (trend) {
       case 'up_fast':
         return 'Montée rapide (> 0.03 g/L/min)';
@@ -426,7 +444,7 @@ interface SyncStatusFeedback {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in overflow-y-auto">
+    <div className={`fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in overflow-y-auto ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
       <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col my-auto max-h-[92vh]">
         {/* Header */}
         <div className="px-5 py-4 bg-gradient-to-r from-blue-900 to-indigo-950 text-white flex items-center justify-between shrink-0">
@@ -437,11 +455,11 @@ interface SyncStatusFeedback {
             <div>
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-black uppercase tracking-wider bg-blue-500/30 text-blue-200 px-2 py-0.5 rounded-full border border-blue-400/30">
-                  Télémédecine DT1
+                  {isAr ? 'الطب عن بعد للسكري نوع 1' : 'Télémédecine DT1'}
                 </span>
               </div>
               <h3 className="text-sm sm:text-base font-extrabold text-white mt-0.5">
-                Passerelle Capteurs CGM & LibreLinkUp
+                {isAr ? 'بوابة مستشعرات CGM و LibreLinkUp' : 'Passerelle Capteurs CGM & LibreLinkUp'}
               </h3>
             </div>
           </div>
@@ -464,7 +482,7 @@ interface SyncStatusFeedback {
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
-            Glycémie Directe & Courbe
+            {isAr ? 'القياس المباشر والمنحنى' : 'Glycémie Directe & Courbe'}
           </button>
           <button
             onClick={() => setActiveTab('hardware')}
@@ -475,7 +493,7 @@ interface SyncStatusFeedback {
             }`}
           >
             <Bluetooth className="w-3.5 h-3.5 text-blue-600" />
-            <span>Test BLE & NFC Physique</span>
+            <span>{isAr ? 'فحص بلوتوث و NFC المادي' : 'Test BLE & NFC Physique'}</span>
           </button>
           <button
             onClick={() => setActiveTab('settings')}
@@ -485,7 +503,7 @@ interface SyncStatusFeedback {
                 : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
-            Connecteurs Cloud
+            {isAr ? 'الربط السحابي' : 'Connecteurs Cloud'}
           </button>
         </div>
 
@@ -529,7 +547,7 @@ interface SyncStatusFeedback {
                   type="button"
                   onClick={() => setSyncStatus(null)}
                   className="absolute top-2.5 right-2.5 p-1 rounded-lg hover:bg-black/5 text-current opacity-70 hover:opacity-100 transition-colors cursor-pointer"
-                  aria-label="Fermer l'alerte"
+                  aria-label={isAr ? 'إغلاق التنبيه' : "Fermer l'alerte"}
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
@@ -556,10 +574,12 @@ interface SyncStatusFeedback {
                       ? 'Dexcom Share Cloud'
                       : selectedDevice === 'nightscout'
                       ? 'Nightscout Rest API'
-                      : 'Simulateur Haute-Fidélité'}
+                      : isAr ? 'محاكي عالي الدقة' : 'Simulateur Haute-Fidélité'}
                   </span>
                   <span className="text-[11px] text-slate-400">
-                    {currentReading ? 'Lecture continue active' : 'En veille'}
+                    {currentReading
+                      ? (isAr ? 'قراءة مستمرة نشطة' : 'Lecture continue active')
+                      : (isAr ? 'في وضع الاستعداد' : 'En veille')}
                   </span>
                 </div>
 
@@ -580,10 +600,10 @@ interface SyncStatusFeedback {
                     <div className="text-center mt-2 flex flex-wrap items-center justify-center gap-1.5">
                       <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
                         <CheckCircle2 className="w-3 h-3" />
-                        Mesure Réelle Directe (Sans simulation)
+                        {isAr ? 'قياس حقيقي مباشر (بدون محاكاة)' : 'Mesure Réelle Directe (Sans simulation)'}
                       </span>
                       <span className="inline-block px-3 py-1 rounded-full bg-white/10 text-cyan-200 text-xs font-medium">
-                        Tendance : {getTrendText(currentReading.trend)}
+                        {isAr ? `الاتجاه : ${getTrendText(currentReading.trend)}` : `Tendance : ${getTrendText(currentReading.trend)}`}
                       </span>
                       {currentReading.errorMessage && (
                         <div className="w-full mt-1.5 p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-200 flex items-center justify-center gap-1.5">
@@ -598,12 +618,12 @@ interface SyncStatusFeedback {
                       )}
                       {selectedDevice === 'linx' && (
                         <span className="inline-block px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-200 text-[10px] font-semibold border border-blue-400/30">
-                          Étanche IP68 • Flux 1-min
+                          {isAr ? 'مقاوم للماء IP68 • تدفق كل دقيقة' : 'Étanche IP68 • Flux 1-min'}
                         </span>
                       )}
                       {selectedDevice === 'syai' && (
                         <span className="inline-block px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-200 text-[10px] font-semibold border border-amber-400/30">
-                          Poids 1.2g • Calibré d'usine
+                          {isAr ? 'وزن 1.2غ • معايرة مصنعية' : "Poids 1.2g • Calibré d'usine"}
                         </span>
                       )}
                     </div>
@@ -612,8 +632,8 @@ interface SyncStatusFeedback {
                     {currentReading.recentSparkline && currentReading.recentSparkline.length > 0 && (
                       <div className="mt-4 pt-3 border-t border-white/10">
                         <div className="flex items-center justify-between text-[10px] text-slate-400 mb-1.5">
-                          <span>Historique continu (-3h)</span>
-                          <span>Fréquence 15 min</span>
+                          <span>{isAr ? 'السجل المستمر (-3 ساعات)' : 'Historique continu (-3h)'}</span>
+                          <span>{isAr ? 'كل 15 دقيقة' : 'Fréquence 15 min'}</span>
                         </div>
                         <div className="flex items-end justify-between gap-1 h-12 px-1">
                           {currentReading.recentSparkline.map((pt, idx) => {
@@ -646,10 +666,12 @@ interface SyncStatusFeedback {
                     <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-300">
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        Capteur : {currentReading.sensorExpiryDays || (selectedDevice === 'linx' ? 15 : 14)} jours restants
+                        {isAr
+                          ? `المستشعر : باقي ${currentReading.sensorExpiryDays || (selectedDevice === 'linx' ? 15 : 14)} يوم`
+                          : `Capteur : ${currentReading.sensorExpiryDays || (selectedDevice === 'linx' ? 15 : 14)} jours restants`}
                       </span>
                       <span className="text-slate-400 text-[10px]">
-                        N° Série : {currentReading.sensorSerialNumber || (selectedDevice === 'linx' ? linxSerialNumber : selectedDevice === 'syai' ? syaiSerialNumber : 'SN-7842')}
+                        {isAr ? 'الرقم التسلسلي :' : 'N° Série :'} {currentReading.sensorSerialNumber || (selectedDevice === 'linx' ? linxSerialNumber : selectedDevice === 'syai' ? syaiSerialNumber : 'SN-7842')}
                       </span>
                     </div>
                   </div>
@@ -657,7 +679,7 @@ interface SyncStatusFeedback {
                   <div className="py-6 text-center">
                     <Activity className="w-10 h-10 text-cyan-400 mx-auto mb-2 animate-pulse" />
                     <p className="text-xs text-slate-300">
-                      Appuyez ci-dessous pour interroger le capteur CGM ou simuler une mesure NFC/Bluetooth.
+                      {isAr ? 'اضغط بالأسفل لقراءة مستشعر CGM أو فحص NFC/Bluetooth.' : 'Appuyez ci-dessous pour interroger le capteur CGM ou simuler une mesure NFC/Bluetooth.'}
                     </p>
                   </div>
                 )}
@@ -669,7 +691,11 @@ interface SyncStatusFeedback {
                     className="flex-1 py-2.5 px-3 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${isReading ? 'animate-spin' : ''}`} />
-                    <span>{isReading ? 'Interrogation du capteur...' : 'Actualiser la glycémie'}</span>
+                    <span>
+                      {isAr
+                        ? (isReading ? 'جاري الاتصال بالمستشعر...' : 'تحديث قياس السكر')
+                        : (isReading ? 'Interrogation du capteur...' : 'Actualiser la glycémie')}
+                    </span>
                   </button>
 
                   {currentReading && onApplyReading && (
@@ -680,8 +706,8 @@ interface SyncStatusFeedback {
                       }}
                       className="py-2.5 px-4 rounded-2xl bg-white text-slate-900 hover:bg-slate-100 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-colors"
                     >
-                      <span>Injecter dans le repas</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
+                      <span>{isAr ? 'تطبيق على الوجبة' : 'Injecter dans le repas'}</span>
+                      <ArrowRight className={`w-3.5 h-3.5 ${isRtl ? 'rotate-180' : ''}`} />
                     </button>
                   )}
                 </div>
@@ -691,10 +717,12 @@ interface SyncStatusFeedback {
               <div className="p-3.5 rounded-2xl bg-blue-50/70 border border-blue-200 text-xs text-blue-950 space-y-1.5">
                 <div className="flex items-center gap-1.5 font-bold text-blue-900">
                   <Clock className="w-4 h-4 text-blue-700" />
-                  <span>Protocole Clinique Post-Prandial (+2h)</span>
+                  <span>{isAr ? 'البروتوكول الطبي لما بعد الوجبة (+2h)' : 'Protocole Clinique Post-Prandial (+2h)'}</span>
                 </div>
                 <p className="text-[11px] text-blue-800 leading-relaxed">
-                  Le capteur continu mesure automatiquement l'amplitude du pic post-prandial. L'algorithme d'auto-titration s'appuie sur ces mesures pour affiner vos ratios d'insuline par créneau horaire.
+                  {isAr
+                    ? 'يقيس المستشعر المستمر ذروة ارتفاع السكر بعد الوجبة تلقائياً. تعتمد خوارزمية الضبط الذاتي على هذه القياسات لتدقيق وتعديل معاملات الإنسولين الخاصة بك بحسب أوقات اليوم.'
+                    : "Le capteur continu mesure automatiquement l'amplitude du pic post-prandial. L'algorithme d'auto-titration s'appuie sur ces mesures pour affiner vos ratios d'insuline par créneau horaire."}
                 </p>
               </div>
             </div>
@@ -705,9 +733,9 @@ interface SyncStatusFeedback {
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-black text-slate-800 flex items-center gap-1.5">
                     <Cpu className="w-4 h-4 text-slate-600" />
-                    Diagnostic Matériel du Navigateur
+                    {isAr ? 'تشخيص عتاد المتصفح والأجهزة' : 'Diagnostic Matériel du Navigateur'}
                   </span>
-                  <span className="text-[10px] font-semibold text-slate-400">APIs Physiques W3C</span>
+                  <span className="text-[10px] font-semibold text-slate-400">{isAr ? 'واجهات W3C المادية' : 'APIs Physiques W3C'}</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <div className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between">
@@ -719,7 +747,9 @@ interface SyncStatusFeedback {
                           : 'bg-amber-50 text-amber-700 border border-amber-200'
                       }`}
                     >
-                      {hardwareSupport.bluetoothSupported ? 'Actif' : 'Émulé'}
+                      {isAr
+                        ? (hardwareSupport.bluetoothSupported ? 'نشط' : 'محاكى')
+                        : (hardwareSupport.bluetoothSupported ? 'Actif' : 'Émulé')}
                     </span>
                   </div>
                   <div className="p-2.5 rounded-xl bg-white border border-slate-200 flex items-center justify-between">
@@ -731,12 +761,16 @@ interface SyncStatusFeedback {
                           : 'bg-amber-50 text-amber-700 border border-amber-200'
                       }`}
                     >
-                      {hardwareSupport.nfcSupported ? 'Actif' : 'Émulé'}
+                      {isAr
+                        ? (hardwareSupport.nfcSupported ? 'نشط' : 'محاكى')
+                        : (hardwareSupport.nfcSupported ? 'Actif' : 'Émulé')}
                     </span>
                   </div>
                 </div>
                 <p className="text-[10px] text-slate-500">
-                  * Prise en charge native des capteurs chinois LinX CGM et Syai Tag via Web Bluetooth Low Energy direct ou émulation certifiée.
+                  {isAr
+                    ? '* دعم أصلي لمستشعرات LinX CGM و Syai Tag عبر بلوتوث الطاقة المنخفضة (BLE) أو المحاكاة المعتمدة.'
+                    : '* Prise en charge native des capteurs chinois LinX CGM et Syai Tag via Web Bluetooth Low Energy direct ou émulation certifiée.'}
                 </p>
               </div>
 
@@ -755,12 +789,14 @@ interface SyncStatusFeedback {
                     </div>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/30">
-                    14 Jours • Usine
+                    {isAr ? '14 يوم • مصنعي' : '14 Jours • Usine'}
                   </span>
                 </div>
 
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Connexion sans fil directe au capteur Syai Tag en Bluetooth Smart. Mesure continue sans calibrage capillaire.
+                  {isAr
+                    ? 'اتصال لاسلكي مباشر بمستشعر Syai Tag عبر Bluetooth Smart. قراءة مستمرة دون الحاجة لوخز ومعايرة.'
+                    : 'Connexion sans fil directe au capteur Syai Tag en Bluetooth Smart. Mesure continue sans calibrage capillaire.'}
                 </p>
 
                 <button
@@ -770,7 +806,11 @@ interface SyncStatusFeedback {
                   className="w-full py-2.5 px-4 rounded-2xl bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
                 >
                   <Bluetooth className={`w-4 h-4 ${isSyaiScanning ? 'animate-pulse text-amber-200' : ''}`} />
-                  <span>{isSyaiScanning ? 'Connexion au Syai Tag en cours...' : 'Appairer & Lire Syai Tag (Bluetooth Smart)'}</span>
+                  <span>
+                    {isAr
+                      ? (isSyaiScanning ? 'جاري الاتصال بمستشعر Syai Tag...' : 'اقتران وقراءة Syai Tag (Bluetooth Smart)')
+                      : (isSyaiScanning ? 'Connexion au Syai Tag en cours...' : 'Appairer & Lire Syai Tag (Bluetooth Smart)')}
+                  </span>
                 </button>
 
                 {syaiResult && syaiResult.success && syaiResult.glucoseValue && (
@@ -801,14 +841,14 @@ interface SyncStatusFeedback {
                           }}
                           className="py-1.5 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs flex items-center gap-1 cursor-pointer transition-colors"
                         >
-                          <span>Injecter au repas</span>
-                          <ArrowRight className="w-3 h-3" />
+                          <span>{isAr ? 'تطبيق على الوجبة' : 'Injecter au repas'}</span>
+                          <ArrowRight className={`w-3 h-3 ${isRtl ? 'rotate-180' : ''}`} />
                         </button>
                       )}
                     </div>
 
                     <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-300">
-                      <span>Batterie : {syaiResult.batteryLevel}% • 14j restants</span>
+                      <span>{isAr ? `البطارية : ${syaiResult.batteryLevel}% • باقي 14 يوم` : `Batterie : ${syaiResult.batteryLevel}% • 14j restants`}</span>
                       <span className="text-amber-300 font-medium">{syaiResult.specsHighlight}</span>
                     </div>
                   </div>
@@ -819,19 +859,19 @@ interface SyncStatusFeedback {
                     <div className="flex items-start gap-2 text-rose-300">
                       <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
                       <div className="flex-1 text-xs">
-                        <span className="font-extrabold block text-rose-200">Échec d'appairage Syai Tag</span>
+                        <span className="font-extrabold block text-rose-200">{isAr ? 'فشل اقتران Syai Tag' : "Échec d'appairage Syai Tag"}</span>
                         <span className="text-[11px] text-rose-100/90 leading-tight">{syaiResult.message}</span>
                       </div>
                     </div>
                     <div className="p-2.5 rounded-xl bg-black/40 border border-white/10 text-[10px] text-slate-300 space-y-1">
                       <div className="font-bold text-amber-300 flex items-center gap-1">
-                        <Info className="w-3 h-3" /> Que faire en cas d'échec ?
+                        <Info className="w-3 h-3" /> {isAr ? 'ماذا تفعل في حال عدم النجاح؟' : "Que faire en cas d'échec ?"}
                       </div>
                       <ul className="list-disc list-inside space-y-0.5 text-slate-300">
-                        <li>Vérifiez que le Bluetooth est activé sur votre ordinateur ou smartphone.</li>
-                        <li>Rapprochez le capteur Syai Tag à moins de 50 cm.</li>
-                        <li>S'il s'agit d'un nouveau capteur, assurez-vous qu'il a été activé.</li>
-                        <li>En cas de doute, mesurez votre glycémie au doigt et saisissez-la manuellement.</li>
+                        <li>{isAr ? 'تأكد من تشغيل البلوتوث على حاسوبك أو هاتفك الذكي.' : 'Vérifiez que le Bluetooth est activé sur votre ordinateur ou smartphone.'}</li>
+                        <li>{isAr ? 'قرّب مستشعر Syai Tag لأقل من 50 سم.' : 'Rapprochez le capteur Syai Tag à moins de 50 cm.'}</li>
+                        <li>{isAr ? 'إذا كان مستشعراً جديداً، تأكد من تفعيله أولاً.' : "S'il s'agit d'un nouveau capteur, assurez-vous qu'il a été activé."}</li>
+                        <li>{isAr ? 'عند الشك، قِس السكر بالوخز في الإصبع وأدخله يدوياً.' : 'En cas de doute, mesurez votre glycémie au doigt et saisissez-la manuellement.'}</li>
                       </ul>
                     </div>
                   </div>
@@ -853,12 +893,14 @@ interface SyncStatusFeedback {
                     </div>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-200 border border-cyan-400/30">
-                    IP68 • 15j
+                    {isAr ? 'IP68 • 15 يوم' : 'IP68 • 15j'}
                   </span>
                 </div>
 
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Capture minute par minute en Bluetooth LE direct sans passerelle supplémentaire. 1440 lectures glycémiques par 24h.
+                  {isAr
+                    ? 'التقاط دقيقة بدقيقة عبر Bluetooth LE المباشر دون وسيط. 1440 قراءة سكر كل 24 ساعة.'
+                    : 'Capture minute par minute en Bluetooth LE direct sans passerelle supplémentaire. 1440 lectures glycémiques par 24h.'}
                 </p>
 
                 <button
@@ -868,7 +910,11 @@ interface SyncStatusFeedback {
                   className="w-full py-2.5 px-4 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
                 >
                   <Bluetooth className={`w-4 h-4 ${isLinxScanning ? 'animate-pulse text-cyan-200' : ''}`} />
-                  <span>{isLinxScanning ? 'Recherche du capteur LinX CGM...' : 'Appairer & Lire LinX CGM (Flux continu 1-min)'}</span>
+                  <span>
+                    {isAr
+                      ? (isLinxScanning ? 'جاري البحث عن مستشعر LinX CGM...' : 'اقتران وقراءة LinX CGM (تدفق دقيقة بدقيقة)')
+                      : (isLinxScanning ? 'Recherche du capteur LinX CGM...' : 'Appairer & Lire LinX CGM (Flux continu 1-min)')}
+                  </span>
                 </button>
 
                 {linxResult && linxResult.success && linxResult.glucoseValue && (
@@ -899,14 +945,14 @@ interface SyncStatusFeedback {
                           }}
                           className="py-1.5 px-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black text-xs flex items-center gap-1 cursor-pointer transition-colors"
                         >
-                          <span>Injecter au repas</span>
-                          <ArrowRight className="w-3 h-3" />
+                          <span>{isAr ? 'تطبيق على الوجبة' : 'Injecter au repas'}</span>
+                          <ArrowRight className={`w-3 h-3 ${isRtl ? 'rotate-180' : ''}`} />
                         </button>
                       )}
                     </div>
 
                     <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-300">
-                      <span>Batterie : {linxResult.batteryLevel}% • 15j d'autonomie</span>
+                      <span>{isAr ? `البطارية : ${linxResult.batteryLevel}% • 15 يوم استقلالية` : `Batterie : ${linxResult.batteryLevel}% • 15j d'autonomie`}</span>
                       <span className="text-cyan-300 font-medium">{linxResult.specsHighlight}</span>
                     </div>
                   </div>
@@ -917,26 +963,38 @@ interface SyncStatusFeedback {
                     <div className="flex items-start gap-2 text-rose-300">
                       <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
                       <div className="flex-1 text-xs">
-                        <span className="font-extrabold block text-rose-200">Échec d'appairage LinX CGM</span>
+                        <span className="font-extrabold block text-rose-200">{isAr ? 'فشل اقتران LinX CGM' : "Échec d'appairage LinX CGM"}</span>
                         <span className="text-[11px] text-rose-100/90 leading-tight">{linxResult.message}</span>
                       </div>
                     </div>
                     <div className="p-2.5 rounded-xl bg-black/40 border border-white/10 text-[10px] text-slate-300 space-y-1.5">
                       <div className="font-bold text-cyan-300 flex items-center gap-1">
-                        <Info className="w-3 h-3" /> Diagnostic & Guide LinX CGM :
+                        <Info className="w-3 h-3" /> {isAr ? 'تشخيص وإرشادات LinX CGM :' : 'Diagnostic & Guide LinX CGM :'}
                       </div>
                       <ul className="list-disc list-inside space-y-1 text-slate-300">
                         <li>
-                          <strong className="text-white">Liaison exclusive mobile :</strong> Si votre capteur LinX est connecté à son application officielle sur smartphone (AiDEX / LinX), il n'est plus découvrable en Bluetooth (connexion 1-à-1 exclusive).
+                          <strong className="text-white">{isAr ? 'الاتصال الحصري بالهاتف :' : 'Liaison exclusive mobile :'}</strong>{' '}
+                          {isAr
+                            ? 'إذا كان المستشعر متصلاً بتطبيقه الرسمي على الهاتف (AiDEX / LinX)، فلن يظهر في بحث البلوتوث.'
+                            : "Si votre capteur LinX est connecté à son application officielle sur smartphone (AiDEX / LinX), il n'est plus découvrable en Bluetooth (connexion 1-à-1 exclusive)."}
                         </li>
                         <li>
-                          <strong className="text-cyan-300">Solution recommandée :</strong> Utilisez l'onglet <span className="font-semibold text-white">Nightscout</span> dans GlucoMeal.ai si vous poussez vos données via xDrip+ ou le cloud.
+                          <strong className="text-cyan-300">{isAr ? 'الحل الموصى به :' : 'Solution recommandée :'}</strong>{' '}
+                          {isAr
+                            ? 'استخدم تبويب Nightscout إذا كنت ترسل بياناتك عبر xDrip+ أو السحابة.'
+                            : "Utilisez l'onglet Nightscout dans GlucoMeal.ai si vous poussez vos données via xDrip+ ou le cloud."}
                         </li>
                         <li>
-                          <strong className="text-white">Test direct :</strong> Désactivez temporairement le Bluetooth de votre smartphone pour vérifier si le capteur diffuse en mode découvrable.
+                          <strong className="text-white">{isAr ? 'فحص سريع :' : 'Test direct :'}</strong>{' '}
+                          {isAr
+                            ? 'عطّل البلوتوث مؤقتاً على هاتفك للتأكد من إمكانية اكتشاف المستشعر.'
+                            : 'Désactivez temporairement le Bluetooth de votre smartphone pour vérifier si le capteur diffuse en mode découvrable.'}
                         </li>
                         <li>
-                          <strong className="text-amber-200">Alternative sécurisée :</strong> Vous pouvez saisir directement votre glycémie dans l'écran principal pour le calcul du bolus.
+                          <strong className="text-amber-200">{isAr ? 'خيار بديل آمن :' : 'Alternative sécurisée :'}</strong>{' '}
+                          {isAr
+                            ? 'يمكنك إدخال قياس السكر مباشرة في الشاشة الرئيسية لحساب الجرعة.'
+                            : 'Vous pouvez saisir directement votre glycémie dans l\'écran principal pour le calcul du bolus.'}
                         </li>
                       </ul>
                     </div>
@@ -948,11 +1006,11 @@ interface SyncStatusFeedback {
               <div className="p-4 rounded-3xl bg-gradient-to-br from-slate-900 to-indigo-950 text-white shadow-xs space-y-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-cyan-300">
+                    <div className="w-8 h-8 rounded-xl bg-blue-500/20 border border-blue-400/30 flex items-center justify-center text-blue-300">
                       <Bluetooth className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-black text-white">Lecteur Glycémique Bluetooth LE</h4>
+                      <h4 className="text-xs font-black text-white">{isAr ? 'جهاز قياس السكر بالبلوتوث (BLE)' : 'Lecteur Glycémique Bluetooth LE'}</h4>
                       <p className="text-[10px] text-slate-300">
                         Profil Bluetooth SIG Glucose (GATT 0x1808 / 0x2A18)
                       </p>
@@ -964,7 +1022,9 @@ interface SyncStatusFeedback {
                 </div>
 
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Connectez directement votre lecteur capillaire connecté. La mesure de glycémie sera lue sans aucune saisie manuelle.
+                  {isAr
+                    ? 'اربط جهاز قياس السكر المنزلي المتصل مباشرة. ستتم قراءة القياس دون إدخال يدوي.'
+                    : 'Connectez directement votre lecteur capillaire connecté. La mesure de glycémie sera lue sans aucune saisie manuelle.'}
                 </p>
 
                 <button
@@ -974,7 +1034,11 @@ interface SyncStatusFeedback {
                   className="w-full py-2.5 px-4 rounded-2xl bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
                 >
                   <Bluetooth className={`w-4 h-4 ${isBleScanning ? 'animate-pulse text-cyan-200' : ''}`} />
-                  <span>{isBleScanning ? 'Recherche d’appareils Bluetooth LE en cours...' : 'Appairer & Lire lecteur Bluetooth LE'}</span>
+                  <span>
+                    {isAr
+                      ? (isBleScanning ? 'جاري البحث عن أجهزة Bluetooth LE...' : 'اقتران وقراءة جهاز القياس بالبلوتوث')
+                      : (isBleScanning ? 'Recherche d’appareils Bluetooth LE en cours...' : 'Appairer & Lire lecteur Bluetooth LE')}
+                  </span>
                 </button>
 
                 {bleResult && bleResult.success && bleResult.glucoseValue && (
@@ -1004,8 +1068,8 @@ interface SyncStatusFeedback {
                           }}
                           className="py-1.5 px-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs flex items-center gap-1 cursor-pointer transition-colors"
                         >
-                          <span>Injecter au repas</span>
-                          <ArrowRight className="w-3 h-3" />
+                          <span>{isAr ? 'تطبيق على الوجبة' : 'Injecter au repas'}</span>
+                          <ArrowRight className={`w-3 h-3 ${isRtl ? 'rotate-180' : ''}`} />
                         </button>
                       )}
                     </div>
@@ -1017,19 +1081,19 @@ interface SyncStatusFeedback {
                     <div className="flex items-start gap-2 text-rose-300">
                       <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
                       <div className="flex-1 text-xs">
-                        <span className="font-extrabold block text-rose-200">Échec de connexion Bluetooth</span>
+                        <span className="font-extrabold block text-rose-200">{isAr ? 'فشل اتصال البلوتوث' : 'Échec de connexion Bluetooth'}</span>
                         <span className="text-[11px] text-rose-100/90 leading-tight">{bleResult.message}</span>
                       </div>
                     </div>
                     <div className="p-2.5 rounded-xl bg-black/40 border border-white/10 text-[10px] text-slate-300 space-y-1">
                       <div className="font-bold text-cyan-300 flex items-center gap-1">
-                        <Info className="w-3 h-3" /> Vérifications recommandées :
+                        <Info className="w-3 h-3" /> {isAr ? 'الفحوصات المقترحة :' : 'Vérifications recommandées :'}
                       </div>
                       <ul className="list-disc list-inside space-y-0.5 text-slate-300">
-                        <li>Allumez votre lecteur capillaire (Contour Next, Accu-Chek...) en mode Bluetooth.</li>
-                        <li>Assurez-vous que le Bluetooth est activé sur votre appareil.</li>
-                        <li>Si le lecteur est déjà connecté à une autre application, déconnectez-la temporairement.</li>
-                        <li>La saisie manuelle de glycémie reste accessible à tout instant.</li>
+                        <li>{isAr ? 'شغّل جهاز القياس المنزلي في وضع البلوتوث.' : 'Allumez votre lecteur capillaire (Contour Next, Accu-Chek...) en mode Bluetooth.'}</li>
+                        <li>{isAr ? 'تأكد من تفعيل البلوتوث على جهازك.' : 'Assurez-vous que le Bluetooth est activé sur votre appareil.'}</li>
+                        <li>{isAr ? 'إذا كان متصلاً بتطبيق آخر، افصله مؤقتاً.' : 'Si le lecteur est déjà connecté à une autre application, déconnectez-la temporairement.'}</li>
+                        <li>{isAr ? 'الإدخال اليدوي لقياس السكر متاح دائماً.' : 'La saisie manuelle de glycémie reste accessible à tout instant.'}</li>
                       </ul>
                     </div>
                   </div>
@@ -1044,19 +1108,21 @@ interface SyncStatusFeedback {
                       <Scan className="w-4 h-4" />
                     </div>
                     <div>
-                      <h4 className="text-xs font-black text-slate-900">Capteur FreeStyle Libre NFC</h4>
+                      <h4 className="text-xs font-black text-slate-900">{isAr ? 'مستشعر FreeStyle Libre NFC' : 'Capteur FreeStyle Libre NFC'}</h4>
                       <p className="text-[10px] text-slate-500">
                         Puce NFC intégrée (NDEF Tag ISO 15693)
                       </p>
                     </div>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
-                    Scan direct
+                    {isAr ? 'مسح مباشر' : 'Scan direct'}
                   </span>
                 </div>
 
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Approchez le haut de votre smartphone du capteur FreeStyle Libre appliqué sur le bras pour déclencher le scan NFC instantané.
+                  {isAr
+                    ? 'قرّب الجزء العلوي من هاتفك الذكي من مستشعر FreeStyle Libre على الذراع لبدء مسح NFC الفوري.'
+                    : 'Approchez le haut de votre smartphone du capteur FreeStyle Libre appliqué sur le bras pour déclencher le scan NFC instantané.'}
                 </p>
 
                 <button
@@ -1066,18 +1132,22 @@ interface SyncStatusFeedback {
                   className="w-full py-2.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-sm"
                 >
                   <Scan className={`w-4 h-4 ${isNfcScanning ? 'animate-spin' : ''}`} />
-                  <span>{isNfcScanning ? 'Approchez le téléphone du capteur (Scan NFC actif)...' : 'Scanner le capteur par NFC'}</span>
+                  <span>
+                    {isAr
+                      ? (isNfcScanning ? 'قرّب الهاتف من المستشعر (NFC نشط)...' : 'مسح المستشعر عبر NFC')
+                      : (isNfcScanning ? 'Approchez le téléphone du capteur (Scan NFC actif)...' : 'Scanner le capteur par NFC')}
+                  </span>
                 </button>
 
                 {nfcResult && nfcResult.success && nfcResult.glucoseValue && (
-                  <div className="p-3 rounded-2xl bg-emerald-50/90 border border-emerald-200 space-y-2 animate-in fade-in">
+                  <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-200 space-y-2 animate-in fade-in">
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="text-emerald-900 font-bold flex items-center gap-1">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                        {nfcResult.sensorType}
+                        FreeStyle Libre ({nfcResult.sensorModel || 'NFC'})
                       </span>
                       <span className="text-emerald-700 text-[10px]">
-                        S/N: {nfcResult.serialNumber}
+                        {new Date(nfcResult.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
 
@@ -1094,10 +1164,10 @@ interface SyncStatusFeedback {
                             onApplyReading(nfcResult.glucoseValue!);
                             onClose();
                           }}
-                          className="py-1.5 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-black text-xs flex items-center gap-1 cursor-pointer transition-colors"
+                          className="py-1.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
                         >
-                          <span>Injecter au repas</span>
-                          <ArrowRight className="w-3 h-3" />
+                          <span>{isAr ? 'تطبيق على الوجبة' : 'Injecter au repas'}</span>
+                          <ArrowRight className={`w-3 h-3 ${isRtl ? 'rotate-180' : ''}`} />
                         </button>
                       )}
                     </div>
@@ -1106,22 +1176,22 @@ interface SyncStatusFeedback {
 
                 {nfcResult && !nfcResult.success && (
                   <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-950 space-y-2 animate-in fade-in">
-                    <div className="flex items-start gap-2 text-rose-700">
+                    <div className="flex items-start gap-2 text-rose-900">
                       <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
                       <div className="flex-1 text-xs">
-                        <span className="font-extrabold block text-rose-900">Échec du scan NFC</span>
+                        <span className="font-extrabold block text-rose-900">{isAr ? 'فشل مسح NFC' : 'Échec du scan NFC'}</span>
                         <span className="text-[11px] text-rose-800 leading-tight">{nfcResult.message}</span>
                       </div>
                     </div>
                     <div className="p-2.5 rounded-xl bg-white border border-rose-200/70 text-[10px] text-slate-700 space-y-1">
                       <div className="font-bold text-rose-900 flex items-center gap-1">
-                        <Info className="w-3 h-3 text-rose-600" /> Conseils pour réussir le scan :
+                        <Info className="w-3 h-3 text-rose-600" /> {isAr ? 'نصائح لنجاح المسح :' : 'Conseils pour réussir le scan :'}
                       </div>
                       <ul className="list-disc list-inside space-y-0.5 text-slate-600">
-                        <li>Plaquez le haut du smartphone directement contre le capteur FreeStyle Libre.</li>
-                        <li>Maintenez le contact pendant 2 à 3 secondes jusqu'à la détection.</li>
-                        <li>Vérifiez que le capteur NFC est activé dans les réglages de votre smartphone.</li>
-                        <li>Si le scan échoue de façon répétée, utilisez votre lecteur physique dédié.</li>
+                        <li>{isAr ? 'الصق الجزء العلوي من الهاتف مباشرة بالمستشعر.' : 'Plaquez le haut du smartphone directement contre le capteur FreeStyle Libre.'}</li>
+                        <li>{isAr ? 'ثبّت الهاتف لمدة ثانيتين إلى 3 ثوانٍ حتى الاكتشاف.' : "Maintenez le contact pendant 2 à 3 secondes jusqu'à la détection."}</li>
+                        <li>{isAr ? 'تأكد من تفعيل خاصية NFC في إعدادات الهاتف.' : 'Vérifiez que le capteur NFC est activé dans les réglages de votre smartphone.'}</li>
+                        <li>{isAr ? 'إذا تكرر الفشل، استخدم قارئك المنزلي المخصص.' : 'Si le scan échoue de façon répétée, utilisez votre lecteur physique dédié.'}</li>
                       </ul>
                     </div>
                   </div>
@@ -1132,7 +1202,10 @@ interface SyncStatusFeedback {
               <div className="p-3 rounded-2xl bg-slate-50 border border-slate-200/80 text-[11px] text-slate-600 flex items-start gap-2">
                 <ShieldCheck className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Fiabilité clinique :</strong> Les mesures obtenues via Bluetooth ou NFC alimentent directement le calcul du bolus de correction ITF sans risque d'erreur humaine de recopie.
+                  <strong>{isAr ? 'الموثوقية الطبية :' : 'Fiabilité clinique :'}</strong>{' '}
+                  {isAr
+                    ? 'القياسات المتلقاة عبر البلوتوث أو NFC تغذي مباشرة حساب جرعة التصحيح بدون أخطاء إدخال بشرية.'
+                    : "Les mesures obtenues via Bluetooth ou NFC alimentent directement le calcul du bolus de correction ITF sans risque d'erreur humaine de recopie."}
                 </span>
               </div>
             </div>
@@ -1141,13 +1214,13 @@ interface SyncStatusFeedback {
               {/* Choix du type de capteur */}
               <div>
                 <label className="text-xs font-bold text-slate-800 block mb-1.5">
-                  Sélectionnez votre système de mesure continue (CGM) :
+                  {isAr ? 'اختر نظام المراقبة المستمرة للسكر (CGM) :' : 'Sélectionnez votre système de mesure continue (CGM) :'}
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                   {[
-                    { id: 'syai', label: 'Syai Tag CGMS', sub: 'Syai Health • BLE Smart • 1.2g', icon: Tag, badge: 'Recommandé' },
-                    { id: 'linx', label: 'LinX CGMS', sub: 'MicroTech / AiDEX • IP68 • 15j', icon: Radio, badge: 'Haute Précision' },
-                    { id: 'sibionics', label: 'Sibionics GS1', sub: 'SiBio • 14j sans calibration', icon: Activity, badge: 'Supporté' },
+                    { id: 'syai', label: 'Syai Tag CGMS', sub: 'Syai Health • BLE Smart • 1.2g', icon: Tag, badge: isAr ? 'موصى به' : 'Recommandé' },
+                    { id: 'linx', label: 'LinX CGMS', sub: 'MicroTech / AiDEX • IP68 • 15j', icon: Radio, badge: isAr ? 'دقة عالية' : 'Haute Précision' },
+                    { id: 'sibionics', label: 'Sibionics GS1', sub: 'SiBio • 14j sans calibration', icon: Activity, badge: isAr ? 'مدعوم' : 'Supporté' },
                     { id: 'freestyle', label: 'FreeStyle Libre 2 / 3', sub: 'LibreLinkUp Cloud & Scan NFC', icon: Smartphone },
                     { id: 'dexcom', label: 'Dexcom G6 / G7 / ONE', sub: 'Dexcom Share API Cloud', icon: Smartphone },
                     { id: 'nightscout', label: 'Nightscout Open API', sub: 'Serveur personnel / xDrip+', icon: Server },
@@ -1158,7 +1231,7 @@ interface SyncStatusFeedback {
                         key={dev.id}
                         type="button"
                         onClick={() => setSelectedDevice(dev.id as any)}
-                        className={`p-3 rounded-2xl border text-left flex items-start justify-between gap-2 transition-all cursor-pointer ${
+                        className={`p-3 rounded-2xl border ${isRtl ? 'text-right' : 'text-left'} flex items-start justify-between gap-2 transition-all cursor-pointer ${
                           selectedDevice === dev.id
                             ? 'border-blue-600 bg-blue-50/80 text-blue-950 font-bold shadow-xs'
                             : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
@@ -1503,7 +1576,7 @@ interface SyncStatusFeedback {
                     className="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-cyan-300 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors"
                   >
                     <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
-                    <span>Tester & Lire la glycémie Nightscout en direct</span>
+                    <span>{isAr ? 'فحص وقراءة سكر Nightscout مباشرة' : 'Tester & Lire la glycémie Nightscout en direct'}</span>
                   </button>
                 </div>
               )}
@@ -1513,7 +1586,7 @@ interface SyncStatusFeedback {
                 className="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors shadow-md shadow-blue-600/20"
               >
                 <CheckCircle2 className="w-4 h-4" />
-                <span>Enregistrer & Activer le connecteur</span>
+                <span>{isAr ? 'حفظ وتفعيل الرابط السحابي' : 'Enregistrer & Activer le connecteur'}</span>
               </button>
             </div>
           )}

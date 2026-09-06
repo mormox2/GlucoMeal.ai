@@ -32,6 +32,7 @@ import {
   Pie,
 } from 'recharts';
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface MedicalReportModalProps {
   isOpen: boolean;
@@ -48,6 +49,10 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
   meals,
   userProfile,
 }) => {
+  const { language, isRtl } = useLanguage();
+  const isAr = language === 'ar';
+  const dateLocale = isAr ? 'ar-TN' : 'fr-FR';
+
   const [periodDays, setPeriodDays] = useState<PeriodFilter>(14);
 
   // Filtrer les repas sur la période sélectionnée
@@ -124,7 +129,7 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
       }
 
       // Frequence plat
-      const cleanName = meal.meal_name.trim();
+      const cleanName = (isAr && meal.meal_name_ar ? meal.meal_name_ar : meal.meal_name).trim();
       if (!mealFrequency[cleanName]) {
         mealFrequency[cleanName] = { count: 0, totalCarbs: 0 };
       }
@@ -169,7 +174,7 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
         const d = new Date(dayKey);
         return {
           date: dayKey,
-          dateLabel: d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }),
+          dateLabel: d.toLocaleDateString(dateLocale, { day: '2-digit', month: '2-digit' }),
           carbs: val.carbs,
           bolus: Number(val.bolus.toFixed(1)),
         };
@@ -199,14 +204,14 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
       topMeals,
       dailyData,
     };
-  }, [filteredMeals, periodDays]);
+  }, [filteredMeals, periodDays, isAr, dateLocale]);
 
   // Données de répartition des créneaux pour graphique Pie
   const slotPieData = [
-    { name: 'Petit-déjeuner', value: stats.slotBreakdown.morning, color: '#3b82f6' },
-    { name: 'Déjeuner', value: stats.slotBreakdown.lunch, color: '#10b981' },
-    { name: 'Dîner', value: stats.slotBreakdown.dinner, color: '#8b5cf6' },
-    { name: 'Collation', value: stats.slotBreakdown.snack, color: '#f59e0b' },
+    { name: isAr ? 'فطور الصباح' : 'Petit-déjeuner', value: stats.slotBreakdown.morning, color: '#3b82f6' },
+    { name: isAr ? 'الغداء' : 'Déjeuner', value: stats.slotBreakdown.lunch, color: '#10b981' },
+    { name: isAr ? 'العشاء' : 'Dîner', value: stats.slotBreakdown.dinner, color: '#8b5cf6' },
+    { name: isAr ? 'لمجة' : 'Collation', value: stats.slotBreakdown.snack, color: '#f59e0b' },
   ].filter((d) => d.value > 0);
 
   // Impression native optimisée (mise en page A4 médicale)
@@ -216,32 +221,50 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
 
   // Export CSV Médical structuré pour le diabétologue
   const handleExportCSV = () => {
-    const headers = [
-      'Date & Heure',
-      'Nom du Repas',
-      'Moment',
-      'Total Glucides (g)',
-      'Index Glycémique Moyen',
-      'Charge Glycémique',
-      'Ratio I:C (g/UI)',
-      'Bolus Repas (UI)',
-      'Bolus Correction (UI)',
-      'Bolus Total (UI)',
-      'Glycémie Pré-prandiale',
-      'Glycémie Post-prandiale (+2h)',
-      'Évaluation Post-prandiale',
-      'Double Bolus Recommandé',
-      'Composition Ingrédients',
-    ];
+    const headers = isAr
+      ? [
+          'التاريخ والوقت',
+          'اسم الوجبة',
+          'الفترة',
+          'إجمالي الكربوهيدرات (غ)',
+          'متوسط المؤشر السكري',
+          'الحمل السكري',
+          'معامل الكربوهيدرات (I:C)',
+          'جرعة الوجبة (وحدة)',
+          'جرعة التصحيح (وحدة)',
+          'إجمالي الجرعة (وحدة)',
+          'السكر قبل الأكل',
+          'السكر بعد الأكل (+2س)',
+          'تقييم بعد الأكل',
+          'جرعة ثنائية مقترحة',
+          'المكونات',
+        ]
+      : [
+          'Date & Heure',
+          'Nom du Repas',
+          'Moment',
+          'Total Glucides (g)',
+          'Index Glycémique Moyen',
+          'Charge Glycémique',
+          'Ratio I:C (g/UI)',
+          'Bolus Repas (UI)',
+          'Bolus Correction (UI)',
+          'Bolus Total (UI)',
+          'Glycémie Pré-prandiale',
+          'Glycémie Post-prandiale (+2h)',
+          'Évaluation Post-prandiale',
+          'Double Bolus Recommandé',
+          'Composition Ingrédients',
+        ];
 
     const rows = filteredMeals.map((m) => {
-      const dateStr = m.created_at ? new Date(m.created_at).toLocaleString('fr-FR') : '';
+      const dateStr = m.created_at ? new Date(m.created_at).toLocaleString(dateLocale) : '';
       const ingredients = m.items
-        .map((i) => `${i.name_fr} (${i.confirmed_weight_g}g -> ${i.calculated_carbs}g glucides)`)
+        .map((i) => `${isAr && i.name_ar ? i.name_ar : i.name_fr} (${i.confirmed_weight_g}g -> ${i.calculated_carbs}g ${isAr ? 'كربوهيدرات' : 'glucides'})`)
         .join('; ');
       return [
         `"${dateStr}"`,
-        `"${m.meal_name.replace(/"/g, '""')}"`,
+        `"${(isAr && m.meal_name_ar ? m.meal_name_ar : m.meal_name).replace(/"/g, '""')}"`,
         `"${m.bolus_calculated?.slot || ''}"`,
         m.total_carbs,
         m.average_glycemic_index || '',
@@ -252,8 +275,8 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
         m.bolus_calculated?.totalBolus || '',
         m.bolus_calculated?.currentGlucose ? `${m.bolus_calculated.currentGlucose} ${userProfile.glucoseUnit}` : '',
         m.post_prandial_glucose ? `${m.post_prandial_glucose} ${userProfile.glucoseUnit}` : '',
-        `"${m.post_prandial_evaluation || 'Non renseigné'}"`,
-        m.dual_wave?.is_recommended ? 'Oui (60% imm. / 40% étalé)' : 'Non',
+        `"${m.post_prandial_evaluation || (isAr ? 'لم يُقس' : 'Non renseigné')}"`,
+        m.dual_wave?.is_recommended ? (isAr ? 'نعم (60% فوري / 40% ممتد)' : 'Oui (60% imm. / 40% étalé)') : (isAr ? 'لا' : 'Non'),
         `"${ingredients.replace(/"/g, '""')}"`,
       ].join(',');
     });
@@ -271,7 +294,12 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white print:static print:z-auto">
+    <div
+      className={`fixed inset-0 z-50 overflow-y-auto bg-slate-900/70 backdrop-blur-xs flex items-center justify-center p-2 sm:p-4 print:p-0 print:bg-white print:static print:z-auto ${
+        isRtl ? 'font-arabic' : ''
+      }`}
+      dir={isRtl ? 'rtl' : 'ltr'}
+    >
       <div className="bg-white rounded-3xl max-w-5xl w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200 print:max-h-none print:shadow-none print:border-none print:rounded-none">
         
         {/* Header non imprimable avec boutons d'actions */}
@@ -282,10 +310,12 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-black text-slate-900 leading-tight">
-                Rapport de Consultation Diabétologique
+                {isAr ? 'تقرير الاستشارة الطبية لمرض السكري' : 'Rapport de Consultation Diabétologique'}
               </h2>
               <p className="text-xs text-slate-500">
-                Synthèse clinique des apports glucidiques, bolus et contrôles post-prandiaux
+                {isAr
+                  ? 'ملخص سريري لاستهلاك الكربوهيدرات وجرعات الإنسولين وقياسات ما بعد الوجبات'
+                  : 'Synthèse clinique des apports glucidiques, bolus et contrôles post-prandiaux'}
               </p>
             </div>
           </div>
@@ -303,7 +333,7 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
                       : 'hover:text-slate-900'
                   }`}
                 >
-                  {days} jours
+                  {isAr ? `${days} أيام` : `${days} jours`}
                 </button>
               ))}
             </div>
@@ -311,19 +341,19 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
             <button
               onClick={handleExportCSV}
               className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
-              title="Exporter les données complètes au format CSV"
+              title={isAr ? 'تصدير كامل البيانات بصيغة CSV' : 'Exporter les données complètes au format CSV'}
             >
               <Download className="w-3.5 h-3.5 text-blue-600" />
-              <span className="hidden sm:inline">Export CSV</span>
+              <span className="hidden sm:inline">{isAr ? 'تصدير CSV' : 'Export CSV'}</span>
             </button>
 
             <button
               onClick={handlePrint}
               className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
-              title="Imprimer ou enregistrer en PDF via la boîte d'impression du navigateur"
+              title={isAr ? 'طباعة أو حفظ بصيغة PDF' : "Imprimer ou enregistrer en PDF via la boîte d'impression du navigateur"}
             >
               <Printer className="w-4 h-4" />
-              <span>Imprimer / PDF</span>
+              <span>{isAr ? 'طباعة / PDF' : 'Imprimer / PDF'}</span>
             </button>
 
             <button
@@ -344,23 +374,41 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-black uppercase tracking-wider text-emerald-800 bg-emerald-100/70 px-2.5 py-0.5 rounded-md">
-                    GlucoMeal AI • Carnet Clinique DT1
+                    {isAr ? 'جلوكوميل AI • السجل السريري للسكري النوع الأول' : 'GlucoMeal AI • Carnet Clinique DT1'}
                   </span>
                   <span className="text-xs text-slate-500">
-                    Généré le {new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    {isAr
+                      ? `تاريخ الإصدار: ${new Date().toLocaleDateString(dateLocale, { day: 'numeric', month: 'long', year: 'numeric' })}`
+                      : `Généré le ${new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`}
                   </span>
                 </div>
                 <h1 className="text-xl sm:text-2xl font-black text-slate-900 mt-1">
-                  Synthèse Thérapeutique & Journal Alimentaire
+                  {isAr ? 'الملخص العلاجي والسجل الغذائي' : 'Synthèse Thérapeutique & Journal Alimentaire'}
                 </h1>
                 <p className="text-xs text-slate-600">
-                  Patient : <strong className="text-slate-900">{userProfile.name}</strong> • Période analysée : <strong>{periodDays} derniers jours</strong> ({stats.totalMealsCount} repas documentés)
+                  {isAr
+                    ? `المريض : `
+                    : `Patient : `}
+                  <strong className="text-slate-900">{userProfile.name}</strong>
+                  {isAr
+                    ? ` • الفترة المحللة : `
+                    : ` • Période analysée : `}
+                  <strong>
+                    {isAr ? `آخر ${periodDays} يوماً` : `${periodDays} derniers jours`}
+                  </strong>
+                  {` (${stats.totalMealsCount} ${isAr ? 'وجبة موثقة' : 'repas documentés'})`}
                 </p>
                 {userProfile.isHoneymoonPhase && (
                   <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-100/90 text-amber-950 text-xs font-bold border border-amber-300">
-                    <span>🍯 Phase de Lune de Miel (Rémission clinique partielle)</span>
+                    <span>
+                      {isAr
+                        ? '🍯 مرحلة شهر العسل (هدأة سريرية جزئية)'
+                        : '🍯 Phase de Lune de Miel (Rémission clinique partielle)'}
+                    </span>
                     {userProfile.diagnosisDate && (
-                      <span className="font-normal opacity-85">• Diagnostic : {userProfile.diagnosisDate}</span>
+                      <span className="font-normal opacity-85">
+                        {isAr ? `• التشخيص: ${userProfile.diagnosisDate}` : `• Diagnostic : ${userProfile.diagnosisDate}`}
+                      </span>
                     )}
                   </div>
                 )}
@@ -369,15 +417,51 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
               {/* Ratios ITF actifs */}
               <div className="bg-white p-3 rounded-2xl border border-slate-200 text-xs shrink-0">
                 <span className="font-extrabold text-slate-800 block mb-1">
-                  Protocole ITF Actif :
+                  {isAr ? 'بروتوكول الإنسولين الوظيفي النشط :' : 'Protocole ITF Actif :'}
                 </span>
                 <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-slate-600 text-[11px]">
-                  <span>Matin : <strong>1 UI / {userProfile?.icRatios?.morning ?? 8}g</strong></span>
-                  <span>Midi : <strong>1 UI / {userProfile?.icRatios?.lunch ?? 10}g</strong></span>
-                  <span>Soir : <strong>1 UI / {userProfile?.icRatios?.dinner ?? 12}g</strong></span>
-                  <span>Collation : <strong>1 UI / {userProfile?.icRatios?.snack ?? 10}g</strong></span>
+                  <span>
+                    {isAr ? 'الصباح :' : 'Matin :'}{' '}
+                    <strong>
+                      {isAr
+                        ? `1 و / ${userProfile?.icRatios?.morning ?? 8} غ`
+                        : `1 UI / ${userProfile?.icRatios?.morning ?? 8}g`}
+                    </strong>
+                  </span>
+                  <span>
+                    {isAr ? 'الغداء :' : 'Midi :'}{' '}
+                    <strong>
+                      {isAr
+                        ? `1 و / ${userProfile?.icRatios?.lunch ?? 10} غ`
+                        : `1 UI / ${userProfile?.icRatios?.lunch ?? 10}g`}
+                    </strong>
+                  </span>
+                  <span>
+                    {isAr ? 'العشاء :' : 'Soir :'}{' '}
+                    <strong>
+                      {isAr
+                        ? `1 و / ${userProfile?.icRatios?.dinner ?? 12} غ`
+                        : `1 UI / ${userProfile?.icRatios?.dinner ?? 12}g`}
+                    </strong>
+                  </span>
+                  <span>
+                    {isAr ? 'اللمجة :' : 'Collation :'}{' '}
+                    <strong>
+                      {isAr
+                        ? `1 و / ${userProfile?.icRatios?.snack ?? 10} غ`
+                        : `1 UI / ${userProfile?.icRatios?.snack ?? 10}g`}
+                    </strong>
+                  </span>
                   <span className="col-span-2 pt-1 border-t border-slate-100 text-slate-500">
-                    Cible : <strong>{userProfile?.targetGlucose ?? 1.0} {userProfile?.glucoseUnit ?? 'g/L'}</strong> • ISF : <strong>{userProfile?.isf ?? 0.4} {userProfile?.glucoseUnit ?? 'g/L'}</strong>
+                    {isAr ? 'الهدف :' : 'Cible :'}{' '}
+                    <strong>
+                      {userProfile?.targetGlucose ?? 1.0} {userProfile?.glucoseUnit ?? 'g/L'}
+                    </strong>
+                    {' • '}
+                    {isAr ? 'الحساسية (ISF) :' : 'ISF :'}{' '}
+                    <strong>
+                      {userProfile?.isf ?? 0.4} {userProfile?.glucoseUnit ?? 'g/L'}
+                    </strong>
                   </span>
                 </div>
               </div>
@@ -387,54 +471,70 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
               <div className="p-3.5 rounded-2xl bg-white border border-slate-200">
                 <span className="text-[10px] uppercase font-bold text-slate-500 block">
-                  Glucides Moyens / Jour
+                  {isAr ? 'معدل الكربوهيدرات / اليوم' : 'Glucides Moyens / Jour'}
                 </span>
                 <span className="text-2xl font-black text-emerald-900">
-                  {stats.avgDailyCarbs} <span className="text-xs font-normal text-slate-500">g/j</span>
+                  {stats.avgDailyCarbs}{' '}
+                  <span className="text-xs font-normal text-slate-500">
+                    {isAr ? 'غ/ي' : 'g/j'}
+                  </span>
                 </span>
                 <span className="text-[10px] text-slate-400 block mt-0.5">
-                  Total : {stats.totalCarbsSum} g
+                  {isAr ? `الإجمالي : ${stats.totalCarbsSum} غ` : `Total : ${stats.totalCarbsSum} g`}
                 </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-white border border-slate-200">
                 <span className="text-[10px] uppercase font-bold text-slate-500 block">
-                  Bolus Moyen / Jour
+                  {isAr ? 'معدل الإنسولين السريع / اليوم' : 'Bolus Moyen / Jour'}
                 </span>
                 <span className="text-2xl font-black text-blue-900">
-                  {stats.avgDailyBolus} <span className="text-xs font-normal text-slate-500">UI/j</span>
+                  {stats.avgDailyBolus}{' '}
+                  <span className="text-xs font-normal text-slate-500">
+                    {isAr ? 'و/ي' : 'UI/j'}
+                  </span>
                 </span>
                 <span className="text-[10px] text-slate-400 block mt-0.5">
-                  Total insuline rapide : {stats.totalBolusSum} UI
+                  {isAr
+                    ? `إجمالي السريع : ${stats.totalBolusSum} وحدة`
+                    : `Total insuline rapide : ${stats.totalBolusSum} UI`}
                 </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-white border border-slate-200">
                 <span className="text-[10px] uppercase font-bold text-slate-500 block">
-                  Objectif Post-Prandial (+2h)
+                  {isAr ? 'الهدف بعد الأكل (+2س)' : 'Objectif Post-Prandial (+2h)'}
                 </span>
                 <span className="text-2xl font-black text-emerald-800">
                   {stats.targetPostPrandialRate}%
                 </span>
                 <span className="text-[10px] text-slate-500 block mt-0.5">
-                  {stats.hyperPostPrandialCount > 0 && `${stats.hyperPostPrandialCount} hyper `}
-                  {stats.hypoPostPrandialCount > 0 && `• ${stats.hypoPostPrandialCount} hypo`}
-                  {stats.hyperPostPrandialCount === 0 && stats.hypoPostPrandialCount === 0 && 'Repas en cible'}
+                  {stats.hyperPostPrandialCount > 0 &&
+                    `${stats.hyperPostPrandialCount} ${isAr ? 'ارتفاع ' : 'hyper '}`}
+                  {stats.hypoPostPrandialCount > 0 &&
+                    `• ${stats.hypoPostPrandialCount} ${isAr ? 'هبوط' : 'hypo'}`}
+                  {stats.hyperPostPrandialCount === 0 &&
+                    stats.hypoPostPrandialCount === 0 &&
+                    (isAr ? 'جميع الوجبات في الهدف' : 'Repas en cible')}
                 </span>
               </div>
 
               <div className="p-3.5 rounded-2xl bg-white border border-slate-200">
                 <span className="text-[10px] uppercase font-bold text-slate-500 block">
-                  Répartition par Repas
+                  {isAr ? 'توزيع الكربوهيدرات حسب الوجبات' : 'Répartition par Repas'}
                 </span>
                 <div className="text-xs font-bold text-slate-800 mt-1 space-y-0.5">
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Midi :</span>
-                    <span>{stats.slotCarbsAvg.lunch}g gluc.</span>
+                    <span className="text-slate-500">{isAr ? 'الغداء :' : 'Midi :'}</span>
+                    <span>
+                      {stats.slotCarbsAvg.lunch} {isAr ? 'غ كربوهيدرات' : 'g gluc.'}
+                    </span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Soir :</span>
-                    <span>{stats.slotCarbsAvg.dinner}g gluc.</span>
+                    <span className="text-slate-500">{isAr ? 'العشاء :' : 'Soir :'}</span>
+                    <span>
+                      {stats.slotCarbsAvg.dinner} {isAr ? 'غ كربوهيدرات' : 'g gluc.'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -450,11 +550,13 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
                 <div className="flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-emerald-700" />
                   <h3 className="text-sm font-bold text-slate-900">
-                    Évolution quotidienne des glucides et doses d'insuline
+                    {isAr
+                      ? 'التطور اليومي للكربوهيدرات وجرعات الإنسولين'
+                      : "Évolution quotidienne des glucides et doses d'insuline"}
                   </h3>
                 </div>
                 <span className="text-[11px] text-slate-400">
-                  {stats.dailyData.length} jours documentés
+                  {stats.dailyData.length} {isAr ? 'أيام مسجلة' : 'jours documentés'}
                 </span>
               </div>
 
@@ -468,12 +570,20 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
                       <Tooltip
                         contentStyle={{ borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '12px' }}
                         formatter={(val: any, name: any) => [
-                          name === 'carbs' ? `${val} g` : `${val} UI`,
-                          name === 'carbs' ? 'Glucides consommés' : 'Bolus rapide total',
+                          name === 'carbs'
+                            ? `${val} ${isAr ? 'غ' : 'g'}`
+                            : `${val} ${isAr ? 'وحدة' : 'UI'}`,
+                          name === 'carbs'
+                            ? (isAr ? 'كربوهيدرات الوجبة' : 'Glucides consommés')
+                            : (isAr ? 'إجمالي الإنسولين السريع' : 'Bolus rapide total'),
                         ]}
                       />
                       <Legend
-                        formatter={(value) => (value === 'carbs' ? 'Glucides (g)' : 'Insuline rapide (UI)')}
+                        formatter={(value) =>
+                          value === 'carbs'
+                            ? (isAr ? 'كربوهيدرات (غ)' : 'Glucides (g)')
+                            : (isAr ? 'إنسولين سريع (وحدة)' : 'Insuline rapide (UI)')
+                        }
                         wrapperStyle={{ fontSize: '12px' }}
                       />
                       <Bar dataKey="carbs" fill="#10b981" radius={[4, 4, 0, 0]} />
@@ -483,7 +593,9 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
                 </div>
               ) : (
                 <div className="h-48 flex items-center justify-center text-xs text-slate-400">
-                  Aucun repas enregistré sur cette période.
+                  {isAr
+                    ? 'لم يتم تسجيل أي وجبة خلال هذه الفترة.'
+                    : 'Aucun repas enregistré sur cette période.'}
                 </div>
               )}
             </div>
@@ -494,7 +606,7 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
                 <div className="flex items-center gap-2 mb-3">
                   <Flame className="w-4 h-4 text-amber-600" />
                   <h3 className="text-sm font-bold text-slate-900">
-                    Plats tunisiens les plus fréquents
+                    {isAr ? 'الأطباق التونسية الأكثر تكراراً' : 'Plats tunisiens les plus fréquents'}
                   </h3>
                 </div>
 
@@ -506,23 +618,28 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
                           {item.name}
                         </span>
                         <span className="text-[10px] text-slate-400">
-                          {item.count} fois consommé
+                          {item.count} {isAr ? 'مرات' : 'fois consommé'}
                         </span>
                       </div>
                       <span className="font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md shrink-0">
-                        ≈ {item.avgCarbs} g
+                        ≈ {item.avgCarbs} {isAr ? 'غ' : 'g'}
                       </span>
                     </div>
                   ))}
                   {stats.topMeals.length === 0 && (
-                    <p className="text-xs text-slate-400 text-center py-6">Pas encore de répétitions de repas</p>
+                    <p className="text-xs text-slate-400 text-center py-6">
+                      {isAr ? 'لا توجد وجبات متكررة بعد' : 'Pas encore de répétitions de repas'}
+                    </p>
                   )}
                 </div>
               </div>
 
               {/* Note clinique pour double-vague */}
               <div className="mt-3 pt-3 border-t border-slate-100 text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl">
-                💡 <strong>Conseil ITF :</strong> Pour les plats traditionnels gras (couscous agneau, ojja), vérifier si la glycémie à +3h nécessite un bolus carré (Dual-Wave).
+                💡 <strong>{isAr ? 'نصيحة الإنسولين الوظيفي :' : 'Conseil ITF :'}</strong>{' '}
+                {isAr
+                  ? 'للأطباق التقليدية الغنية بالدهون والبروتين (كسكسي باللحم، عجة)، تحقق مما إذا كانت نسبة السكر بعد 3 ساعات تتطلب جرعة ثنائية ممتدة (Dual-Wave).'
+                  : 'Pour les plats traditionnels gras (couscous agneau, ojja), vérifier si la glycémie à +3h nécessite un bolus carré (Dual-Wave).'}
               </div>
             </div>
           </div>
@@ -533,32 +650,34 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
               <div className="flex items-center gap-2">
                 <Clock className="w-4 h-4 text-slate-600" />
                 <h3 className="text-sm font-black text-slate-900 uppercase tracking-wider">
-                  Relevé chronologique des repas ({filteredMeals.length})
+                  {isAr
+                    ? `السجل الزمني للوجبات (${filteredMeals.length})`
+                    : `Relevé chronologique des repas (${filteredMeals.length})`}
                 </h3>
               </div>
               <span className="text-xs text-slate-500">
-                Trié par date décroissante
+                {isAr ? 'مرتبة من الأحدث إلى الأقدم' : 'Trié par date décroissante'}
               </span>
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
+              <table className="w-full text-left rtl:text-right text-xs border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-extrabold uppercase tracking-wider text-slate-600">
-                    <th className="py-3 px-3.5">Date & Heure</th>
-                    <th className="py-3 px-3">Repas Tunisien</th>
-                    <th className="py-3 px-3">Détail Glucidique</th>
-                    <th className="py-3 px-2 text-center">IG / CG</th>
-                    <th className="py-3 px-3 text-center">Bolus Repas</th>
-                    <th className="py-3 px-3 text-center">Glycémie Pré</th>
-                    <th className="py-3 px-3 text-center">Glycémie +2h</th>
-                    <th className="py-3 px-3 text-center">Bolus Mixte</th>
+                    <th className="py-3 px-3.5">{isAr ? 'التاريخ والوقت' : 'Date & Heure'}</th>
+                    <th className="py-3 px-3">{isAr ? 'الوجبة التونسية' : 'Repas Tunisien'}</th>
+                    <th className="py-3 px-3">{isAr ? 'تفاصيل الكربوهيدرات' : 'Détail Glucidique'}</th>
+                    <th className="py-3 px-2 text-center">{isAr ? 'المؤشر / الحمل' : 'IG / CG'}</th>
+                    <th className="py-3 px-3 text-center">{isAr ? 'جرعة الوجبة' : 'Bolus Repas'}</th>
+                    <th className="py-3 px-3 text-center">{isAr ? 'السكر قبل الأكل' : 'Glycémie Pré'}</th>
+                    <th className="py-3 px-3 text-center">{isAr ? 'السكر بعد ساعتين' : 'Glycémie +2h'}</th>
+                    <th className="py-3 px-3 text-center">{isAr ? 'نوع الجرعة' : 'Bolus Mixte'}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {filteredMeals.map((meal) => {
                     const dateObj = meal.created_at ? new Date(meal.created_at) : new Date();
-                    const dateFormatted = dateObj.toLocaleDateString('fr-FR', {
+                    const dateFormatted = dateObj.toLocaleDateString(dateLocale, {
                       day: '2-digit',
                       month: '2-digit',
                       hour: '2-digit',
@@ -572,32 +691,34 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
                         </td>
                         <td className="py-3 px-3">
                           <span className="font-bold text-slate-900 block">
-                            {meal.meal_name}
+                            {isAr && meal.meal_name_ar ? meal.meal_name_ar : meal.meal_name}
                           </span>
                           <span className="text-[10px] text-slate-400">
-                            {meal.items.map((it) => it.name_fr).slice(0, 2).join(', ')}
+                            {meal.items.map((it) => (isAr && it.name_ar ? it.name_ar : it.name_fr)).slice(0, 2).join('، ')}
                             {meal.items.length > 2 && '...'}
                           </span>
                         </td>
                         <td className="py-3 px-3 whitespace-nowrap">
                           <span className="font-black text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md">
-                            ≈ {meal.total_carbs} g
+                            ≈ {meal.total_carbs} {isAr ? 'غ' : 'g'}
                           </span>
                           <span className="text-[10px] text-slate-400 block mt-0.5">
-                            Ratio : 1UI / {meal.bolus_calculated?.icRatio || userProfile?.icRatios?.lunch || 10}g
+                            {isAr
+                              ? `المعامل : 1 و / ${meal.bolus_calculated?.icRatio || userProfile?.icRatios?.lunch || 10}غ`
+                              : `Ratio : 1UI / ${meal.bolus_calculated?.icRatio || userProfile?.icRatios?.lunch || 10}g`}
                           </span>
                         </td>
                         <td className="py-3 px-2 text-center whitespace-nowrap">
                           <span className="text-[11px] font-bold text-slate-700">
-                            IG {meal.average_glycemic_index || 55}
+                            {isAr ? 'م.س' : 'IG'} {meal.average_glycemic_index || 55}
                           </span>
                           <span className="text-[10px] text-slate-400 block">
-                            CG {meal.total_glycemic_load || Math.round((meal.total_carbs * 55) / 100)}
+                            {isAr ? 'ح.س' : 'CG'} {meal.total_glycemic_load || Math.round((meal.total_carbs * 55) / 100)}
                           </span>
                         </td>
                         <td className="py-3 px-3 text-center whitespace-nowrap">
                           <span className="font-black text-slate-900 bg-blue-50 text-blue-900 px-2 py-0.5 rounded-md">
-                            {meal.bolus_calculated?.totalBolus || '—'} UI
+                            {meal.bolus_calculated?.totalBolus || '—'} {isAr ? 'وحدة' : 'UI'}
                           </span>
                         </td>
                         <td className="py-3 px-3 text-center whitespace-nowrap text-slate-600 font-medium">
@@ -622,16 +743,20 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
                               {meal.post_prandial_evaluation === 'hypo' && ' 🚨'}
                             </span>
                           ) : (
-                            <span className="text-slate-400 italic text-[11px]">Non mesuré</span>
+                            <span className="text-slate-400 italic text-[11px]">
+                              {isAr ? 'لم يُقس' : 'Non mesuré'}
+                            </span>
                           )}
                         </td>
                         <td className="py-3 px-3 text-center whitespace-nowrap text-[11px]">
                           {meal.dual_wave?.is_recommended ? (
                             <span className="text-indigo-700 font-bold bg-indigo-50 px-2 py-0.5 rounded">
-                              Dual 60/40
+                              {isAr ? 'ثنائي 60/40' : 'Dual 60/40'}
                             </span>
                           ) : (
-                            <span className="text-slate-400">Standard</span>
+                            <span className="text-slate-400">
+                              {isAr ? 'عادي' : 'Standard'}
+                            </span>
                           )}
                         </td>
                       </tr>
@@ -645,12 +770,22 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
           {/* Section Notes Cliniques pour le Diabétologue */}
           <div className="p-4 rounded-2xl border border-dashed border-slate-300 text-xs text-slate-600 print:block">
             <h4 className="font-extrabold text-slate-800 mb-1">
-              Observations Cliniques & Adaptation Thérapeutique (Diabétologue) :
+              {isAr
+                ? 'الملاحظات السريرية والتعديل العلاجي (طبيب السكري) :'
+                : 'Observations Cliniques & Adaptation Thérapeutique (Diabétologue) :'}
             </h4>
             <div className="h-16 border-b border-slate-200 mt-2"></div>
             <div className="flex justify-between items-center mt-3 text-[11px] text-slate-400">
-              <span>Signature & Cachet du Médecin : _________________________</span>
-              <span>Prochain RDV de contrôle : _________________________</span>
+              <span>
+                {isAr
+                  ? 'توقيع وخاتم الطبيب المعالج : _________________________'
+                  : 'Signature & Cachet du Médecin : _________________________'}
+              </span>
+              <span>
+                {isAr
+                  ? 'موعد المراجعة القادم : _________________________'
+                  : 'Prochain RDV de contrôle : _________________________'}
+              </span>
             </div>
           </div>
 

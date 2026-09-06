@@ -8,6 +8,7 @@ import {
   HelpCircle,
   X,
   ArrowRight,
+  ArrowLeft,
   ShieldCheck,
   Check,
   RefreshCw,
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 import { AnalyzedMeal, UserProfileDT1, MealSlot } from '../types';
 import { analyzePatientTitration, SlotTitrationAnalysis } from '../utils/autoTitration';
+import { useLanguage } from '../i18n/LanguageContext';
 
 interface AutoTitrationModalProps {
   isOpen: boolean;
@@ -33,11 +35,15 @@ export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
   onApplyNewRatio,
   onApplyRatios,
 }) => {
+  const { language, isRtl } = useLanguage();
+  const isAr = language === 'ar';
+  const ArrowIcon = isRtl ? ArrowLeft : ArrowRight;
+
   const [appliedSlots, setAppliedSlots] = useState<Record<string, boolean>>({});
 
   if (!isOpen) return null;
 
-  const report = analyzePatientTitration(meals, userProfile);
+  const report = analyzePatientTitration(meals, userProfile, language);
 
   const handleApply = (slot: MealSlot, newRatio: number) => {
     if (onApplyNewRatio) {
@@ -62,7 +68,12 @@ export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
   const slotKeys: MealSlot[] = ['morning', 'lunch', 'dinner', 'snack'];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in overflow-y-auto">
+    <div
+      className={`fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in overflow-y-auto ${
+        isRtl ? 'font-arabic' : ''
+      }`}
+      dir={isRtl ? 'rtl' : 'ltr'}
+    >
       <div className="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col my-auto max-h-[92vh]">
         {/* Modal Header */}
         <div className="p-5 sm:p-6 bg-gradient-to-r from-emerald-800 to-teal-900 text-white flex items-center justify-between shrink-0">
@@ -73,17 +84,18 @@ export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-black uppercase tracking-wider bg-emerald-700/60 text-emerald-200 px-2 py-0.5 rounded-full border border-emerald-600/40">
-                  Algorithmique DT1 • Consensus SFD/ADA
+                  {isAr ? 'خوارزمية السكري النوع الأول • توافق SFD/ADA' : 'Algorithmique DT1 • Consensus SFD/ADA'}
                 </span>
               </div>
               <h2 className="text-lg sm:text-xl font-black tracking-tight mt-0.5">
-                Auto-Titration Intelligente des Ratios I:G
+                {isAr ? 'المعايرة الذكية لمعاملات الإنسولين والكربوهيدرات' : 'Auto-Titration Intelligente des Ratios I:G'}
               </h2>
             </div>
           </div>
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors cursor-pointer"
+            title={isAr ? 'إغلاق' : 'Fermer'}
           >
             <X className="w-4 h-4" />
           </button>
@@ -93,11 +105,17 @@ export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
         <div className="bg-emerald-50/80 p-4 border-b border-emerald-100/80 flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-4 flex-wrap">
             <div>
-              <span className="text-slate-500 font-medium">Contrôles H+2 analysés : </span>
-              <span className="font-extrabold text-slate-800">{report.totalPostPrandials} repas</span>
+              <span className="text-slate-500 font-medium">
+                {isAr ? 'قياسات ما بعد الأكل المحللة : ' : 'Contrôles H+2 analysés : '}
+              </span>
+              <span className="font-extrabold text-slate-800">
+                {report.totalPostPrandials} {isAr ? 'وجبة' : 'repas'}
+              </span>
             </div>
             <div>
-              <span className="text-slate-500 font-medium">Temps dans la Cible (+2h) : </span>
+              <span className="text-slate-500 font-medium">
+                {isAr ? 'الوقت في النطاق المستهدف (+2س) : ' : 'Temps dans la Cible (+2h) : '}
+              </span>
               <span className={`font-black ${report.globalTimeInRangePercent >= 70 ? 'text-emerald-700' : 'text-amber-700'}`}>
                 {report.globalTimeInRangePercent}%
               </span>
@@ -105,7 +123,7 @@ export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
           </div>
           <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-emerald-200 text-[11px] font-bold text-emerald-800 shadow-2xs">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Pas de palier sécurisé : ±15% max</span>
+            <span>{isAr ? 'تدرج آمن: ±15% كحد أقصى' : 'Pas de palier sécurisé : ±15% max'}</span>
           </div>
         </div>
 
@@ -115,14 +133,16 @@ export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
             <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start gap-2.5">
               <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <div>
-                <span className="font-bold">Alerte Prioritaire : </span>
+                <span className="font-bold">{isAr ? 'تنبيه ذو أولوية سريرية: ' : 'Alerte Prioritaire : '}</span>
                 <span>{report.priorityAlert}</span>
               </div>
             </div>
           )}
 
-          <p className="text-xs text-slate-600">
-            L'algorithme de rétro-contrôle compare vos glycémies 2h post-prandiales à votre profil DT1. Lorsque des écarts répétés sont observés, une titration progressive vous est proposée afin d’ajuster précisément votre nombre de grammes de glucides couverts par 1 unité d’insuline.
+          <p className="text-xs text-slate-600 leading-relaxed">
+            {isAr
+              ? 'تقارن خوارزمية التغذية الراجعة مستويات السكر بعد ساعتين من الأكل مع ملفك العلاجي. عند رصد فروقات متكررة، تقترح معايرة تدريجية لضبط غرامات الكربوهيدرات التي تغطيها وحدة إنسولين واحدة بدقة وأمان.'
+              : "L'algorithme de rétro-contrôle compare vos glycémies 2h post-prandiales à votre profil DT1. Lorsque des écarts répétés sont observés, une titration progressive vous est proposée afin d’ajuster précisément votre nombre de grammes de glucides couverts par 1 unité d’insuline."}
           </p>
 
           {/* Cards for each slot */}
@@ -165,32 +185,48 @@ export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
                         </span>
                       </div>
                       <div className="text-xs text-slate-500 mt-1 flex items-center gap-3">
-                        <span>{info.totalRecordedPostPrandial} contrôles H+2</span>
+                        <span>
+                          {info.totalRecordedPostPrandial} {isAr ? 'قياسات +2س' : 'contrôles H+2'}
+                        </span>
                         <span>•</span>
-                        <span>Cible : {info.targetPercentage}%</span>
+                        <span>{isAr ? 'الهدف :' : 'Cible :'} {info.targetPercentage}%</span>
                         {info.hyperPercentage > 0 && (
-                          <span className="text-amber-700 font-semibold">• Hyper : {info.hyperPercentage}%</span>
+                          <span className="text-amber-700 font-semibold">
+                            • {isAr ? 'ارتفاع :' : 'Hyper :'} {info.hyperPercentage}%
+                          </span>
                         )}
                         {info.hypoPercentage > 0 && (
-                          <span className="text-rose-700 font-semibold">• Hypo : {info.hypoPercentage}%</span>
+                          <span className="text-rose-700 font-semibold">
+                            • {isAr ? 'هبوط :' : 'Hypo :'} {info.hypoPercentage}%
+                          </span>
                         )}
                       </div>
                     </div>
 
                     {/* Ratio Comparison Badge */}
                     <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-right">
-                        <span className="text-[10px] uppercase font-bold text-slate-400 block">Ratio Actuel</span>
-                        <span className="text-xs font-black text-slate-700">1 UI / {info.currentRatio} g</span>
+                      <div className="text-right rtl:text-left">
+                        <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                          {isAr ? 'المعامل الحالي' : 'Ratio Actuel'}
+                        </span>
+                        <span className="text-xs font-black text-slate-700">
+                          {isAr
+                            ? `1 و / ${info.currentRatio} غ`
+                            : `1 UI / ${info.currentRatio} g`}
+                        </span>
                       </div>
 
                       {hasChange && (
                         <>
-                          <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                          <div className="text-right">
-                            <span className="text-[10px] uppercase font-black text-emerald-600 block">Suggéré</span>
+                          <ArrowIcon className="w-3.5 h-3.5 text-slate-400" />
+                          <div className="text-right rtl:text-left">
+                            <span className="text-[10px] uppercase font-black text-emerald-600 block">
+                              {isAr ? 'المقترح' : 'Suggéré'}
+                            </span>
                             <span className="text-xs font-black text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-md">
-                              1 UI / {info.suggestedRatio} g
+                              {isAr
+                                ? `1 و / ${info.suggestedRatio} غ`
+                                : `1 UI / ${info.suggestedRatio} g`}
                             </span>
                           </div>
                         </>
@@ -219,12 +255,16 @@ export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
                         {isApplied ? (
                           <>
                             <Check className="w-3.5 h-3.5" />
-                            <span>Ratio appliqué au profil !</span>
+                            <span>{isAr ? 'تم تطبيق المعامل في ملفك بنجاح!' : 'Ratio appliqué au profil !'}</span>
                           </>
                         ) : (
                           <>
                             <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                            <span>Appliquer ce ratio ({info.suggestedRatio} g/UI)</span>
+                            <span>
+                              {isAr
+                                ? `تطبيق هذا المعامل (1 و / ${info.suggestedRatio} غ)`
+                                : `Appliquer ce ratio (${info.suggestedRatio} g/UI)`}
+                            </span>
                           </>
                         )}
                       </button>
@@ -240,13 +280,17 @@ export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
         <div className="p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
           <div className="flex items-center gap-1.5">
             <Info className="w-4 h-4 text-slate-400" />
-            <span>Toute modification peut être validée avec votre diabétologue.</span>
+            <span>
+              {isAr
+                ? 'يمكنك مناقشة أي تعديل في المعاملات مع طبيبك المعالج.'
+                : 'Toute modification peut être validée avec votre diabétologue.'}
+            </span>
           </div>
           <button
             onClick={onClose}
             className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold transition-colors cursor-pointer"
           >
-            Fermer
+            {isAr ? 'إغلاق' : 'Fermer'}
           </button>
         </div>
       </div>
