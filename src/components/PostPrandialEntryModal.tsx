@@ -10,7 +10,7 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
-import { evaluatePostPrandialResult, fetchCurrentCGMReading } from '../utils/cgmService';
+import { evaluatePostPrandialResult, fetchCurrentCGMReading, loadCGMConfig } from '../utils/cgmService';
 
 interface PostPrandialEntryModalProps {
   isOpen: boolean;
@@ -45,8 +45,9 @@ export const PostPrandialEntryModal: React.FC<PostPrandialEntryModalProps> = ({
   const handleReadFromCGM = async () => {
     setIsReadingCGM(true);
     try {
+      const activeCgm = userProfile.cgmConfig || loadCGMConfig();
       const reading = await fetchCurrentCGMReading(
-        userProfile.cgmConfig || { deviceType: 'freestyle', isConnected: true },
+        activeCgm,
         userProfile.glucoseUnit
       );
       setGlucoseInput(String(reading.glucose));

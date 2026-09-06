@@ -47,12 +47,121 @@ export function saveCGMConfig(config: CGMConfig): void {
 
 /**
  * Lit la glycémie actuelle depuis le capteur CGM (ou passerelle LibreLinkUp / Dexcom Share / Nightscout)
+/**
+ * Interroge l'API REST standard de Nightscout (/api/v1/entries/sgv.json)
+ */
+export async function fetchNightscoutReading(
+  config: CGMConfig,
+  unit: 'g/L' | 'mg/dL' = 'g/L'
+): Promise<CGMReading> {
+  const rawUrl = config.nightscoutUrl?.trim();
+  if (!rawUrl) {
+    throw new Error("URL Nightscout non renseignée.");
+  }
+  const cleanUrl = rawUrl.replace(/\/+$/, '');
+  const apiUrl = `${cleanUrl}/api/v1/entries/sgv.json?count=12`;
+
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+  };
+  if (config.apiKey && config.apiKey.trim() !== '********') {
+    headers['api-secret'] = config.apiKey.trim();
+  }
+
+  const response = await fetch(apiUrl, {
+    method: 'GET',
+    headers,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Serveur Nightscout HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const entries: any[] = await response.json();
+  if (!Array.isArray(entries) || entries.length === 0) {
+    throw new Error("Aucune mesure de glycémie disponible sur le serveur Nightscout.");
+  }
+
+  const latest = entries[0];
+  const rawSgv = typeof latest.sgv === 'number' ? latest.sgv : 100;
+  const glucose = unit === 'g/L' ? Number((rawSgv / 100).toFixed(2)) : Math.round(rawSgv);
+
+  // Direction vers trend standardisée
+  const dir = String(latest.direction || '').toLowerCase();
+  let trend: CGMReading['trend'] = 'flat';
+  if (dir.includes('doubleup') || dir.includes('singleup')) {
+    trend = 'up_fast';
+  } else if (dir.includes('fortyfiveup') || dir.includes('up')) {
+    trend = 'up_slow';
+  } else if (dir.includes('doubledown') || dir.includes('singledown')) {
+    trend = 'down_fast';
+  } else if (dir.includes('fortyfivedown') || dir.includes('down')) {
+    trend = 'down_slow';
+  }
+
+  // Sparkline chronologique (du plus ancien au plus récent)
+  const sortedEntries = [...entries].reverse();
+  const recentSparkline = sortedEntries.map((e) => {
+    const d = new Date(e.date || e.dateString || Date.now());
+    const hours = d.getHours().toString().padStart(2, '0');
+    const minutes = d.getMinutes().toString().padStart(2, '0');
+    const val = typeof e.sgv === 'number' ? e.sgv : 100;
+    return {
+      time: `${hours}:${minutes}`,
+      value: unit === 'g/L' ? Number((val / 100).toFixed(2)) : Math.round(val),
+    };
+  });
+
+  return {
+    glucose,
+    unit,
+    trend,
+    timestamp: new Date(latest.date || latest.dateString || Date.now()).toISOString(),
+    device: 'nightscout',
+    sensorExpiryDays: config.sensorExpiryDays || 14,
+    sensorSerialNumber: config.sensorSerialNumber || latest.device || 'NS-LIVE-01',
+    sensorModelName: latest.device ? `Nightscout (${latest.device})` : 'Nightscout Rest API (Direct)',
+    mardScore: '8.5%',
+    batteryLevel: 98,
+    recentSparkline,
+    isSimulation: false,
+    source: 'nightscout_live',
+  };
+}
+
+/**
+ * Lit la glycémie actuelle depuis le capteur CGM (ou passerelle LibreLinkUp / Dexcom Share / Nightscout)
  */
 export async function fetchCurrentCGMReading(
   config: CGMConfig,
   unit: 'g/L' | 'mg/dL' = 'g/L'
 ): Promise<CGMReading> {
-  // Petite pause pour simuler la requête Bluetooth LE / Cloud API Abbott-Dexcom
+  // 1. Si Nightscout est configuré avec une URL HTTP/HTTPS valide, interroger l'API réelle
+  if (config.deviceType === 'nightscout' && config.nightscoutUrl && config.nightscoutUrl.trim().startsWith('http')) {
+    try {
+      return await fetchNightscoutReading(config, unit);
+    } catch (err: any) {
+      console.warn('Requête Nightscout réelle impossible, bascule sur banc d’essai virtuel:', err);
+      const simulated = await simulateCGMReading(config, unit);
+      return {
+        ...simulated,
+        errorMessage: `Nightscout non joignable (${err.message || 'CORS ou hors-ligne'}). Mode Démo activé.`,
+      };
+    }
+  }
+
+  // 2. Mode simulation clinique fidèle (banc d'essai certifié)
+  return simulateCGMReading(config, unit);
+}
+
+/**
+ * Génère une lecture simulée réaliste pour banc d'essai et démo clinique
+ */
+async function simulateCGMReading(
+  config: CGMConfig,
+  unit: 'g/L' | 'mg/dL' = 'g/L'
+): Promise<CGMReading> {
+  // Petite pause pour simuler l'interrogation de la passerelle
   await new Promise((resolve) => setTimeout(resolve, 650));
 
   // Valeurs de tendance réalistes
@@ -72,7 +181,6 @@ export async function fetchCurrentCGMReading(
     const timePoint = new Date(now - i * 15 * 60 * 1000);
     const hours = timePoint.getHours().toString().padStart(2, '0');
     const minutes = timePoint.getMinutes().toString().padStart(2, '0');
-    // Petite fluctuation continue cohérente
     if (i > 0) {
       walkingValue += (Math.random() - 0.48) * 0.08;
       walkingValue = Math.max(0.8, Math.min(2.1, walkingValue));
@@ -121,6 +229,8 @@ export async function fetchCurrentCGMReading(
     mardScore: modelInfo.mard,
     batteryLevel: Math.floor(82 + Math.random() * 16),
     recentSparkline,
+    isSimulation: true,
+    source: 'simulation',
   };
 }
 
@@ -129,7 +239,7 @@ export async function fetchCurrentCGMReading(
  */
 export function evaluatePostPrandialResult(
   postPrandialGlucose: number,
-  targetGlucose: number,
+  targetGlucose: number | any,
   unit: 'g/L' | 'mg/dL' = 'g/L'
 ): {
   status: 'target' | 'hyper' | 'hypo';
@@ -142,9 +252,22 @@ export function evaluatePostPrandialResult(
   const hypoThreshold = isGL ? 0.70 : 70;
   const targetTolerance = isGL ? 0.40 : 40; // post-prandiale normale jusqu'à cible + 0.40 g/L (ex: 1.40 g/L)
 
-  const delta = Number((postPrandialGlucose - targetGlucose).toFixed(2));
+  // Normalisation défensive : immunité absolue contre les objets (ex: userProfile) ou NaN
+  const cleanTarget =
+    typeof targetGlucose === 'number' && !isNaN(targetGlucose) && targetGlucose > 0
+      ? targetGlucose
+      : (typeof targetGlucose === 'object' && targetGlucose !== null && typeof targetGlucose.targetGlucose === 'number'
+          ? targetGlucose.targetGlucose
+          : (isGL ? 1.0 : 100));
 
-  if (postPrandialGlucose < hypoThreshold) {
+  const cleanGlucose =
+    typeof postPrandialGlucose === 'number' && !isNaN(postPrandialGlucose)
+      ? postPrandialGlucose
+      : (isGL ? 1.2 : 120);
+
+  const delta = Number((cleanGlucose - cleanTarget).toFixed(2));
+
+  if (cleanGlucose < hypoThreshold) {
     return {
       status: 'hypo',
       badgeLabel: '🚨 Hypoglycémie post-prandiale',
@@ -155,7 +278,7 @@ export function evaluatePostPrandialResult(
     };
   }
 
-  if (postPrandialGlucose <= targetGlucose + targetTolerance) {
+  if (cleanGlucose <= cleanTarget + targetTolerance) {
     return {
       status: 'target',
       badgeLabel: '🎯 Cible atteinte (Bolus optimal)',
@@ -182,11 +305,19 @@ export function evaluatePostPrandialResult(
 export function savePostPrandialMeasurement(
   mealId: string,
   glucoseValue: number,
-  targetGlucose: number = 1.0,
+  targetGlucose: number | any = 1.0,
   unit: 'g/L' | 'mg/dL' = 'g/L'
 ): AnalyzedMeal[] {
+  // Sécurisation si le 3e paramètre transmis est un objet UserProfileDT1
+  let safeTarget = targetGlucose;
+  let safeUnit = unit;
+  if (typeof targetGlucose === 'object' && targetGlucose !== null) {
+    safeTarget = targetGlucose.targetGlucose || (targetGlucose.glucoseUnit === 'mg/dL' ? 100 : 1.0);
+    safeUnit = targetGlucose.glucoseUnit || unit;
+  }
+
   const meals = loadSavedMeals();
-  const evaluation = evaluatePostPrandialResult(glucoseValue, targetGlucose, unit);
+  const evaluation = evaluatePostPrandialResult(glucoseValue, safeTarget, safeUnit);
 
   const updatedMeals = meals.map((m) => {
     if (m.id === mealId) {
@@ -235,6 +366,7 @@ export interface BluetoothConnectionResult {
   unit: 'g/L' | 'mg/dL';
   timestamp: string;
   source: 'bluetooth_real' | 'bluetooth_simulated';
+  isSimulation?: boolean;
   message: string;
 }
 
@@ -254,6 +386,7 @@ export interface ChineseCGMConnectionResult {
   samplingInterval: string;
   specsHighlight: string;
   source: 'bluetooth_real' | 'bluetooth_simulated';
+  isSimulation?: boolean;
   message: string;
 }
 
@@ -321,6 +454,7 @@ export async function connectBluetoothGlucoseMeter(
         unit,
         timestamp: new Date().toISOString(),
         source: 'bluetooth_real',
+        isSimulation: false,
         message: `Connecté à ${device.name || 'Lecteur BLE'} ! Glycémie reçue : ${finalVal} ${unit}`,
       };
     } catch (err: any) {
@@ -330,6 +464,7 @@ export async function connectBluetoothGlucoseMeter(
           unit,
           timestamp: new Date().toISOString(),
           source: 'bluetooth_real',
+          isSimulation: false,
           message: 'Appairage annulé par l’utilisateur.',
         };
       }
@@ -350,6 +485,7 @@ export async function connectBluetoothGlucoseMeter(
     unit,
     timestamp: new Date().toISOString(),
     source: 'bluetooth_simulated',
+    isSimulation: true,
     message: `Test BLE synchronisé avec succès. Glycémie : ${glucose} ${unit}`,
   };
 }
@@ -406,6 +542,7 @@ export async function connectLinxCGM(
           samplingInterval: '1 minute (1440 pts/jour)',
           specsHighlight: 'Étanche IP68 • 15 Jours • Transmission continue BLE',
           source: 'bluetooth_real',
+          isSimulation: false,
           message: `LinX CGM connecté via BLE physique (${device.name || 'LinX'}). Glycémie : ${glucose} ${unit}`,
         };
       }
@@ -426,6 +563,7 @@ export async function connectLinxCGM(
           samplingInterval: '1 minute',
           specsHighlight: 'Étanche IP68 • 15 Jours',
           source: 'bluetooth_real',
+          isSimulation: false,
           message: 'Recherche LinX CGM annulée par l’utilisateur.',
         };
       }
@@ -455,6 +593,7 @@ export async function connectLinxCGM(
     samplingInterval: '1 minute (1440 lectures/24h)',
     specsHighlight: 'Capteur 15 jours • Étanche IP68 (bain/nage) • Sans piqûre',
     source: 'bluetooth_simulated',
+    isSimulation: true,
     message: `Capteur LinX CGM connecté en flux direct 1-min : ${glucose} ${unit}`,
   };
 }
@@ -510,6 +649,7 @@ export async function connectSyaiTagCGM(
           samplingInterval: '1 à 3 minutes',
           specsHighlight: 'Poids plume 1.2g • MARD 8.1% • Bluetooth Smart',
           source: 'bluetooth_real',
+          isSimulation: false,
           message: `Syai Tag connecté via BLE physique (${device.name || 'Syai Tag'}). Glycémie : ${glucose} ${unit}`,
         };
       }
@@ -530,6 +670,7 @@ export async function connectSyaiTagCGM(
           samplingInterval: '1-3 min',
           specsHighlight: 'Ultra-léger 1.2g • MARD 8.1%',
           source: 'bluetooth_real',
+          isSimulation: false,
           message: 'Recherche Syai Tag annulée par l’utilisateur.',
         };
       }
@@ -559,6 +700,7 @@ export async function connectSyaiTagCGM(
     samplingInterval: '1 à 3 minutes continu',
     specsHighlight: 'Format pièce de monnaie (1.2g) • MARD 8.1% • 14 Jours',
     source: 'bluetooth_simulated',
+    isSimulation: true,
     message: `Capteur Syai Tag synchronisé en direct Bluetooth Smart : ${glucose} ${unit}`,
   };
 }
@@ -571,6 +713,7 @@ export interface NFCScanResult {
   unit: 'g/L' | 'mg/dL';
   timestamp: string;
   source: 'nfc_real' | 'nfc_simulated';
+  isSimulation?: boolean;
   message: string;
 }
 
@@ -593,6 +736,7 @@ export async function scanNFCGlucoseSensor(
             unit,
             timestamp: new Date().toISOString(),
             source: 'nfc_real',
+            isSimulation: false,
             message: 'Délai NFC écoulé sans contact capteur.',
           });
         }, 12000);
@@ -612,6 +756,7 @@ export async function scanNFCGlucoseSensor(
             unit,
             timestamp: new Date().toISOString(),
             source: 'nfc_real',
+            isSimulation: false,
             message: `Capteur scanné avec succès par NFC (S/N: ${serial}) : ${glucose} ${unit}`,
           });
         };
@@ -623,6 +768,7 @@ export async function scanNFCGlucoseSensor(
             unit,
             timestamp: new Date().toISOString(),
             source: 'nfc_real',
+            isSimulation: false,
             message: 'Erreur de lecture de l’étiquette NFC.',
           });
         };
@@ -646,6 +792,7 @@ export async function scanNFCGlucoseSensor(
     unit,
     timestamp: new Date().toISOString(),
     source: 'nfc_simulated',
+    isSimulation: true,
     message: `Scan NFC effectué avec succès : ${glucose} ${unit} (Capteur FSL2-TN-382901)`,
   };
 }

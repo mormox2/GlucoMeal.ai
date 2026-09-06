@@ -438,9 +438,26 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
                     </div>
 
                     <div className="text-center mt-2 flex flex-wrap items-center justify-center gap-1.5">
+                      {currentReading.isSimulation ? (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
+                          <AlertCircle className="w-3 h-3" />
+                          Mode Démo / Simulation
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Mesure Réelle Directe
+                        </span>
+                      )}
                       <span className="inline-block px-3 py-1 rounded-full bg-white/10 text-cyan-200 text-xs font-medium">
                         Tendance : {getTrendText(currentReading.trend)}
                       </span>
+                      {currentReading.errorMessage && (
+                        <div className="w-full mt-1.5 p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-200 flex items-center justify-center gap-1.5">
+                          <AlertCircle className="w-3 h-3 text-amber-400 shrink-0" />
+                          <span>{currentReading.errorMessage}</span>
+                        </div>
+                      )}
                       {currentReading.mardScore && (
                         <span className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
                           MARD : {currentReading.mardScore}
@@ -1243,6 +1260,19 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-blue-500 bg-white"
                     />
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      handleSaveSettings();
+                      setActiveTab('status');
+                      await handleReadSensor();
+                    }}
+                    className="w-full py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-cyan-300 text-xs font-bold flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                  >
+                    <Radio className="w-3.5 h-3.5 text-cyan-400 animate-pulse" />
+                    <span>Tester & Lire la glycémie Nightscout en direct</span>
+                  </button>
                 </div>
               )}
 

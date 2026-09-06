@@ -136,13 +136,22 @@ export default function App() {
   };
 
   const handleSavePostPrandial = (mealId: string, glucoseValue: number) => {
-    const updated = savePostPrandialMeasurement(mealId, glucoseValue, userProfile);
+    const updated = savePostPrandialMeasurement(
+      mealId,
+      glucoseValue,
+      userProfile.targetGlucose,
+      userProfile.glucoseUnit
+    );
     setSavedMeals(updated);
   };
 
   const handleSaveCGMConfig = (newCfg: CGMConfig) => {
     setCgmConfig(newCfg);
     saveCGMConfig(newCfg);
+    // Mettre à jour également dans le profil patient pour la cohérence globale
+    const updatedProfile = { ...userProfile, cgmConfig: newCfg };
+    setUserProfile(updatedProfile);
+    saveUserProfile(updatedProfile);
   };
 
   // Handle Photo Analysis
@@ -606,6 +615,7 @@ export default function App() {
         isOpen={isCGMModalOpen}
         onClose={() => setIsCGMModalOpen(false)}
         config={cgmConfig}
+        userProfile={userProfile}
         onSaveConfig={handleSaveCGMConfig}
       />
 

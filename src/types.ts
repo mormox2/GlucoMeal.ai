@@ -102,6 +102,9 @@ export interface CGMReading {
   mardScore?: string;
   batteryLevel?: number;
   recentSparkline?: { time: string; value: number }[];
+  isSimulation?: boolean;
+  source?: 'nightscout_live' | 'bluetooth_real' | 'bluetooth_simulated' | 'nfc_real' | 'nfc_simulated' | 'simulation';
+  errorMessage?: string;
 }
 
 export interface CGMConfig {

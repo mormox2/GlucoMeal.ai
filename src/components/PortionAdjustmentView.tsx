@@ -45,7 +45,7 @@ import {
 } from '../data/tunisianFoodDatabase';
 import { getCurrentMealSlot, calculatePersonalizedBolus } from '../utils/storage';
 import { recordPatientPortionCorrection, getLearnedPortionForFood } from '../utils/activeLearning';
-import { fetchCurrentCGMReading } from '../utils/cgmService';
+import { fetchCurrentCGMReading, loadCGMConfig } from '../utils/cgmService';
 import { scheduleH2Reminder } from '../utils/h2Reminder';
 import { HealthySubstitutionsCard } from './HealthySubstitutionsCard';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -161,8 +161,9 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
   const handleQuickCGMRead = async () => {
     setIsReadingCGM(true);
     try {
+      const activeCgm = userProfile.cgmConfig || loadCGMConfig();
       const reading = await fetchCurrentCGMReading(
-        userProfile.cgmConfig || { deviceType: 'freestyle', isConnected: true },
+        activeCgm,
         userProfile.glucoseUnit
       );
       setCurrentGlucoseInput(String(reading.glucose));
