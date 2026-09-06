@@ -2,13 +2,14 @@
 
 > **Moteur hybride d'estimation des glucides par IA vision/voix et calcul déterministe certifié pour Diabétiques de Type 1 (DT1), spécialement calibré pour la gastronomie tunisienne et méditerranéenne.**
 
-[![Status: Production Ready](https://img.shields.io/badge/Status-Production%20Ready-047857.svg?style=flat-square)](#)
+[![Deploy: Vercel](https://img.shields.io/badge/Live_App-glucomeal--ai.vercel.app-000000.svg?style=flat-square&logo=vercel)](https://glucomeal-ai.vercel.app/)
+[![Status: Production Ready](https://img.shields.io/badge/Status-Production%20Ready-047857.svg?style=flat-square)](https://glucomeal-ai.vercel.app/)
 [![React: 19.0.1](https://img.shields.io/badge/React-19.0.1-61DAFB.svg?style=flat-square&logo=react)](#)
 [![TypeScript: 5.8](https://img.shields.io/badge/TypeScript-5.8-3178C6.svg?style=flat-square&logo=typescript)](#)
 [![Tailwind CSS: 4.1](https://img.shields.io/badge/Tailwind_CSS-v4.1-38B2AC.svg?style=flat-square&logo=tailwind-css)](#)
 [![Gemini: 2.5 Flash](https://img.shields.io/badge/Google_Gemini-2.5_Flash-4285F4.svg?style=flat-square&logo=google)](#)
 [![Firebase: 12.18](https://img.shields.io/badge/Firebase-Firestore_%26_Auth-FFCA28.svg?style=flat-square&logo=firebase)](#)
-[![Tests: Vitest 12/12](https://img.shields.io/badge/Tests-12%2F12%20Passing-10B981.svg?style=flat-square&logo=vitest)](#)
+[![Tests: Vitest 23/23](https://img.shields.io/badge/Tests-23%2F23%20Passing-10B981.svg?style=flat-square&logo=vitest)](#)
 [![PWA: Offline Ready](https://img.shields.io/badge/PWA-Offline%20%26%20Installable-7C3AED.svg?style=flat-square)](#)
 
 ---
