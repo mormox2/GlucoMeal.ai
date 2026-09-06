@@ -12,6 +12,8 @@ import {
   Minus,
   ShieldCheck,
   AlertCircle,
+  AlertTriangle,
+  Info,
   Clock,
   ArrowRight,
   BatteryCharging,
@@ -84,9 +86,16 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
 
   const [sibionicsSerialNumber, setSibionicsSerialNumber] = useState(config.sibionicsSerialNumber || 'SB-118274');
 
+interface SyncStatusFeedback {
+  type: 'success' | 'warning' | 'error' | 'info';
+  title: string;
+  description: string;
+  hint?: string;
+}
+
   const [isReading, setIsReading] = useState(false);
   const [currentReading, setCurrentReading] = useState<CGMReading | null>(null);
-  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<SyncStatusFeedback | null>(null);
 
   // Hardware BLE & NFC & Chinese CGM Testing states
   const [isBleScanning, setIsBleScanning] = useState(false);
@@ -108,20 +117,47 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
 
   const handleConnectBle = async () => {
     setIsBleScanning(true);
-    setSyncMessage(null);
+    setSyncStatus(null);
     try {
       const res = await connectBluetoothGlucoseMeter(currentUnit);
       setBleResult(res);
       if (res.success && res.glucoseValue) {
-        setSyncMessage(res.message);
+        if (res.isSimulation) {
+          setSyncStatus({
+            type: 'info',
+            title: 'Mode Émulation Bluetooth',
+            description: res.message,
+            hint: 'Lecteur virtuel de démonstration synchronisé. Pour un lecteur physique, activez le Bluetooth sur votre appareil.',
+          });
+        } else {
+          setSyncStatus({
+            type: 'success',
+            title: 'Lecteur Bluetooth connecté',
+            description: res.message,
+          });
+        }
+      } else {
+        setSyncStatus({
+          type: 'error',
+          title: 'Échec de connexion Bluetooth',
+          description: res.message || 'Impossible d’établir la liaison avec le lecteur de glycémie.',
+          hint: 'Vérifiez que le lecteur est allumé, à portée (< 2 mètres) et que le Bluetooth de votre appareil est actif.',
+        });
       }
     } catch (err: any) {
+      const msg = err?.message || 'Erreur lors de la tentative de connexion BLE.';
       setBleResult({
         success: false,
         unit: currentUnit,
         timestamp: new Date().toISOString(),
         source: 'bluetooth_real',
-        message: 'Erreur lors de la tentative de connexion BLE.',
+        message: msg,
+      });
+      setSyncStatus({
+        type: 'error',
+        title: 'Erreur d’accès Bluetooth',
+        description: msg,
+        hint: 'Le navigateur ou le système a refusé la connexion Bluetooth. Vous pouvez saisir votre glycémie manuellement.',
       });
     } finally {
       setIsBleScanning(false);
@@ -130,15 +166,36 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
 
   const handleConnectLinx = async () => {
     setIsLinxScanning(true);
-    setSyncMessage(null);
+    setSyncStatus(null);
     try {
       const res = await connectLinxCGM(currentUnit);
       setLinxResult(res);
       if (res.success && res.glucoseValue) {
-        setSyncMessage(res.message);
         setSelectedDevice('linx');
+        if (res.isSimulation) {
+          setSyncStatus({
+            type: 'info',
+            title: 'Capteur LinX CGM (Émulé)',
+            description: res.message,
+            hint: 'Flux démo actif. Pour appairer votre capteur LinX physique, activez le Bluetooth sur votre ordinateur/smartphone.',
+          });
+        } else {
+          setSyncStatus({
+            type: 'success',
+            title: 'Capteur LinX CGM connecté en direct',
+            description: res.message,
+          });
+        }
+      } else {
+        setSyncStatus({
+          type: 'error',
+          title: 'Échec de connexion LinX CGM',
+          description: res.message || 'Le capteur LinX CGM n’a pas répondu.',
+          hint: 'Vérifiez que le capteur LinX est actif, non périmé (15j max) et à portée Bluetooth.',
+        });
       }
-    } catch (err) {
+    } catch (err: any) {
+      const msg = err?.message || 'Erreur lors de la connexion Bluetooth LinX CGM.';
       setLinxResult({
         success: false,
         brand: 'linx',
@@ -154,7 +211,13 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
         samplingInterval: '1 minute',
         specsHighlight: 'Étanche IP68 • 15 Jours',
         source: 'bluetooth_real',
-        message: 'Erreur lors de la connexion Bluetooth LinX CGM.',
+        message: msg,
+      });
+      setSyncStatus({
+        type: 'error',
+        title: 'Erreur Bluetooth LinX CGM',
+        description: msg,
+        hint: 'Assurez-vous que le Bluetooth est activé et autorisez l’accès dans votre navigateur.',
       });
     } finally {
       setIsLinxScanning(false);
@@ -163,15 +226,36 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
 
   const handleConnectSyai = async () => {
     setIsSyaiScanning(true);
-    setSyncMessage(null);
+    setSyncStatus(null);
     try {
       const res = await connectSyaiTagCGM(currentUnit);
       setSyaiResult(res);
       if (res.success && res.glucoseValue) {
-        setSyncMessage(res.message);
         setSelectedDevice('syai');
+        if (res.isSimulation) {
+          setSyncStatus({
+            type: 'info',
+            title: 'Capteur Syai Tag (Émulé)',
+            description: res.message,
+            hint: 'Flux démo actif. Approchez votre Syai Tag physique à moins de 50 cm pour la synchronisation réelle.',
+          });
+        } else {
+          setSyncStatus({
+            type: 'success',
+            title: 'Capteur Syai Tag connecté en direct',
+            description: res.message,
+          });
+        }
+      } else {
+        setSyncStatus({
+          type: 'error',
+          title: 'Échec de connexion Syai Tag',
+          description: res.message || 'Le capteur Syai Tag n’a pas pu être joint.',
+          hint: 'Vérifiez que le capteur Syai Tag est bien en place et que le Bluetooth de votre appareil est actif.',
+        });
       }
-    } catch (err) {
+    } catch (err: any) {
+      const msg = err?.message || 'Erreur lors de la connexion Bluetooth Syai Tag.';
       setSyaiResult({
         success: false,
         brand: 'syai',
@@ -187,7 +271,13 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
         samplingInterval: '1-3 min',
         specsHighlight: 'Ultra-léger 1.2g • MARD 8.1%',
         source: 'bluetooth_real',
-        message: 'Erreur lors de la connexion Bluetooth Syai Tag.',
+        message: msg,
+      });
+      setSyncStatus({
+        type: 'error',
+        title: 'Erreur Bluetooth Syai Tag',
+        description: msg,
+        hint: 'Connexion refusée ou interrompue. La saisie manuelle de glycémie reste opérationnelle.',
       });
     } finally {
       setIsSyaiScanning(false);
@@ -196,20 +286,38 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
 
   const handleScanNfc = async () => {
     setIsNfcScanning(true);
-    setSyncMessage(null);
+    setSyncStatus(null);
     try {
       const res = await scanNFCGlucoseSensor(currentUnit);
       setNfcResult(res);
       if (res.success && res.glucoseValue) {
-        setSyncMessage(res.message);
+        setSyncStatus({
+          type: 'success',
+          title: 'Scan NFC réussi',
+          description: res.message,
+        });
+      } else {
+        setSyncStatus({
+          type: 'error',
+          title: 'Scan NFC non abouti',
+          description: res.message || 'Délai d’attente dépassé ou capteur non détecté.',
+          hint: 'Plaquez fermement le haut de votre smartphone contre le capteur FreeStyle Libre pendant 2 à 3 secondes.',
+        });
       }
     } catch (err: any) {
+      const msg = err?.message || 'Erreur lors du scan NFC.';
       setNfcResult({
         success: false,
         unit: currentUnit,
         timestamp: new Date().toISOString(),
         source: 'nfc_real',
-        message: 'Erreur lors du scan NFC.',
+        message: msg,
+      });
+      setSyncStatus({
+        type: 'error',
+        title: 'Erreur Scan NFC',
+        description: msg,
+        hint: 'Vérifiez que la fonction NFC est bien activée dans les paramètres de votre smartphone.',
       });
     } finally {
       setIsNfcScanning(false);
@@ -218,12 +326,14 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
 
   const handleReadSensor = async () => {
     setIsReading(true);
-    setSyncMessage(null);
+    setSyncStatus(null);
     try {
       const reading = await fetchCurrentCGMReading(
         {
           ...config,
           deviceType: selectedDevice,
+          nightscoutUrl,
+          apiKey,
           libreEmail,
           librePassword,
           libreRegion,
@@ -243,9 +353,34 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
         currentUnit
       );
       setCurrentReading(reading);
-      setSyncMessage('✅ Donnée capteur synchronisée en direct (BLE / Cloud API) !');
-    } catch (err) {
-      setSyncMessage('❌ Impossible de contacter la passerelle du capteur.');
+      if (reading.errorMessage) {
+        setSyncStatus({
+          type: 'warning',
+          title: 'Avertissement Passerelle CGM',
+          description: reading.errorMessage,
+          hint: 'Une glycémie indicative a été générée. Pour le calcul réel de dose, contrôlez votre glycémie par piqûre au doigt.',
+        });
+      } else if (reading.isSimulation) {
+        setSyncStatus({
+          type: 'info',
+          title: 'Mode Banc d’Essai Virtuel',
+          description: `Lecture simulée générée : ${reading.glucose} ${currentUnit}.`,
+          hint: 'Renseignez vos accès dans l’onglet Connecteurs Cloud pour basculer sur vos données en direct.',
+        });
+      } else {
+        setSyncStatus({
+          type: 'success',
+          title: 'Lecture capteur synchronisée',
+          description: `Donnée reçue en direct (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${currentUnit}.`,
+        });
+      }
+    } catch (err: any) {
+      setSyncStatus({
+        type: 'error',
+        title: 'Échec de lecture du capteur',
+        description: err?.message || 'Impossible de contacter la passerelle du capteur.',
+        hint: 'Vérifiez la connexion Internet, l’URL Nightscout ou réalisez un contrôle capillaire manuel.',
+      });
     } finally {
       setIsReading(false);
     }
@@ -288,8 +423,12 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
     if (onUpdateConfig) onUpdateConfig(newConfig);
     if (onSaveConfig) onSaveConfig(newConfig);
     saveCGMConfig(newConfig);
-    setSyncMessage('✅ Configuration CGM enregistrée et connectée !');
-    setTimeout(() => setSyncMessage(null), 3500);
+    setSyncStatus({
+      type: 'success',
+      title: 'Configuration enregistrée',
+      description: 'Paramètres du capteur CGM et connecteurs mis à jour avec succès.',
+    });
+    setTimeout(() => setSyncStatus(null), 4000);
   };
 
   const getTrendIcon = (trend: CGMReading['trend']) => {
@@ -390,10 +529,49 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
 
         {/* Content */}
         <div className="p-5 space-y-4 overflow-y-auto">
-          {syncMessage && (
-            <div className="p-3 rounded-2xl bg-blue-50 border border-blue-200 text-xs font-bold text-blue-950 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-blue-600 shrink-0" />
-              <span>{syncMessage}</span>
+          {syncStatus && (
+            <div
+              className={`p-3.5 rounded-2xl border text-xs animate-in fade-in transition-all relative ${
+                syncStatus.type === 'error'
+                  ? 'bg-rose-50 border-rose-200 text-rose-950'
+                  : syncStatus.type === 'warning'
+                  ? 'bg-amber-50 border-amber-200 text-amber-950'
+                  : syncStatus.type === 'info'
+                  ? 'bg-sky-50 border-sky-200 text-sky-950'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-950'
+              }`}
+            >
+              <div className="flex items-start gap-2.5">
+                <div className="shrink-0 mt-0.5">
+                  {syncStatus.type === 'error' ? (
+                    <AlertCircle className="w-5 h-5 text-rose-600" />
+                  ) : syncStatus.type === 'warning' ? (
+                    <AlertTriangle className="w-5 h-5 text-amber-600" />
+                  ) : syncStatus.type === 'info' ? (
+                    <Info className="w-5 h-5 text-sky-600" />
+                  ) : (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0 pr-5">
+                  <h5 className="font-black text-xs leading-snug">{syncStatus.title}</h5>
+                  <p className="mt-0.5 text-[11px] opacity-90 leading-relaxed">{syncStatus.description}</p>
+                  {syncStatus.hint && (
+                    <div className="mt-2 pt-1.5 border-t border-current/15 flex items-center gap-1.5 text-[10px] font-semibold opacity-90">
+                      <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                      <span>{syncStatus.hint}</span>
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSyncStatus(null)}
+                  className="absolute top-2.5 right-2.5 p-1 rounded-lg hover:bg-black/5 text-current opacity-70 hover:opacity-100 transition-colors cursor-pointer"
+                  aria-label="Fermer l'alerte"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           )}
 
@@ -680,6 +858,29 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
                     </div>
                   </div>
                 )}
+
+                {syaiResult && !syaiResult.success && (
+                  <div className="p-3.5 rounded-2xl bg-rose-950/70 border border-rose-500/50 text-white space-y-2 animate-in fade-in">
+                    <div className="flex items-start gap-2 text-rose-300">
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                      <div className="flex-1 text-xs">
+                        <span className="font-extrabold block text-rose-200">Échec d'appairage Syai Tag</span>
+                        <span className="text-[11px] text-rose-100/90 leading-tight">{syaiResult.message}</span>
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-black/40 border border-white/10 text-[10px] text-slate-300 space-y-1">
+                      <div className="font-bold text-amber-300 flex items-center gap-1">
+                        <Info className="w-3 h-3" /> Que faire en cas d'échec ?
+                      </div>
+                      <ul className="list-disc list-inside space-y-0.5 text-slate-300">
+                        <li>Vérifiez que le Bluetooth est activé sur votre ordinateur ou smartphone.</li>
+                        <li>Rapprochez le capteur Syai Tag à moins de 50 cm.</li>
+                        <li>S'il s'agit d'un nouveau capteur, assurez-vous qu'il a été activé.</li>
+                        <li>En cas de doute, mesurez votre glycémie au doigt et saisissez-la manuellement.</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* LinX CGMS (MicroTech / AiDEX) Section */}
@@ -755,6 +956,29 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
                     </div>
                   </div>
                 )}
+
+                {linxResult && !linxResult.success && (
+                  <div className="p-3.5 rounded-2xl bg-rose-950/70 border border-rose-500/50 text-white space-y-2 animate-in fade-in">
+                    <div className="flex items-start gap-2 text-rose-300">
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                      <div className="flex-1 text-xs">
+                        <span className="font-extrabold block text-rose-200">Échec d'appairage LinX CGM</span>
+                        <span className="text-[11px] text-rose-100/90 leading-tight">{linxResult.message}</span>
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-black/40 border border-white/10 text-[10px] text-slate-300 space-y-1">
+                      <div className="font-bold text-cyan-300 flex items-center gap-1">
+                        <Info className="w-3 h-3" /> Guide de dépannage LinX :
+                      </div>
+                      <ul className="list-disc list-inside space-y-0.5 text-slate-300">
+                        <li>Assurez-vous que le transmetteur LinX / AiDEX est bien clipsé sur le capteur.</li>
+                        <li>Vérifiez les permissions Web Bluetooth de votre navigateur Chrome/Edge.</li>
+                        <li>Le capteur a une validité de 15 jours IP68 : vérifiez sa date de pose.</li>
+                        <li>Vous pouvez saisir directement votre glycémie dans l'écran principal.</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Bluetooth LE Section */}
@@ -824,6 +1048,29 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
                     </div>
                   </div>
                 )}
+
+                {bleResult && !bleResult.success && (
+                  <div className="p-3.5 rounded-2xl bg-rose-950/70 border border-rose-500/50 text-white space-y-2 animate-in fade-in">
+                    <div className="flex items-start gap-2 text-rose-300">
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-400" />
+                      <div className="flex-1 text-xs">
+                        <span className="font-extrabold block text-rose-200">Échec de connexion Bluetooth</span>
+                        <span className="text-[11px] text-rose-100/90 leading-tight">{bleResult.message}</span>
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-black/40 border border-white/10 text-[10px] text-slate-300 space-y-1">
+                      <div className="font-bold text-cyan-300 flex items-center gap-1">
+                        <Info className="w-3 h-3" /> Vérifications recommandées :
+                      </div>
+                      <ul className="list-disc list-inside space-y-0.5 text-slate-300">
+                        <li>Allumez votre lecteur capillaire (Contour Next, Accu-Chek...) en mode Bluetooth.</li>
+                        <li>Assurez-vous que le Bluetooth est activé sur votre appareil.</li>
+                        <li>Si le lecteur est déjà connecté à une autre application, déconnectez-la temporairement.</li>
+                        <li>La saisie manuelle de glycémie reste accessible à tout instant.</li>
+                      </ul>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* NFC Sensor Scan Section */}
@@ -890,6 +1137,29 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
                           <ArrowRight className="w-3 h-3" />
                         </button>
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {nfcResult && !nfcResult.success && (
+                  <div className="p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-950 space-y-2 animate-in fade-in">
+                    <div className="flex items-start gap-2 text-rose-700">
+                      <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                      <div className="flex-1 text-xs">
+                        <span className="font-extrabold block text-rose-900">Échec du scan NFC</span>
+                        <span className="text-[11px] text-rose-800 leading-tight">{nfcResult.message}</span>
+                      </div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-white border border-rose-200/70 text-[10px] text-slate-700 space-y-1">
+                      <div className="font-bold text-rose-900 flex items-center gap-1">
+                        <Info className="w-3 h-3 text-rose-600" /> Conseils pour réussir le scan :
+                      </div>
+                      <ul className="list-disc list-inside space-y-0.5 text-slate-600">
+                        <li>Plaquez le haut du smartphone directement contre le capteur FreeStyle Libre.</li>
+                        <li>Maintenez le contact pendant 2 à 3 secondes jusqu'à la détection.</li>
+                        <li>Vérifiez que le capteur NFC est activé dans les réglages de votre smartphone.</li>
+                        <li>Si le scan échoue de façon répétée, utilisez votre lecteur physique dédié.</li>
+                      </ul>
                     </div>
                   </div>
                 )}

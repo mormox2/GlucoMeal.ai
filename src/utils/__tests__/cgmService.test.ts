@@ -154,5 +154,30 @@ describe('Service CGM & Évaluation Post-Prandiale', () => {
       expect(reading.errorMessage).toContain('Nightscout non joignable');
       expect(reading.glucose).toBeGreaterThan(0);
     });
+
+    it('alerte explicitement l’utilisateur si l’URL Nightscout est absente', async () => {
+      const config: CGMConfig = {
+        deviceType: 'nightscout',
+        isConnected: true,
+        nightscoutUrl: '',
+      };
+
+      const reading = await fetchCurrentCGMReading(config, 'g/L');
+
+      expect(reading.isSimulation).toBe(true);
+      expect(reading.errorMessage).toBe("URL Nightscout non configurée. Veuillez renseigner l'adresse dans les paramètres.");
+    });
+
+    it('informe l’utilisateur sur le banc d’essai virtuel pour LinX CGM et Syai Tag', async () => {
+      const configLinx: CGMConfig = {
+        deviceType: 'linx',
+        isConnected: true,
+      };
+
+      const reading = await fetchCurrentCGMReading(configLinx, 'g/L');
+
+      expect(reading.isSimulation).toBe(true);
+      expect(reading.errorMessage).toContain("Mode Banc d’Essai Virtuel");
+    });
   });
 });

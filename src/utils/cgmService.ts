@@ -136,22 +136,45 @@ export async function fetchCurrentCGMReading(
   config: CGMConfig,
   unit: 'g/L' | 'mg/dL' = 'g/L'
 ): Promise<CGMReading> {
-  // 1. Si Nightscout est configuré avec une URL HTTP/HTTPS valide, interroger l'API réelle
-  if (config.deviceType === 'nightscout' && config.nightscoutUrl && config.nightscoutUrl.trim().startsWith('http')) {
-    try {
-      return await fetchNightscoutReading(config, unit);
-    } catch (err: any) {
-      console.warn('Requête Nightscout réelle impossible, bascule sur banc d’essai virtuel:', err);
+  // 1. Si Nightscout est sélectionné
+  if (config.deviceType === 'nightscout') {
+    if (config.nightscoutUrl && config.nightscoutUrl.trim().startsWith('http')) {
+      try {
+        return await fetchNightscoutReading(config, unit);
+      } catch (err: any) {
+        console.warn('Requête Nightscout réelle impossible, bascule sur banc d’essai virtuel:', err);
+        const simulated = await simulateCGMReading(config, unit);
+        return {
+          ...simulated,
+          errorMessage: `Nightscout non joignable (${err.message || 'CORS ou hors-ligne'}). Mode Démo activé.`,
+        };
+      }
+    } else {
       const simulated = await simulateCGMReading(config, unit);
       return {
         ...simulated,
-        errorMessage: `Nightscout non joignable (${err.message || 'CORS ou hors-ligne'}). Mode Démo activé.`,
+        errorMessage: "URL Nightscout non configurée. Veuillez renseigner l'adresse dans les paramètres.",
       };
     }
   }
 
-  // 2. Mode simulation clinique fidèle (banc d'essai certifié)
-  return simulateCGMReading(config, unit);
+  // 2. Capteurs chinois (LinX, Syai, Sibionics) en lecture directe
+  if (config.deviceType === 'linx' || config.deviceType === 'syai' || config.deviceType === 'sibionics') {
+    const simulated = await simulateCGMReading(config, unit);
+    return {
+      ...simulated,
+      errorMessage: "Mode Banc d’Essai Virtuel. Pour appairer votre capteur physique, utilisez l'onglet 'Test BLE & NFC Physique'.",
+    };
+  }
+
+  // 3. Mode simulation clinique par défaut
+  const simulated = await simulateCGMReading(config, unit);
+  return {
+    ...simulated,
+    errorMessage: config.deviceType === 'simulator'
+      ? undefined
+      : "Mode Banc d’Essai Virtuel actif (Simulation pédagogique certifiée).",
+  };
 }
 
 /**

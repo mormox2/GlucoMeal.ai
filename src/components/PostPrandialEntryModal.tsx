@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   X,
   AlertTriangle,
+  AlertCircle,
   Activity,
   ArrowRight,
   TrendingUp,
@@ -33,6 +34,11 @@ export const PostPrandialEntryModal: React.FC<PostPrandialEntryModalProps> = ({
     meal.post_prandial_glucose !== undefined ? String(meal.post_prandial_glucose) : ''
   );
   const [isReadingCGM, setIsReadingCGM] = useState(false);
+  const [cgmFeedback, setCgmFeedback] = useState<{
+    type: 'error' | 'warning' | 'success';
+    message: string;
+    hint?: string;
+  } | null>(null);
 
   if (!isOpen) return null;
 
@@ -44,6 +50,7 @@ export const PostPrandialEntryModal: React.FC<PostPrandialEntryModalProps> = ({
 
   const handleReadFromCGM = async () => {
     setIsReadingCGM(true);
+    setCgmFeedback(null);
     try {
       const activeCgm = userProfile.cgmConfig || loadCGMConfig();
       const reading = await fetchCurrentCGMReading(
@@ -51,8 +58,30 @@ export const PostPrandialEntryModal: React.FC<PostPrandialEntryModalProps> = ({
         userProfile.glucoseUnit
       );
       setGlucoseInput(String(reading.glucose));
-    } catch (err) {
-      console.error(err);
+      if (reading.errorMessage) {
+        setCgmFeedback({
+          type: 'warning',
+          message: reading.errorMessage,
+          hint: 'Valeur indicative insérée. Vous pouvez la corriger manuellement ci-dessous si nécessaire.',
+        });
+      } else if (reading.isSimulation) {
+        setCgmFeedback({
+          type: 'warning',
+          message: `Mode Démo : Glycémie simulée à ${reading.glucose} ${userProfile.glucoseUnit}.`,
+          hint: 'Saisie manuelle possible dans le champ ci-dessous.',
+        });
+      } else {
+        setCgmFeedback({
+          type: 'success',
+          message: `Glycémie synchronisée en direct (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${userProfile.glucoseUnit}.`,
+        });
+      }
+    } catch (err: any) {
+      setCgmFeedback({
+        type: 'error',
+        message: `Échec de connexion au capteur CGM : ${err?.message || 'Capteur non joignable'}.`,
+        hint: 'Veuillez mesurer votre glycémie capillaire au doigt et la saisir manuellement ci-dessous.',
+      });
     } finally {
       setIsReadingCGM(false);
     }
@@ -147,6 +176,42 @@ export const PostPrandialEntryModal: React.FC<PostPrandialEntryModalProps> = ({
               </span>
             </div>
           </div>
+
+          {cgmFeedback && (
+            <div
+              className={`p-3 rounded-2xl border text-xs flex items-start gap-2.5 animate-in fade-in transition-all ${
+                cgmFeedback.type === 'error'
+                  ? 'bg-rose-50 border-rose-200 text-rose-950'
+                  : cgmFeedback.type === 'warning'
+                  ? 'bg-amber-50 border-amber-200 text-amber-950'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-950'
+              }`}
+            >
+              <div className="shrink-0 mt-0.5">
+                {cgmFeedback.type === 'error' ? (
+                  <AlertCircle className="w-4 h-4 text-rose-600" />
+                ) : cgmFeedback.type === 'warning' ? (
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0 pr-2">
+                <p className="font-extrabold text-[11px] leading-snug">{cgmFeedback.message}</p>
+                {cgmFeedback.hint && (
+                  <p className="mt-1 text-[10px] opacity-90 leading-relaxed">{cgmFeedback.hint}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCgmFeedback(null)}
+                className="text-current opacity-60 hover:opacity-100 p-0.5 cursor-pointer"
+                aria-label="Fermer l'alerte CGM"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           {/* Feedback clinique instantané */}
           {evaluation && (

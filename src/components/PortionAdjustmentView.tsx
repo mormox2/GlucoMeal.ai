@@ -3,6 +3,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   AlertTriangle,
+  AlertCircle,
   Plus,
   Trash2,
   CheckCircle2,
@@ -74,6 +75,11 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
   const [foodSearchQuery, setFoodSearchQuery] = useState('');
   const [appliedHabitPreset, setAppliedHabitPreset] = useState(false);
   const [isReadingCGM, setIsReadingCGM] = useState(false);
+  const [cgmFeedback, setCgmFeedback] = useState<{
+    type: 'error' | 'warning' | 'success';
+    message: string;
+    hint?: string;
+  } | null>(null);
   const [isHighContrastMode, setIsHighContrastMode] = useState(false);
   const [isIngredientsCompact, setIsIngredientsCompact] = useState(false);
 
@@ -160,6 +166,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
   // Lecture instantanée depuis le capteur CGM
   const handleQuickCGMRead = async () => {
     setIsReadingCGM(true);
+    setCgmFeedback(null);
     try {
       const activeCgm = userProfile.cgmConfig || loadCGMConfig();
       const reading = await fetchCurrentCGMReading(
@@ -167,8 +174,30 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         userProfile.glucoseUnit
       );
       setCurrentGlucoseInput(String(reading.glucose));
-    } catch (err) {
-      console.error(err);
+      if (reading.errorMessage) {
+        setCgmFeedback({
+          type: 'warning',
+          message: reading.errorMessage,
+          hint: 'Glycémie indicative pré-remplie. Vous pouvez la corriger manuellement ci-contre si nécessaire.',
+        });
+      } else if (reading.isSimulation) {
+        setCgmFeedback({
+          type: 'warning',
+          message: `Mode Démo : Glycémie simulée à ${reading.glucose} ${userProfile.glucoseUnit}.`,
+          hint: 'Pour lier votre vrai capteur ou Nightscout, configurez la passerelle CGM.',
+        });
+      } else {
+        setCgmFeedback({
+          type: 'success',
+          message: `Glycémie synchronisée en direct (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${userProfile.glucoseUnit}.`,
+        });
+      }
+    } catch (err: any) {
+      setCgmFeedback({
+        type: 'error',
+        message: `Échec de connexion au capteur CGM : ${err?.message || 'Capteur non joignable'}.`,
+        hint: 'Saisissez votre glycémie manuellement ci-contre pour calculer votre bolus en toute sécurité.',
+      });
     } finally {
       setIsReadingCGM(false);
     }
@@ -777,6 +806,42 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               </span>
             </div>
           </div>
+
+          {cgmFeedback && (
+            <div
+              className={`mt-3 p-3 rounded-2xl border text-xs flex items-start gap-2.5 animate-in fade-in transition-all ${
+                cgmFeedback.type === 'error'
+                  ? 'bg-rose-950/80 border-rose-500/60 text-rose-100'
+                  : cgmFeedback.type === 'warning'
+                  ? 'bg-amber-950/80 border-amber-500/60 text-amber-100'
+                  : 'bg-emerald-950/80 border-emerald-500/60 text-emerald-100'
+              }`}
+            >
+              <div className="shrink-0 mt-0.5">
+                {cgmFeedback.type === 'error' ? (
+                  <AlertCircle className="w-4 h-4 text-rose-400" />
+                ) : cgmFeedback.type === 'warning' ? (
+                  <AlertTriangle className="w-4 h-4 text-amber-400" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                )}
+              </div>
+              <div className="flex-1 min-w-0 pr-2">
+                <p className="font-bold text-[11px] leading-snug">{cgmFeedback.message}</p>
+                {cgmFeedback.hint && (
+                  <p className="mt-1 text-[10px] opacity-85 leading-relaxed">{cgmFeedback.hint}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCgmFeedback(null)}
+                className="text-current opacity-60 hover:opacity-100 p-0.5 cursor-pointer"
+                aria-label="Fermer l'alerte CGM"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
 
           {currentGlucoseNum !== undefined && (
             <div className="mt-2.5 pt-2 border-t border-white/10 flex flex-col gap-2 text-xs">
