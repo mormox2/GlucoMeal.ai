@@ -594,7 +594,7 @@ export async function connectLinxCGM(
           specsHighlight: 'Étanche IP68 • 15 Jours',
           source: 'bluetooth_real',
           isSimulation: false,
-          message: 'Recherche LinX CGM annulée par l’utilisateur.',
+          message: 'Capteur LinX non détecté ou sélection annulée. Le capteur LinX est généralement verrouillé en liaison exclusive par son application mobile officielle.',
         };
       }
       console.warn('Web Bluetooth LinX scan notice:', err);

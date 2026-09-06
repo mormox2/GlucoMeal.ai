@@ -966,15 +966,23 @@ interface SyncStatusFeedback {
                         <span className="text-[11px] text-rose-100/90 leading-tight">{linxResult.message}</span>
                       </div>
                     </div>
-                    <div className="p-2.5 rounded-xl bg-black/40 border border-white/10 text-[10px] text-slate-300 space-y-1">
+                    <div className="p-2.5 rounded-xl bg-black/40 border border-white/10 text-[10px] text-slate-300 space-y-1.5">
                       <div className="font-bold text-cyan-300 flex items-center gap-1">
-                        <Info className="w-3 h-3" /> Guide de dépannage LinX :
+                        <Info className="w-3 h-3" /> Diagnostic & Guide LinX CGM :
                       </div>
-                      <ul className="list-disc list-inside space-y-0.5 text-slate-300">
-                        <li>Assurez-vous que le transmetteur LinX / AiDEX est bien clipsé sur le capteur.</li>
-                        <li>Vérifiez les permissions Web Bluetooth de votre navigateur Chrome/Edge.</li>
-                        <li>Le capteur a une validité de 15 jours IP68 : vérifiez sa date de pose.</li>
-                        <li>Vous pouvez saisir directement votre glycémie dans l'écran principal.</li>
+                      <ul className="list-disc list-inside space-y-1 text-slate-300">
+                        <li>
+                          <strong className="text-white">Liaison exclusive mobile :</strong> Si votre capteur LinX est connecté à son application officielle sur smartphone (AiDEX / LinX), il n'est plus découvrable en Bluetooth (connexion 1-à-1 exclusive).
+                        </li>
+                        <li>
+                          <strong className="text-cyan-300">Solution recommandée :</strong> Utilisez l'onglet <span className="font-semibold text-white">Nightscout</span> dans GlucoMeal.ai si vous poussez vos données via xDrip+ ou le cloud.
+                        </li>
+                        <li>
+                          <strong className="text-white">Test direct :</strong> Désactivez temporairement le Bluetooth de votre smartphone pour vérifier si le capteur diffuse en mode découvrable.
+                        </li>
+                        <li>
+                          <strong className="text-amber-200">Alternative sécurisée :</strong> Vous pouvez saisir directement votre glycémie dans l'écran principal pour le calcul du bolus.
+                        </li>
                       </ul>
                     </div>
                   </div>
