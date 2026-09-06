@@ -76,8 +76,8 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
         {/* Header */}
         <div className="p-5 bg-gradient-to-br from-emerald-800 to-teal-900 text-white flex items-center justify-between relative overflow-hidden">
           <div className="relative z-10 flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white shadow-inner">
-              <Smartphone className="w-6 h-6 text-emerald-300" />
+            <div className="w-12 h-12 rounded-2xl overflow-hidden shadow-lg border border-white/20 shrink-0">
+              <img src="/icon.svg" alt="GlucoMeal" className="w-full h-full object-cover" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">

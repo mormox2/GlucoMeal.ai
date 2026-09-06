@@ -75,8 +75,8 @@ export const Header: React.FC<HeaderProps> = ({
               onClick={() => setCurrentTab('app')}
               className="flex items-center gap-1.5 sm:gap-2 cursor-pointer group"
             >
-              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-emerald-600 to-teal-800 flex items-center justify-center text-white shadow-xs group-hover:scale-105 transition-transform shrink-0">
-                <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-xl overflow-hidden shadow-xs group-hover:scale-105 transition-transform shrink-0 border border-emerald-900/10">
+                <img src="/icon.svg" alt="GlucoMeal.AI" className="w-full h-full object-cover" />
               </div>
               <div>
                 <div className="flex items-center gap-1 sm:gap-1.5">

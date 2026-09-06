@@ -62,8 +62,8 @@ export const LandingPageView: React.FC<LandingPageViewProps> = ({
       <header className="sticky top-0 z-30 bg-white border-b border-slate-200">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 shrink-0">
-            <div className="w-8 h-8 rounded-lg bg-emerald-700 text-white flex items-center justify-center font-bold text-sm shrink-0">
-              <HeartPulse className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-lg overflow-hidden shrink-0 shadow-xs border border-emerald-900/10">
+              <img src="/icon.svg" alt="GlucoMeal Clinical" className="w-full h-full object-cover" />
             </div>
             <div>
               <div className="flex items-center gap-1.5">

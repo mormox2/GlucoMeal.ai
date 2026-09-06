@@ -95,8 +95,8 @@ export const PWAInstallBanner: React.FC<PWAInstallBannerProps> = ({ onOpenInstal
         <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:max-w-md z-40 bg-slate-900/95 text-white p-4 rounded-2xl shadow-2xl border border-emerald-500/30 backdrop-blur-md animate-in slide-in-from-bottom-5">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
-                <Smartphone className="w-5 h-5" />
+              <div className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-xs border border-emerald-500/30">
+                <img src="/icon.svg" alt="GlucoMeal" className="w-full h-full object-cover" />
               </div>
               <div>
                 <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
