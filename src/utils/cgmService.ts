@@ -90,7 +90,10 @@ export async function fetchNightscoutReading(
   }
 
   const latest = entries[0];
-  const rawSgv = typeof latest.sgv === 'number' ? latest.sgv : 100;
+  if (!latest || typeof latest.sgv !== 'number') {
+    throw new Error("La dernière mesure Nightscout est invalide ou ne contient pas de valeur glycémique SGV réelle.");
+  }
+  const rawSgv = latest.sgv;
   const glucose = unit === 'g/L' ? Number((rawSgv / 100).toFixed(2)) : Math.round(rawSgv);
 
   // Direction vers trend standardisée
@@ -108,16 +111,17 @@ export async function fetchNightscoutReading(
 
   // Sparkline chronologique (du plus ancien au plus récent)
   const sortedEntries = [...entries].reverse();
-  const recentSparkline = sortedEntries.map((e) => {
-    const d = new Date(e.date || e.dateString || Date.now());
-    const hours = d.getHours().toString().padStart(2, '0');
-    const minutes = d.getMinutes().toString().padStart(2, '0');
-    const val = typeof e.sgv === 'number' ? e.sgv : 100;
-    return {
-      time: `${hours}:${minutes}`,
-      value: unit === 'g/L' ? Number((val / 100).toFixed(2)) : Math.round(val),
-    };
-  });
+  const recentSparkline = sortedEntries
+    .filter((e) => typeof e.sgv === 'number')
+    .map((e) => {
+      const d = new Date(e.date || e.dateString || Date.now());
+      const hours = d.getHours().toString().padStart(2, '0');
+      const minutes = d.getMinutes().toString().padStart(2, '0');
+      return {
+        time: `${hours}:${minutes}`,
+        value: unit === 'g/L' ? Number((e.sgv / 100).toFixed(2)) : Math.round(e.sgv),
+      };
+    });
 
   return {
     glucose,
@@ -137,131 +141,49 @@ export async function fetchNightscoutReading(
 }
 
 /**
- * Lit la glycémie actuelle depuis le capteur CGM (ou passerelle LibreLinkUp / Dexcom Share / Nightscout)
+ * Lit la glycémie actuelle depuis le capteur CGM (ou passerelle Nightscout / BLE / Cloud)
+ * Règle stricte : AUCUNE simulation ni valeur inventée. Soit la lecture réelle exacte, soit une erreur.
  */
 export async function fetchCurrentCGMReading(
   config: CGMConfig,
   unit: 'g/L' | 'mg/dL' = 'g/L'
 ): Promise<CGMReading> {
-  // 1. Si Nightscout est sélectionné
-  if (config.deviceType === 'nightscout') {
+  // 1. Si Nightscout est sélectionné (ou si LinX/Syai utilise la passerelle Nightscout)
+  const isNightscoutSelected =
+    config.deviceType === 'nightscout' ||
+    (config.deviceType === 'linx' && config.linxBridgeMode === 'nightscout_bridge') ||
+    (config.deviceType === 'syai' && config.syaiBridgeMode === 'nightscout_bridge');
+
+  if (isNightscoutSelected) {
     if (config.nightscoutUrl && config.nightscoutUrl.trim().startsWith('http')) {
-      try {
-        return await fetchNightscoutReading(config, unit);
-      } catch (err: any) {
-        console.warn('Requête Nightscout réelle impossible, bascule sur banc d’essai virtuel:', err);
-        const simulated = await simulateCGMReading(config, unit);
-        return {
-          ...simulated,
-          errorMessage: `Nightscout non joignable (${err.message || 'CORS ou hors-ligne'}). Mode Démo activé.`,
-        };
-      }
-    } else {
-      const simulated = await simulateCGMReading(config, unit);
-      return {
-        ...simulated,
-        errorMessage: "URL Nightscout non configurée. Veuillez renseigner l'adresse dans les paramètres.",
-      };
+      return await fetchNightscoutReading(config, unit);
     }
+    throw new Error("URL Nightscout non configurée. Aucune simulation autorisée : veuillez renseigner l'adresse de votre serveur Nightscout ou saisir votre glycémie manuellement.");
   }
 
-  // 2. Capteurs chinois (LinX, Syai, Sibionics) en lecture directe
-  if (config.deviceType === 'linx' || config.deviceType === 'syai' || config.deviceType === 'sibionics') {
-    const simulated = await simulateCGMReading(config, unit);
-    return {
-      ...simulated,
-      errorMessage: "Mode Banc d’Essai Virtuel. Pour appairer votre capteur physique, utilisez l'onglet 'Test BLE & NFC Physique'.",
-    };
+  // 2. Capteurs chinois (LinX, Syai, Sibionics)
+  if (config.deviceType === 'linx') {
+    throw new Error("Capteur LinX CGM non synchronisé : aucune mesure réelle reçue. Connectez le transmetteur ou utilisez la passerelle Nightscout/xDrip+. Aucune simulation autorisée.");
   }
 
-  // 3. Mode simulation clinique par défaut
-  const simulated = await simulateCGMReading(config, unit);
-  return {
-    ...simulated,
-    errorMessage: config.deviceType === 'simulator'
-      ? undefined
-      : "Mode Banc d’Essai Virtuel actif (Simulation pédagogique certifiée).",
-  };
-}
-
-/**
- * Génère une lecture simulée réaliste pour banc d'essai et démo clinique
- */
-async function simulateCGMReading(
-  config: CGMConfig,
-  unit: 'g/L' | 'mg/dL' = 'g/L'
-): Promise<CGMReading> {
-  // Petite pause pour simuler l'interrogation de la passerelle
-  await new Promise((resolve) => setTimeout(resolve, 650));
-
-  // Valeurs de tendance réalistes
-  const trends: CGMReading['trend'][] = ['flat', 'up_slow', 'up_fast', 'down_slow'];
-  const randomTrend = trends[Math.floor(Math.random() * trends.length)];
-
-  // Génération d'une glycémie réaliste (ex: 1.10 à 1.45 g/L)
-  const baseValueG = Number((1.12 + (Math.random() * 0.35 - 0.1)).toFixed(2));
-  const glucose = unit === 'g/L' ? baseValueG : Math.round(baseValueG * 100);
-
-  // Génération des 12 derniers points CGM (échantillonnage 15 min sur 3h)
-  const recentSparkline: { time: string; value: number }[] = [];
-  const now = Date.now();
-  let walkingValue = baseValueG;
-
-  for (let i = 11; i >= 0; i--) {
-    const timePoint = new Date(now - i * 15 * 60 * 1000);
-    const hours = timePoint.getHours().toString().padStart(2, '0');
-    const minutes = timePoint.getMinutes().toString().padStart(2, '0');
-    if (i > 0) {
-      walkingValue += (Math.random() - 0.48) * 0.08;
-      walkingValue = Math.max(0.8, Math.min(2.1, walkingValue));
-    } else {
-      walkingValue = baseValueG;
-    }
-    recentSparkline.push({
-      time: `${hours}:${minutes}`,
-      value: unit === 'g/L' ? Number(walkingValue.toFixed(2)) : Math.round(walkingValue * 100),
-    });
+  if (config.deviceType === 'syai') {
+    throw new Error("Capteur Syai Tag non synchronisé : aucune mesure réelle reçue. Appairez le capteur via Bluetooth Smart ou utilisez la passerelle Nightscout. Aucune simulation autorisée.");
   }
 
-  const serialMap: Record<string, string> = {
-    freestyle: 'FSL3-TN-981240',
-    dexcom: 'DXG7-TN-772183',
-    nightscout: 'NS-GATE-502',
-    simulator: 'SIM-BLE-001',
-    manual: 'MAN-001',
-    linx: config.linxSerialNumber || 'LX-TN-882310',
-    syai: config.syaiSerialNumber || 'ST-TN-409182',
-    sibionics: config.sibionicsSerialNumber || 'SB-TN-118274',
-  };
+  if (config.deviceType === 'sibionics') {
+    throw new Error("Capteur Sibionics GS1 non synchronisé. Aucune donnée simulée autorisée : saisissez votre glycémie manuellement.");
+  }
 
-  const modelMap: Record<string, { name: string; mard: string; defaultDays: number }> = {
-    freestyle: { name: 'FreeStyle Libre 2 / 3', mard: '9.2%', defaultDays: 14 },
-    dexcom: { name: 'Dexcom G7 / ONE', mard: '8.2%', defaultDays: 10 },
-    nightscout: { name: 'Nightscout Bridge', mard: 'Variable', defaultDays: 14 },
-    simulator: { name: 'Simulateur Clinique', mard: '0.0%', defaultDays: 14 },
-    linx: { name: 'LinX CGMS (MicroTech / AiDEX)', mard: '8.9%', defaultDays: 15 },
-    syai: { name: 'Syai Tag CGMS (Syai Health)', mard: '8.1%', defaultDays: 14 },
-    sibionics: { name: 'Sibionics GS1 (SiBio)', mard: '8.8%', defaultDays: 14 },
-    manual: { name: 'Saisie Manuelle', mard: '-', defaultDays: 0 },
-  };
+  // 3. FreeStyle Libre & Dexcom
+  if (config.deviceType === 'freestyle') {
+    throw new Error("Capteur FreeStyle Libre : scannez le capteur via NFC ou connectez votre compte LibreLinkUp. Aucune simulation autorisée.");
+  }
 
-  const modelInfo = modelMap[config.deviceType] || modelMap.freestyle;
+  if (config.deviceType === 'dexcom') {
+    throw new Error("Capteur Dexcom : connectez votre passerelle Dexcom Share ou Nightscout. Aucune simulation autorisée.");
+  }
 
-  return {
-    glucose,
-    unit,
-    trend: randomTrend,
-    timestamp: new Date().toISOString(),
-    device: config.deviceType,
-    sensorExpiryDays: config.sensorExpiryDays || modelInfo.defaultDays,
-    sensorSerialNumber: config.sensorSerialNumber || serialMap[config.deviceType] || 'CGM-TN-001',
-    sensorModelName: modelInfo.name,
-    mardScore: modelInfo.mard,
-    batteryLevel: Math.floor(82 + Math.random() * 16),
-    recentSparkline,
-    isSimulation: true,
-    source: 'simulation',
-  };
+  throw new Error("Aucun capteur CGM connecté. Aucune donnée simulée n'est autorisée : saisissez votre glycémie manuellement pour calculer votre bolus.");
 }
 
 /**
@@ -447,11 +369,18 @@ export async function connectBluetoothGlucoseMeter(
       });
 
       if (!device) {
-        throw new Error('Aucun appareil sélectionné.');
+        return {
+          success: false,
+          unit,
+          timestamp: new Date().toISOString(),
+          source: 'bluetooth_real',
+          isSimulation: false,
+          message: 'Aucun appareil Bluetooth sélectionné. Aucune simulation autorisée.',
+        };
       }
 
       const server = await device.gatt?.connect();
-      let valMgDl = 118;
+      let valMgDl: number | null = null;
       try {
         if (server) {
           const service = await server.getPrimaryService('glucose');
@@ -471,7 +400,19 @@ export async function connectBluetoothGlucoseMeter(
           }
         }
       } catch (e) {
-        console.warn('Lecture caractéristique BLE directe non disponible, utilisation device flux:', e);
+        console.warn('Lecture caractéristique BLE directe non disponible:', e);
+      }
+
+      if (valMgDl === null) {
+        return {
+          success: false,
+          deviceName: device.name || 'Lecteur BLE',
+          unit,
+          timestamp: new Date().toISOString(),
+          source: 'bluetooth_real',
+          isSimulation: false,
+          message: `Appareil ${device.name || 'BLE'} connecté, mais aucune mesure exacte n'a pu être extraite du service Bluetooth (GATT 0x1808). Aucune simulation autorisée.`,
+        };
       }
 
       const valGL = Number((valMgDl / 100).toFixed(2));
@@ -485,7 +426,7 @@ export async function connectBluetoothGlucoseMeter(
         timestamp: new Date().toISOString(),
         source: 'bluetooth_real',
         isSimulation: false,
-        message: `Connecté à ${device.name || 'Lecteur BLE'} ! Glycémie reçue : ${finalVal} ${unit}`,
+        message: `Connecté à ${device.name || 'Lecteur BLE'} ! Glycémie réelle reçue : ${finalVal} ${unit}`,
       };
     } catch (err: any) {
       if (err.name === 'NotFoundError' || err.message?.includes('User cancelled')) {
@@ -495,28 +436,27 @@ export async function connectBluetoothGlucoseMeter(
           timestamp: new Date().toISOString(),
           source: 'bluetooth_real',
           isSimulation: false,
-          message: 'Appairage annulé par l’utilisateur.',
+          message: 'Appairage annulé ou aucun lecteur détecté. Aucune simulation autorisée.',
         };
       }
-      console.warn('Web Bluetooth restriction or cancel:', err);
+      return {
+        success: false,
+        unit,
+        timestamp: new Date().toISOString(),
+        source: 'bluetooth_real',
+        isSimulation: false,
+        message: `Erreur d'accès Bluetooth : ${err?.message || 'Connexion non établie'}. Aucune simulation autorisée.`,
+      };
     }
   }
 
-  // Graceful fallback simulation
-  await new Promise((r) => setTimeout(r, 850));
-  const simValMg = Math.round(108 + Math.random() * 25);
-  const simValGL = Number((simValMg / 100).toFixed(2));
-  const glucose = unit === 'g/L' ? simValGL : simValMg;
-
   return {
-    success: true,
-    deviceName: 'Lecteur Contour Next ONE (Mode BLE Fallback)',
-    glucoseValue: glucose,
+    success: false,
     unit,
     timestamp: new Date().toISOString(),
-    source: 'bluetooth_simulated',
-    isSimulation: true,
-    message: `Test BLE synchronisé avec succès. Glycémie : ${glucose} ${unit}`,
+    source: 'bluetooth_real',
+    isSimulation: false,
+    message: 'Web Bluetooth non supporté par ce navigateur (Chrome ou Edge requis). Aucune simulation autorisée.',
   };
 }
 
@@ -546,43 +486,57 @@ export async function connectLinxCGM(
       });
 
       if (device) {
+        let finalVal: number | null = null;
         try {
-          await device.gatt?.connect();
+          const server = await device.gatt?.connect();
+          if (server) {
+            const service = await server.getPrimaryService('glucose');
+            const char = await service.getCharacteristic(0x2a18);
+            const value = await char.readValue();
+            if (value && value.byteLength >= 14) {
+              const rawConcentration = value.getUint16(12, true);
+              const mantissa = rawConcentration & 0x0fff;
+              const exponent =
+                (rawConcentration >> 12) >= 8
+                  ? (rawConcentration >> 12) - 16
+                  : rawConcentration >> 12;
+              const computedVal = mantissa * Math.pow(10, exponent) * 100000;
+              if (computedVal > 30 && computedVal < 500) {
+                finalVal = unit === 'g/L' ? Number((computedVal / 100).toFixed(2)) : Math.round(computedVal);
+              }
+            }
+          }
         } catch (e) {
           console.warn('LinX GATT direct connect info:', e);
         }
 
-        const baseValG = Number((1.15 + (Math.random() * 0.25 - 0.1)).toFixed(2));
-        const valMg = Math.round(baseValG * 100);
-        const glucose = unit === 'g/L' ? baseValG : valMg;
+        if (finalVal !== null) {
+          return {
+            success: true,
+            brand: 'linx',
+            modelName: 'LinX CGMS (MicroTech Medical)',
+            deviceName: device.name || 'LinX Sensor',
+            serialNumber: 'LX-883920',
+            glucoseValue: finalVal,
+            unit,
+            trend: 'flat',
+            timestamp: new Date().toISOString(),
+            sensorExpiryDays: 15,
+            mardScore: '8.9%',
+            batteryLevel: 94,
+            samplingInterval: '1 minute (1440 pts/jour)',
+            specsHighlight: 'Étanche IP68 • 15 Jours • Transmission continue BLE',
+            source: 'bluetooth_real',
+            isSimulation: false,
+            message: `LinX CGM connecté via BLE physique (${device.name || 'LinX'}). Glycémie réelle : ${finalVal} ${unit}`,
+          };
+        }
 
-        return {
-          success: true,
-          brand: 'linx',
-          modelName: 'LinX CGMS (MicroTech Medical)',
-          deviceName: device.name || 'LinX-LX883920',
-          serialNumber: 'LX-883920',
-          glucoseValue: glucose,
-          unit,
-          trend: 'flat',
-          timestamp: new Date().toISOString(),
-          sensorExpiryDays: 15,
-          mardScore: '8.9%',
-          batteryLevel: 94,
-          samplingInterval: '1 minute (1440 pts/jour)',
-          specsHighlight: 'Étanche IP68 • 15 Jours • Transmission continue BLE',
-          source: 'bluetooth_real',
-          isSimulation: false,
-          message: `LinX CGM connecté via BLE physique (${device.name || 'LinX'}). Glycémie : ${glucose} ${unit}`,
-        };
-      }
-    } catch (err: any) {
-      if (err.name === 'NotFoundError' || err.message?.includes('User cancelled')) {
         return {
           success: false,
           brand: 'linx',
-          modelName: 'LinX CGMS (MicroTech)',
-          deviceName: 'LinX CGM Sensor',
+          modelName: 'LinX CGMS (MicroTech Medical)',
+          deviceName: device.name || 'LinX Sensor',
           serialNumber: 'LX-883920',
           unit,
           trend: 'flat',
@@ -594,37 +548,48 @@ export async function connectLinxCGM(
           specsHighlight: 'Étanche IP68 • 15 Jours',
           source: 'bluetooth_real',
           isSimulation: false,
-          message: 'Capteur LinX non détecté ou sélection annulée. Le capteur LinX est généralement verrouillé en liaison exclusive par son application mobile officielle.',
+          message: `Capteur LinX appairé (${device.name || 'LinX'}), mais le flux propriétaire chiffré requiert la passerelle officielle LinX ou Nightscout. Aucune simulation autorisée.`,
         };
       }
-      console.warn('Web Bluetooth LinX scan notice:', err);
+    } catch (err: any) {
+      return {
+        success: false,
+        brand: 'linx',
+        modelName: 'LinX CGMS (MicroTech)',
+        deviceName: 'LinX CGM Sensor',
+        serialNumber: 'LX-883920',
+        unit,
+        trend: 'flat',
+        timestamp: new Date().toISOString(),
+        sensorExpiryDays: 15,
+        mardScore: '8.9%',
+        batteryLevel: 94,
+        samplingInterval: '1 minute',
+        specsHighlight: 'Étanche IP68 • 15 Jours',
+        source: 'bluetooth_real',
+        isSimulation: false,
+        message: 'Capteur LinX non détecté ou sélection annulée (le capteur est généralement verrouillé en liaison exclusive par son application mobile officielle). Aucune simulation autorisée.',
+      };
     }
   }
 
-  // Graceful certified simulation
-  await new Promise((r) => setTimeout(r, 800));
-  const baseValG = Number((1.18 + (Math.random() * 0.22 - 0.1)).toFixed(2));
-  const valMg = Math.round(baseValG * 100);
-  const glucose = unit === 'g/L' ? baseValG : valMg;
-
   return {
-    success: true,
+    success: false,
     brand: 'linx',
-    modelName: 'LinX CGMS (MicroTech / AiDEX)',
-    deviceName: 'LinX-BLE-883920 (Simulé)',
-    serialNumber: 'LX-TN-883920',
-    glucoseValue: glucose,
+    modelName: 'LinX CGMS (MicroTech)',
+    deviceName: 'LinX CGM Sensor',
+    serialNumber: 'LX-883920',
     unit,
     trend: 'flat',
     timestamp: new Date().toISOString(),
     sensorExpiryDays: 15,
     mardScore: '8.9%',
-    batteryLevel: 92,
-    samplingInterval: '1 minute (1440 lectures/24h)',
-    specsHighlight: 'Capteur 15 jours • Étanche IP68 (bain/nage) • Sans piqûre',
-    source: 'bluetooth_simulated',
-    isSimulation: true,
-    message: `Capteur LinX CGM connecté en flux direct 1-min : ${glucose} ${unit}`,
+    batteryLevel: 94,
+    samplingInterval: '1 minute',
+    specsHighlight: 'Étanche IP68 • 15 Jours',
+    source: 'bluetooth_real',
+    isSimulation: false,
+    message: 'Web Bluetooth non supporté par ce navigateur (Chrome ou Edge requis). Aucune simulation autorisée.',
   };
 }
 
@@ -653,43 +618,57 @@ export async function connectSyaiTagCGM(
       });
 
       if (device) {
+        let finalVal: number | null = null;
         try {
-          await device.gatt?.connect();
+          const server = await device.gatt?.connect();
+          if (server) {
+            const service = await server.getPrimaryService('glucose');
+            const char = await service.getCharacteristic(0x2a18);
+            const value = await char.readValue();
+            if (value && value.byteLength >= 14) {
+              const rawConcentration = value.getUint16(12, true);
+              const mantissa = rawConcentration & 0x0fff;
+              const exponent =
+                (rawConcentration >> 12) >= 8
+                  ? (rawConcentration >> 12) - 16
+                  : rawConcentration >> 12;
+              const computedVal = mantissa * Math.pow(10, exponent) * 100000;
+              if (computedVal > 30 && computedVal < 500) {
+                finalVal = unit === 'g/L' ? Number((computedVal / 100).toFixed(2)) : Math.round(computedVal);
+              }
+            }
+          }
         } catch (e) {
           console.warn('Syai Tag direct connect notice:', e);
         }
 
-        const baseValG = Number((1.22 + (Math.random() * 0.24 - 0.1)).toFixed(2));
-        const valMg = Math.round(baseValG * 100);
-        const glucose = unit === 'g/L' ? baseValG : valMg;
+        if (finalVal !== null) {
+          return {
+            success: true,
+            brand: 'syai',
+            modelName: 'Syai Tag CGMS (Syai Health)',
+            deviceName: device.name || 'SyaiTag-409182',
+            serialNumber: 'ST-409182',
+            glucoseValue: finalVal,
+            unit,
+            trend: 'up_slow',
+            timestamp: new Date().toISOString(),
+            sensorExpiryDays: 14,
+            mardScore: '8.1% (Excellence clinique)',
+            batteryLevel: 97,
+            samplingInterval: '1 à 3 minutes',
+            specsHighlight: 'Poids plume 1.2g • MARD 8.1% • Bluetooth Smart',
+            source: 'bluetooth_real',
+            isSimulation: false,
+            message: `Syai Tag connecté via BLE physique (${device.name || 'Syai Tag'}). Glycémie réelle : ${finalVal} ${unit}`,
+          };
+        }
 
-        return {
-          success: true,
-          brand: 'syai',
-          modelName: 'Syai Tag CGMS (Syai Health)',
-          deviceName: device.name || 'SyaiTag-409182',
-          serialNumber: 'ST-409182',
-          glucoseValue: glucose,
-          unit,
-          trend: 'up_slow',
-          timestamp: new Date().toISOString(),
-          sensorExpiryDays: 14,
-          mardScore: '8.1% (Excellence clinique)',
-          batteryLevel: 97,
-          samplingInterval: '1 à 3 minutes',
-          specsHighlight: 'Poids plume 1.2g • MARD 8.1% • Bluetooth Smart',
-          source: 'bluetooth_real',
-          isSimulation: false,
-          message: `Syai Tag connecté via BLE physique (${device.name || 'Syai Tag'}). Glycémie : ${glucose} ${unit}`,
-        };
-      }
-    } catch (err: any) {
-      if (err.name === 'NotFoundError' || err.message?.includes('User cancelled')) {
         return {
           success: false,
           brand: 'syai',
           modelName: 'Syai Tag CGMS (Syai Health)',
-          deviceName: 'Syai Tag Sensor',
+          deviceName: device.name || 'Syai Tag Sensor',
           serialNumber: 'ST-409182',
           unit,
           trend: 'flat',
@@ -701,37 +680,48 @@ export async function connectSyaiTagCGM(
           specsHighlight: 'Ultra-léger 1.2g • MARD 8.1%',
           source: 'bluetooth_real',
           isSimulation: false,
-          message: 'Recherche Syai Tag annulée par l’utilisateur.',
+          message: `Capteur Syai Tag appairé (${device.name || 'Syai Tag'}), mais la trame propriétaire requiert la passerelle officielle Syai ou Nightscout. Aucune simulation autorisée.`,
         };
       }
-      console.warn('Web Bluetooth Syai scan notice:', err);
+    } catch (err: any) {
+      return {
+        success: false,
+        brand: 'syai',
+        modelName: 'Syai Tag CGMS (Syai Health)',
+        deviceName: 'Syai Tag Sensor',
+        serialNumber: 'ST-409182',
+        unit,
+        trend: 'flat',
+        timestamp: new Date().toISOString(),
+        sensorExpiryDays: 14,
+        mardScore: '8.1%',
+        batteryLevel: 95,
+        samplingInterval: '1-3 min',
+        specsHighlight: 'Ultra-léger 1.2g • MARD 8.1%',
+        source: 'bluetooth_real',
+        isSimulation: false,
+        message: 'Recherche Syai Tag annulée ou aucun capteur détecté. Aucune simulation autorisée.',
+      };
     }
   }
 
-  // Graceful certified simulation
-  await new Promise((r) => setTimeout(r, 800));
-  const baseValG = Number((1.20 + (Math.random() * 0.22 - 0.1)).toFixed(2));
-  const valMg = Math.round(baseValG * 100);
-  const glucose = unit === 'g/L' ? baseValG : valMg;
-
   return {
-    success: true,
+    success: false,
     brand: 'syai',
     modelName: 'Syai Tag CGMS (Syai Health)',
-    deviceName: 'SyaiTag-ST409182 (Simulé)',
-    serialNumber: 'ST-TN-409182',
-    glucoseValue: glucose,
+    deviceName: 'Syai Tag Sensor',
+    serialNumber: 'ST-409182',
     unit,
     trend: 'flat',
     timestamp: new Date().toISOString(),
     sensorExpiryDays: 14,
-    mardScore: '8.1% (Calibré usine)',
-    batteryLevel: 96,
-    samplingInterval: '1 à 3 minutes continu',
-    specsHighlight: 'Format pièce de monnaie (1.2g) • MARD 8.1% • 14 Jours',
-    source: 'bluetooth_simulated',
-    isSimulation: true,
-    message: `Capteur Syai Tag synchronisé en direct Bluetooth Smart : ${glucose} ${unit}`,
+    mardScore: '8.1%',
+    batteryLevel: 95,
+    samplingInterval: '1-3 min',
+    specsHighlight: 'Ultra-léger 1.2g • MARD 8.1%',
+    source: 'bluetooth_real',
+    isSimulation: false,
+    message: 'Web Bluetooth non supporté par ce navigateur (Chrome ou Edge requis). Aucune simulation autorisée.',
   };
 }
 
@@ -767,27 +757,22 @@ export async function scanNFCGlucoseSensor(
             timestamp: new Date().toISOString(),
             source: 'nfc_real',
             isSimulation: false,
-            message: 'Délai NFC écoulé sans contact capteur.',
+            message: 'Délai NFC écoulé sans contact capteur. Aucune simulation autorisée.',
           });
         }, 12000);
 
         ndef.onreading = (event: any) => {
           clearTimeout(timeout);
-          const serial = event.serialNumber || 'FSL-NFC-74892';
-          const simValMg = Math.round(112 + Math.random() * 25);
-          const simValGL = Number((simValMg / 100).toFixed(2));
-          const glucose = unit === 'g/L' ? simValGL : simValMg;
-
+          const serial = event.serialNumber || 'FSL-NFC';
           resolve({
-            success: true,
-            sensorType: 'FreeStyle Libre 2 (Scan NFC direct)',
+            success: false,
+            sensorType: 'FreeStyle Libre (Puce NFC détectée)',
             serialNumber: serial,
-            glucoseValue: glucose,
             unit,
             timestamp: new Date().toISOString(),
             source: 'nfc_real',
             isSimulation: false,
-            message: `Capteur scanné avec succès par NFC (S/N: ${serial}) : ${glucose} ${unit}`,
+            message: `Capteur NFC détecté (S/N: ${serial}), mais le protocole Abbott propriétaire nécessite l'application LibreLink ou LibreLinkUp. Aucune simulation autorisée.`,
           });
         };
 
@@ -799,30 +784,28 @@ export async function scanNFCGlucoseSensor(
             timestamp: new Date().toISOString(),
             source: 'nfc_real',
             isSimulation: false,
-            message: 'Erreur de lecture de l’étiquette NFC.',
+            message: 'Erreur de lecture de l’étiquette NFC. Aucune simulation autorisée.',
           });
         };
       });
     } catch (err: any) {
-      console.warn('Web NFC access error:', err);
+      return {
+        success: false,
+        unit,
+        timestamp: new Date().toISOString(),
+        source: 'nfc_real',
+        isSimulation: false,
+        message: `Erreur d'accès Web NFC : ${err?.message || 'Accès refusé'}. Aucune simulation autorisée.`,
+      };
     }
   }
 
-  // Graceful fallback simulation
-  await new Promise((r) => setTimeout(r, 1100));
-  const simValMg = Math.round(114 + Math.random() * 20);
-  const simValGL = Number((simValMg / 100).toFixed(2));
-  const glucose = unit === 'g/L' ? simValGL : simValMg;
-
   return {
-    success: true,
-    sensorType: 'FreeStyle Libre 2/3 (Mode NFC Démo)',
-    serialNumber: 'FSL2-TN-382901',
-    glucoseValue: glucose,
+    success: false,
     unit,
     timestamp: new Date().toISOString(),
-    source: 'nfc_simulated',
-    isSimulation: true,
-    message: `Scan NFC effectué avec succès : ${glucose} ${unit} (Capteur FSL2-TN-382901)`,
+    source: 'nfc_real',
+    isSimulation: false,
+    message: 'Web NFC non supporté sur cet appareil (Chrome sur Android avec puce NFC active requis). Aucune simulation autorisée.',
   };
 }

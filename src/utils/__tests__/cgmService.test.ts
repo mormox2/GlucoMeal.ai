@@ -154,7 +154,7 @@ describe('Service CGM & Évaluation Post-Prandiale', () => {
       expect(reading.sensorSerialNumber).toBe('xDrip-DexcomG7');
     });
 
-    it('bascule proprement en mode démo si Nightscout est inaccessible (hors-ligne ou CORS)', async () => {
+    it('rejette avec une erreur sans simulation si Nightscout est inaccessible (hors-ligne ou CORS)', async () => {
       global.fetch = vi.fn().mockRejectedValue(new Error('Failed to fetch'));
 
       const config: CGMConfig = {
@@ -163,37 +163,33 @@ describe('Service CGM & Évaluation Post-Prandiale', () => {
         nightscoutUrl: 'https://inaccessible-nightscout.example.com',
       };
 
-      const reading = await fetchCurrentCGMReading(config, 'g/L');
-
-      expect(reading.isSimulation).toBe(true);
-      expect(reading.source).toBe('simulation');
-      expect(reading.errorMessage).toContain('Nightscout non joignable');
-      expect(reading.glucose).toBeGreaterThan(0);
+      await expect(fetchCurrentCGMReading(config, 'g/L')).rejects.toThrow(/Failed to fetch/);
     });
 
-    it('alerte explicitement l’utilisateur si l’URL Nightscout est absente', async () => {
+    it('alerte explicitement l’utilisateur sans simulation si l’URL Nightscout est absente', async () => {
       const config: CGMConfig = {
         deviceType: 'nightscout',
         isConnected: true,
         nightscoutUrl: '',
       };
 
-      const reading = await fetchCurrentCGMReading(config, 'g/L');
-
-      expect(reading.isSimulation).toBe(true);
-      expect(reading.errorMessage).toBe("URL Nightscout non configurée. Veuillez renseigner l'adresse dans les paramètres.");
+      await expect(fetchCurrentCGMReading(config, 'g/L')).rejects.toThrow("URL Nightscout non configurée. Aucune simulation autorisée");
     });
 
-    it('informe l’utilisateur sur le banc d’essai virtuel pour LinX CGM et Syai Tag', async () => {
+    it('rejette sans aucune simulation pour LinX CGM et Syai Tag si aucun flux réel n’est connecté', async () => {
       const configLinx: CGMConfig = {
         deviceType: 'linx',
         isConnected: true,
       };
 
-      const reading = await fetchCurrentCGMReading(configLinx, 'g/L');
+      await expect(fetchCurrentCGMReading(configLinx, 'g/L')).rejects.toThrow("Capteur LinX CGM non synchronisé");
 
-      expect(reading.isSimulation).toBe(true);
-      expect(reading.errorMessage).toContain("Mode Banc d’Essai Virtuel");
+      const configSyai: CGMConfig = {
+        deviceType: 'syai',
+        isConnected: true,
+      };
+
+      await expect(fetchCurrentCGMReading(configSyai, 'g/L')).rejects.toThrow("Capteur Syai Tag non synchronisé");
     });
   });
 });

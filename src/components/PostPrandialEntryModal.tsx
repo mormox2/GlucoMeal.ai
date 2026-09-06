@@ -57,30 +57,20 @@ export const PostPrandialEntryModal: React.FC<PostPrandialEntryModalProps> = ({
         activeCgm,
         userProfile.glucoseUnit
       );
-      setGlucoseInput(String(reading.glucose));
-      if (reading.errorMessage) {
-        setCgmFeedback({
-          type: 'warning',
-          message: reading.errorMessage,
-          hint: 'Valeur indicative insérée. Vous pouvez la corriger manuellement ci-dessous si nécessaire.',
-        });
-      } else if (reading.isSimulation) {
-        setCgmFeedback({
-          type: 'warning',
-          message: `Mode Démo : Glycémie simulée à ${reading.glucose} ${userProfile.glucoseUnit}.`,
-          hint: 'Saisie manuelle possible dans le champ ci-dessous.',
-        });
-      } else {
+      if (reading && typeof reading.glucose === 'number' && !reading.isSimulation) {
+        setGlucoseInput(String(reading.glucose));
         setCgmFeedback({
           type: 'success',
-          message: `Glycémie synchronisée en direct (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${userProfile.glucoseUnit}.`,
+          message: `Glycémie réelle synchronisée (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${userProfile.glucoseUnit}.`,
         });
+      } else {
+        throw new Error("Aucune mesure réelle disponible.");
       }
     } catch (err: any) {
       setCgmFeedback({
         type: 'error',
-        message: `Échec de connexion au capteur CGM : ${err?.message || 'Capteur non joignable'}.`,
-        hint: 'Veuillez mesurer votre glycémie capillaire au doigt et la saisir manuellement ci-dessous.',
+        message: `Échec de lecture du capteur CGM : ${err?.message || 'Capteur non joignable'}.`,
+        hint: 'Aucune simulation autorisée. Veuillez mesurer votre glycémie capillaire au doigt et la saisir manuellement ci-dessous.',
       });
     } finally {
       setIsReadingCGM(false);

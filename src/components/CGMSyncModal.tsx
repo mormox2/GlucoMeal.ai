@@ -122,26 +122,17 @@ interface SyncStatusFeedback {
       const res = await connectBluetoothGlucoseMeter(currentUnit);
       setBleResult(res);
       if (res.success && res.glucoseValue) {
-        if (res.isSimulation) {
-          setSyncStatus({
-            type: 'info',
-            title: 'Mode Émulation Bluetooth',
-            description: res.message,
-            hint: 'Lecteur virtuel de démonstration synchronisé. Pour un lecteur physique, activez le Bluetooth sur votre appareil.',
-          });
-        } else {
-          setSyncStatus({
-            type: 'success',
-            title: 'Lecteur Bluetooth connecté',
-            description: res.message,
-          });
-        }
+        setSyncStatus({
+          type: 'success',
+          title: 'Lecteur Bluetooth connecté',
+          description: res.message,
+        });
       } else {
         setSyncStatus({
           type: 'error',
           title: 'Échec de connexion Bluetooth',
           description: res.message || 'Impossible d’établir la liaison avec le lecteur de glycémie.',
-          hint: 'Vérifiez que le lecteur est allumé, à portée (< 2 mètres) et que le Bluetooth de votre appareil est actif.',
+          hint: 'Aucune simulation autorisée. Vérifiez que le lecteur est allumé, à portée (< 2 mètres) et que le Bluetooth est actif.',
         });
       }
     } catch (err: any) {
@@ -172,26 +163,17 @@ interface SyncStatusFeedback {
       setLinxResult(res);
       if (res.success && res.glucoseValue) {
         setSelectedDevice('linx');
-        if (res.isSimulation) {
-          setSyncStatus({
-            type: 'info',
-            title: 'Capteur LinX CGM (Émulé)',
-            description: res.message,
-            hint: 'Flux démo actif. Pour appairer votre capteur LinX physique, activez le Bluetooth sur votre ordinateur/smartphone.',
-          });
-        } else {
-          setSyncStatus({
-            type: 'success',
-            title: 'Capteur LinX CGM connecté en direct',
-            description: res.message,
-          });
-        }
+        setSyncStatus({
+          type: 'success',
+          title: 'Capteur LinX CGM connecté en direct',
+          description: res.message,
+        });
       } else {
         setSyncStatus({
           type: 'error',
           title: 'Échec de connexion LinX CGM',
           description: res.message || 'Le capteur LinX CGM n’a pas répondu.',
-          hint: 'Vérifiez que le capteur LinX est actif, non périmé (15j max) et à portée Bluetooth.',
+          hint: 'Aucune simulation autorisée. Vérifiez que le capteur LinX est actif, non verrouillé par une autre app et à portée.',
         });
       }
     } catch (err: any) {
@@ -217,7 +199,7 @@ interface SyncStatusFeedback {
         type: 'error',
         title: 'Erreur Bluetooth LinX CGM',
         description: msg,
-        hint: 'Assurez-vous que le Bluetooth est activé et autorisez l’accès dans votre navigateur.',
+        hint: 'Aucune simulation autorisée. Assurez-vous que le Bluetooth est activé et autorisez l’accès dans votre navigateur.',
       });
     } finally {
       setIsLinxScanning(false);
@@ -232,26 +214,17 @@ interface SyncStatusFeedback {
       setSyaiResult(res);
       if (res.success && res.glucoseValue) {
         setSelectedDevice('syai');
-        if (res.isSimulation) {
-          setSyncStatus({
-            type: 'info',
-            title: 'Capteur Syai Tag (Émulé)',
-            description: res.message,
-            hint: 'Flux démo actif. Approchez votre Syai Tag physique à moins de 50 cm pour la synchronisation réelle.',
-          });
-        } else {
-          setSyncStatus({
-            type: 'success',
-            title: 'Capteur Syai Tag connecté en direct',
-            description: res.message,
-          });
-        }
+        setSyncStatus({
+          type: 'success',
+          title: 'Capteur Syai Tag connecté en direct',
+          description: res.message,
+        });
       } else {
         setSyncStatus({
           type: 'error',
           title: 'Échec de connexion Syai Tag',
           description: res.message || 'Le capteur Syai Tag n’a pas pu être joint.',
-          hint: 'Vérifiez que le capteur Syai Tag est bien en place et que le Bluetooth de votre appareil est actif.',
+          hint: 'Aucune simulation autorisée. Vérifiez que le capteur Syai Tag est bien en place et à portée Bluetooth.',
         });
       }
     } catch (err: any) {
@@ -352,34 +325,23 @@ interface SyncStatusFeedback {
         },
         currentUnit
       );
-      setCurrentReading(reading);
-      if (reading.errorMessage) {
-        setSyncStatus({
-          type: 'warning',
-          title: 'Avertissement Passerelle CGM',
-          description: reading.errorMessage,
-          hint: 'Une glycémie indicative a été générée. Pour le calcul réel de dose, contrôlez votre glycémie par piqûre au doigt.',
-        });
-      } else if (reading.isSimulation) {
-        setSyncStatus({
-          type: 'info',
-          title: 'Mode Banc d’Essai Virtuel',
-          description: `Lecture simulée générée : ${reading.glucose} ${currentUnit}.`,
-          hint: 'Renseignez vos accès dans l’onglet Connecteurs Cloud pour basculer sur vos données en direct.',
-        });
-      } else {
+      if (reading && typeof reading.glucose === 'number' && !reading.isSimulation) {
+        setCurrentReading(reading);
         setSyncStatus({
           type: 'success',
           title: 'Lecture capteur synchronisée',
-          description: `Donnée reçue en direct (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${currentUnit}.`,
+          description: `Donnée réelle reçue (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${currentUnit}.`,
         });
+      } else {
+        throw new Error("Aucune mesure réelle valide reçue.");
       }
     } catch (err: any) {
+      setCurrentReading(null);
       setSyncStatus({
         type: 'error',
         title: 'Échec de lecture du capteur',
         description: err?.message || 'Impossible de contacter la passerelle du capteur.',
-        hint: 'Vérifiez la connexion Internet, l’URL Nightscout ou réalisez un contrôle capillaire manuel.',
+        hint: 'Aucune simulation autorisée. Vérifiez la connexion, vos identifiants ou réalisez un contrôle capillaire manuel au doigt.',
       });
     } finally {
       setIsReading(false);
@@ -616,17 +578,10 @@ interface SyncStatusFeedback {
                     </div>
 
                     <div className="text-center mt-2 flex flex-wrap items-center justify-center gap-1.5">
-                      {currentReading.isSimulation ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold border border-amber-500/30">
-                          <AlertCircle className="w-3 h-3" />
-                          Mode Démo / Simulation
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
-                          <CheckCircle2 className="w-3 h-3" />
-                          Mesure Réelle Directe
-                        </span>
-                      )}
+                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Mesure Réelle Directe (Sans simulation)
+                      </span>
                       <span className="inline-block px-3 py-1 rounded-full bg-white/10 text-cyan-200 text-xs font-medium">
                         Tendance : {getTrendText(currentReading.trend)}
                       </span>
@@ -1196,7 +1151,6 @@ interface SyncStatusFeedback {
                     { id: 'freestyle', label: 'FreeStyle Libre 2 / 3', sub: 'LibreLinkUp Cloud & Scan NFC', icon: Smartphone },
                     { id: 'dexcom', label: 'Dexcom G6 / G7 / ONE', sub: 'Dexcom Share API Cloud', icon: Smartphone },
                     { id: 'nightscout', label: 'Nightscout Open API', sub: 'Serveur personnel / xDrip+', icon: Server },
-                    { id: 'simulator', label: 'Simulateur Clinique', sub: 'Banc d’essai virtuel', icon: Cpu },
                   ].map((dev) => {
                     const Icon = dev.icon;
                     return (

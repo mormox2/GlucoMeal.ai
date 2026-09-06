@@ -173,30 +173,20 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         activeCgm,
         userProfile.glucoseUnit
       );
-      setCurrentGlucoseInput(String(reading.glucose));
-      if (reading.errorMessage) {
-        setCgmFeedback({
-          type: 'warning',
-          message: reading.errorMessage,
-          hint: 'Glycémie indicative pré-remplie. Vous pouvez la corriger manuellement ci-contre si nécessaire.',
-        });
-      } else if (reading.isSimulation) {
-        setCgmFeedback({
-          type: 'warning',
-          message: `Mode Démo : Glycémie simulée à ${reading.glucose} ${userProfile.glucoseUnit}.`,
-          hint: 'Pour lier votre vrai capteur ou Nightscout, configurez la passerelle CGM.',
-        });
-      } else {
+      if (reading && typeof reading.glucose === 'number' && !reading.isSimulation) {
+        setCurrentGlucoseInput(String(reading.glucose));
         setCgmFeedback({
           type: 'success',
-          message: `Glycémie synchronisée en direct (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${userProfile.glucoseUnit}.`,
+          message: `Glycémie réelle synchronisée (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${userProfile.glucoseUnit}.`,
         });
+      } else {
+        throw new Error("Aucune mesure réelle valide reçue.");
       }
     } catch (err: any) {
       setCgmFeedback({
         type: 'error',
-        message: `Échec de connexion au capteur CGM : ${err?.message || 'Capteur non joignable'}.`,
-        hint: 'Saisissez votre glycémie manuellement ci-contre pour calculer votre bolus en toute sécurité.',
+        message: `Échec de lecture du capteur CGM : ${err?.message || 'Capteur non joignable'}.`,
+        hint: 'Aucune simulation autorisée. Saisissez votre glycémie manuellement ci-contre pour calculer votre bolus en toute sécurité.',
       });
     } finally {
       setIsReadingCGM(false);
