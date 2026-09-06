@@ -1,7 +1,7 @@
 {
   "firestore": [
     {
-      "database": "ai-studio-glucomealai-6920051f-c8b0-4ef8-8e48-730c2c50c5bf",
+      "database": "(default)",
       "rules": "firestore.rules",
       "indexes": "firestore.indexes.json"
     }

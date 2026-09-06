@@ -63,33 +63,44 @@ if (typeof window !== 'undefined' && firebaseConfig.recaptchaSiteKey) {
   }
 }
 
-// Database ID spécifique provisionné par AI Studio
-const dbId = firebaseConfig.firestoreDatabaseId || '(default)';
+// Database ID Firestore (défaut ou personnalisé)
+const rawDbId = firebaseConfig.firestoreDatabaseId;
+const dbId = rawDbId && rawDbId !== '(default)' ? rawDbId : undefined;
 
 let db: Firestore;
 try {
-  db = initializeFirestore(
-    app,
-    {
-      localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager(),
-      }),
-    },
-    dbId
-  );
+  db = dbId
+    ? initializeFirestore(
+        app,
+        {
+          localCache: persistentLocalCache({
+            tabManager: persistentMultipleTabManager(),
+          }),
+        },
+        dbId
+      )
+    : initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+      });
 } catch (err) {
   try {
     // Fallback mémoire vive si IndexedDB est désactivé (ex: navigation privée stricte)
-    db = initializeFirestore(
-      app,
-      {
-        localCache: memoryLocalCache(),
-      },
-      dbId
-    );
+    db = dbId
+      ? initializeFirestore(
+          app,
+          {
+            localCache: memoryLocalCache(),
+          },
+          dbId
+        )
+      : initializeFirestore(app, {
+          localCache: memoryLocalCache(),
+        });
   } catch {
     // Fallback si déjà initialisé
-    db = getFirestore(app, dbId);
+    db = dbId ? getFirestore(app, dbId) : getFirestore(app);
   }
 }
 
@@ -348,7 +359,14 @@ export async function pushSyncCodeToFirestore(
   payload?: CloudSyncPayload
 ): Promise<{ success: boolean; syncCode: string; lastUpdated: string; totalMeals: number }> {
   try {
-    const user = await ensureAuthenticatedUser();
+    let creatorUid = 'anonymous';
+    try {
+      const user = await ensureAuthenticatedUser();
+      creatorUid = user.uid;
+    } catch {
+      // Authentification non initialisée ou anonyme désactivée
+    }
+
     let syncCode = customCode?.trim().toUpperCase();
     if (!syncCode) {
       const p1 = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -362,7 +380,7 @@ export async function pushSyncCodeToFirestore(
 
     await setDoc(docRef, {
       syncCode,
-      creatorUid: user.uid,
+      creatorUid,
       userProfile: payload?.userProfile || {},
       meals: payload?.meals || [],
       learnedPortions: payload?.learnedPortions || [],
@@ -389,7 +407,11 @@ export async function pullSyncCodeFromFirestore(
   syncCode: string
 ): Promise<{ success: boolean; message: string; record?: any }> {
   try {
-    await ensureAuthenticatedUser();
+    try {
+      await ensureAuthenticatedUser();
+    } catch {
+      // Continue en lecture directe si autorisé
+    }
     const cleanCode = syncCode.trim().toUpperCase();
     const docRef = doc(db, 'syncCodes', cleanCode);
     const snap = await getDoc(docRef);

@@ -258,7 +258,7 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             </div>
             <div className="flex items-center justify-between text-[10px] text-amber-800/80 font-mono">
               <span>Projet : GlucoMeal AI</span>
-              <span className="opacity-75" title="ID technique Google Cloud: winter-quota-8dzmz">ID: winter-quota-8dzmz</span>
+              <span className="opacity-75" title="ID technique Google Cloud: glucomeal-ai">ID: glucomeal-ai</span>
             </div>
             <p className="text-[11px] text-amber-900/80 leading-relaxed">
               Vos repas et paramètres d'insuline bénéficient du cache hors-ligne persistant (IndexedDB) et de la synchronisation sécurisée Google Firebase (Zero-Trust Rules).
