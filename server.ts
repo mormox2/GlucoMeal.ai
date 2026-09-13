@@ -500,10 +500,22 @@ Réponds UNIQUEMENT sous forme de JSON strict conforme au schéma.`;
 
       // Mode 2 & 3: Text / Voice Natural Language Entry
       const inputText = (text || audioTranscript || '').trim();
+      const voiceLang: string = req.body.voiceLang || 'fr-FR';
+      const isArabicInput = voiceLang === 'ar-TN' || /[\u0600-\u06FF]/.test(inputText);
+
       if (mode === 'text' || mode === 'voice' || inputText) {
+        // Guard: refuse empty input before hitting the local fallback
+        if (!inputText) {
+          return res.status(400).json({ error: 'Aucun texte ou transcript audio fourni.' });
+        }
+
         if (ai && inputText) {
           try {
+            const langInstruction = isArabicInput
+              ? `L'utilisateur a parlé en dialecte tunisien (Derja) ou arabe. Réponds avec meal_name en arabe tunisien et name_ar en arabe. Le name_fr peut être une traduction courte en français.`
+              : `L'utilisateur a parlé en français. Réponds avec meal_name en français et name_ar en arabe tunisien.`;
             const nlpPrompt = `Tu es l'analyseur nutritionnel d'élite de GlucoMeal AI, spécialement calibré pour le diabète de type 1 et la gastronomie tunisienne / maghrébine (français et Derja tunisienne).
+${langInstruction}
 L'utilisateur diabétique a décrit son repas : "${inputText}"
 
 RÈGLES CRUCIALES POUR LA DÉCOMPOSITION :

@@ -263,7 +263,7 @@ export default function App() {
   };
 
   // Handle Voice Analysis
-  const handleAnalyzeVoice = async (transcript: string) => {
+  const handleAnalyzeVoice = async (transcript: string, voiceLang?: string) => {
     setIsAnalyzing(true);
     setAnalysisStepLabel(
       isAr
@@ -277,8 +277,12 @@ export default function App() {
       const response = await fetch('/api/analyze-meal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'voice', audioTranscript: transcript }),
+        body: JSON.stringify({ mode: 'voice', audioTranscript: transcript, voiceLang: voiceLang || 'fr-FR' }),
       });
+
+      if (!response.ok) {
+        throw new Error(`API error ${response.status}`);
+      }
 
       const data = await response.json();
       const analyzedMeal: AnalyzedMeal = {
@@ -299,6 +303,7 @@ export default function App() {
       setMealFlowState('review');
     } catch (err) {
       console.error('Voice analysis error:', err);
+      setMealFlowState('idle'); // Unblock UI so user can retry
     } finally {
       setIsAnalyzing(false);
     }
