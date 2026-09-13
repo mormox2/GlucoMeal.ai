@@ -597,8 +597,8 @@ export default function App() {
         {/* Tab 3: Tunisian Food Database */}
         {currentTab === 'database' && <FoodDatabaseView />}
 
-        {/* Tab 4: Benchmark Dataset */}
-        {currentTab === 'benchmark' && <BenchmarkView />}
+        {/* Tab 4: Benchmark Dataset — dev-only QA tool, hidden in production */}
+        {import.meta.env.DEV && currentTab === 'benchmark' && <BenchmarkView />}
 
         {/* Tab 5: Diabetologist Portal & Telemonitoring */}
         {currentTab === 'doctor' && (

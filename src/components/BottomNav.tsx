@@ -44,7 +44,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
   const [isToolsOpen, setIsToolsOpen] = useState(false);
 
   const isMedicalTab = currentTab === 'doctor';
-  const isToolsActive = ['database', 'benchmark'].includes(currentTab);
+  const isToolsActive = (import.meta.env.DEV && currentTab === 'benchmark') || currentTab === 'database';
 
   return (
     <>
@@ -202,17 +202,19 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               )}
             </div>
 
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-center text-xs text-slate-500">
-              <button
-                onClick={() => {
-                  setIsToolsOpen(false);
-                  setCurrentTab('benchmark');
-                }}
-                className="hover:text-emerald-700 cursor-pointer font-medium"
-              >
-                {language === 'ar' ? 'مجموعة التحقق (100 طبق)' : 'Dataset 100 Repas'}
-              </button>
-            </div>
+            {import.meta.env.DEV && (
+              <div className="pt-2 border-t border-slate-100 flex items-center justify-center text-xs text-slate-500">
+                <button
+                  onClick={() => {
+                    setIsToolsOpen(false);
+                    setCurrentTab('benchmark');
+                  }}
+                  className="hover:text-emerald-700 cursor-pointer font-medium"
+                >
+                  {language === 'ar' ? 'مجموعة التحقق (100 طبق)' : 'Dataset 100 Repas'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
