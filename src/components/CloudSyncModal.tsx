@@ -410,8 +410,8 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             </div>
             <p className="text-[11px] text-amber-900/80 leading-relaxed">
               {isAr
-                ? 'تستفيد وجباتك ومعاملات الإنسولين من التخزين المحلي الدائم (IndexedDB) والمزامنة السحابية الآمنة مع جوجل فايربيس (قواعد Zero-Trust).'
-                : "Vos repas et paramètres d'insuline bénéficient du cache hors-ligne persistant (IndexedDB) et de la synchronisation sécurisée Google Firebase (Zero-Trust Rules)."}
+                ? 'تستفيد وجباتك ومعاملات الإنسولين من التخزين المحلي الدائم (IndexedDB) والمزامنة السحابية مع جوجل فايربيس إذا وافقت عليها (البيانات متاحة لحسابك فقط).'
+                : "Vos repas et paramètres d'insuline bénéficient du cache hors-ligne persistant (IndexedDB) et, si vous l'avez acceptée, de la sauvegarde Google Firebase (accessible à votre seul compte)."}
             </p>
           </div>
 

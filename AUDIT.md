@@ -40,8 +40,29 @@ Autres corrections faites en chemin :
 - La lecture Bluetooth suit la norme Glucose Profile mais n'a pas pu être testée sur un vrai lecteur.
 - Les anciens codes de synchronisation (format court) ne sont plus lisibles.
 - Une politique TTL Firestore sur `syncCodes.expiresAt` reste à activer dans la console.
-- La base d'aliments contient des identifiants en double (`reg-01` à `reg-08`) ; à dédoublonner.
-- La priorité P2 reste ouverte (H5 benchmark, reste de H6, M2 à M7, M10, section 4).
+- La base d'aliments contient des identifiants en double (`reg-01` à `reg-08`) ; à dédoublonner (fait en P2).
+
+**P2 corrigés** :
+
+| Constat | Correction | Vérification |
+|---|---|---|
+| H5 Benchmark simulé | Plus aucune prédiction simulée : seuls les repas réellement analysés sont évalués (taille du dataset et repas non évalués affichés) ; Live Vision exige une vraie photo et passe par le même pipeline que l'application ; variantes synthétiques signalées ; « certificat ISO 15197 », tampon et signature retirés (« rapport d'évaluation interne, non certifié ») ; allégations « certifié », « 200+ aliments » et « pesés sur balance » retirées de l'interface (FR/AR) et du README | `serverAnalysis.test.ts`, `analyzeMealApi.test.ts` |
+| H6 Auto-titration | Fenêtre de 14 jours ; repas pris en compte seulement avec le ratio actuel et un bolus non bloqué ; au moins 5 contrôles pour augmenter, au plus +10 % ; diminution dès 2 hypos ; aucune proposition si hypo et hyper coexistent ; confirmation « validé avec votre diabétologue ? » avant d'appliquer | `autoTitration.test.ts` |
+| M2 Parseur local | Module `server/localParser.ts` : mots entiers, « pomme de terre » ≠ pomme, volume de boisson seulement avec une unité (ml, cl, l), pas de double comptage du pain du lablabi, aucun résultat plutôt qu'une valeur inventée | `serverAnalysis.test.ts` |
+| M3 Injection de prompt | Consignes dans `systemInstruction`, description dans un message séparé et traitée comme donnée ; 500 caractères maximum (`TEXT_TOO_LONG`) ; poids hors 5-1500 g signalés en confiance faible ; types d'image limités | `serverAnalysis.test.ts`, `analyzeMealApi.test.ts` |
+| M4 Fuite d'erreurs | Messages génériques (`SERVER_ERROR`), détails seulement dans les journaux serveur | `analyzeMealApi.test.ts` |
+| M5 CORS | Liste d'origines (`ALLOWED_ORIGINS`, défaut l'origine de production + même hôte) ; requête préliminaire d'une autre origine refusée (403) | `analyzeMealApi.test.ts` |
+| M6 En-têtes | `vercel.json` : CSP, HSTS, `nosniff`, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, COOP sur tout le site ; API en `no-store` avec CSP `default-src 'none'` ; script de service worker en ligne supprimé (compatible CSP) | build de production servi avec ces en-têtes : aucune violation CSP dans le navigateur |
+| M7 Limiteur | Purge des compteurs expirés, `trust proxy` configuré (`TRUST_PROXY`, 1 sur Vercel) ; la limite reste par instance (un stockage partagé serait nécessaire pour une limite globale) | — |
+| M10 RGPD | Écran de consentement obligatoire (données de santé et Gemini), sauvegarde cloud et mesure d'audience facultatives et désactivées par défaut ; politique de confidentialité FR/AR ; synchronisation Firestore seulement avec accord ; Vercel Analytics seulement avec accord ; « Supprimer toutes mes données » (appareil, cache Firestore, repas, profil, délégués, codes de partage, photos Storage, compte) | `consent.test.ts` + test navigateur |
+| M11 Modèles Gemini | `GEMINI_MODEL` (défaut `gemini-2.5-flash`), repli facultatif `GEMINI_FALLBACK_MODEL`, délai `GEMINI_TIMEOUT_MS` (25 s) | `serverAnalysis.test.ts` |
+| Section 4 | Chargement à la demande (Benchmark, portail, rapport, code-barres, CGM) et bibliothèques séparées : fichier principal de 2,5 Mo à 540 ko ; `api/index.js` régénéré par `npm run build` (en-tête « fichier généré ») ; `lang="fr"` puis langue et sens mis à jour dynamiquement ; `package.json` renommé, outils de build en `devDependencies` ; README corrigé ; correspondance exacte pour les portions apprises ; tri des repas côté client (repas sans `created_at` visibles) ; cache du service worker versionné à chaque build et réponses opaques non mises en cache ; commentaires AI Studio nettoyés (`metadata.json` conservé pour l'import dans AI Studio) ; tests des règles Firestore et Storage versionnés (`npm run test:rules`) ; identifiants en double de la base renommés ; métadonnées LinX/Syai inventées restantes (numéro de série, batterie, MARD, tendance, jours restants) supprimées | 150 tests + 6 tests de règles |
+
+Points restants :
+- Limite de débit globale : nécessiterait un stockage partagé (Upstash Redis ou Vercel KV).
+- Le consentement est redemandé à tous les utilisateurs existants à la première ouverture.
+- Le dataset d'évaluation reste théorique : pour une vraie mesure de précision, il faut des repas pesés et photographiés.
+- Réglementaire (voir section 6) : analyse de risques, cycle de vie logiciel et statut de dispositif médical restent à traiter avant toute diffusion publique.
 
 ## 0. Synthèse
 

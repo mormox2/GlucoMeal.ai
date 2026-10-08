@@ -79,14 +79,9 @@ export function getLearnedPortionForFood(foodKeyOrName: string): PatientCustomPo
 
   return portions.find((p) => {
     if (!p.is_active) return false;
-    const pName = p.food_name.toLowerCase();
-    const pId = p.food_id.toLowerCase();
-    return (
-      pId === cleanKey ||
-      pName === cleanKey ||
-      pName.includes(cleanKey) ||
-      cleanKey.includes(pName)
-    );
+    // Correspondance exacte uniquement : une portion apprise pour « Pain » ne doit pas s'appliquer
+    // à « Pain tabouna » ou « Pain au chocolat »
+    return p.food_id.toLowerCase() === cleanKey || p.food_name.toLowerCase().trim() === cleanKey;
   });
 }
 

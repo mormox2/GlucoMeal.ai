@@ -1,3 +1,5 @@
+// Fichier généré par « npm run build:api » à partir de server.ts : ne pas modifier à la main.
+
 // server.ts
 import "dotenv/config";
 import express from "express";

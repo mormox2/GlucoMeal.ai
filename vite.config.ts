@@ -21,6 +21,19 @@ export default defineConfig(() => {
       },
       dedupe: ['react', 'react-dom'],
     },
+    build: {
+      rollupOptions: {
+        output: {
+          // Bibliothèques stables dans des fichiers séparés : mieux mises en cache entre deux déploiements
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return undefined;
+            if (/node_modules\/(@firebase|firebase)\//.test(id)) return 'vendor-firebase';
+            if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'vendor-react';
+            return undefined;
+          },
+        },
+      },
+    },
     optimizeDeps: {
       include: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime', 'react/jsx-dev-runtime'],
     },

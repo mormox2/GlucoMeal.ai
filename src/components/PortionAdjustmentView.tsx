@@ -51,7 +51,7 @@ import {
   computeInsulinOnBoard,
   sanitizeUserProfile,
 } from '../utils/storage';
-import { recordPatientPortionCorrection, getLearnedPortionForFood } from '../utils/activeLearning';
+import { recordPatientPortionCorrection } from '../utils/activeLearning';
 import { fetchCurrentCGMReading, loadCGMConfig } from '../utils/cgmService';
 import { scheduleH2Reminder } from '../utils/h2Reminder';
 import { HealthySubstitutionsCard } from './HealthySubstitutionsCard';

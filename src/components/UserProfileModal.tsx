@@ -965,12 +965,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <span className="text-xs font-bold text-slate-800 block">
                   {currentUserEmail
                     ? (language === 'ar' ? 'الحساب السحابي Firebase متصل' : 'Compte Cloud Firebase Connecté')
-                    : (language === 'ar' ? 'الوضع المحلي والخاص الآمن' : 'Mode Local / Anonyme Sécurisé')}
+                    : (language === 'ar' ? 'الوضع المحلي' : 'Mode local')}
                 </span>
                 <span className="text-[11px] text-slate-500 block truncate max-w-[220px] sm:max-w-xs">
                   {currentUserEmail
                     ? currentUserEmail
-                    : (language === 'ar' ? 'البيانات محفوظة ومزامنة بأمان' : 'Données synchronisées sur Firestore & cache IndexedDB')}
+                    : consent?.cloudSync
+                      ? (language === 'ar' ? 'البيانات محفوظة على هذا الجهاز ومزامنة مع Firebase' : 'Données sur cet appareil, sauvegardées dans Firebase')
+                      : (language === 'ar' ? 'البيانات محفوظة على هذا الجهاز فقط' : 'Données sur cet appareil uniquement')}
                 </span>
               </div>
             </div>
@@ -987,7 +989,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             ) : (
               <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{language === 'ar' ? 'حماية مشفرة نشطة' : 'Zero-Trust Actif'}</span>
+                <span>{consent?.cloudSync ? (language === 'ar' ? 'حفظ سحابي مفعل' : 'Sauvegarde cloud active') : (language === 'ar' ? 'بدون حفظ سحابي' : 'Sans sauvegarde cloud')}</span>
               </div>
             )}
           </div>

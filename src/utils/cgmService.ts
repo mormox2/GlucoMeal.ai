@@ -412,14 +412,16 @@ export interface ChineseCGMConnectionResult {
   brand: 'linx' | 'syai' | 'sibionics';
   modelName: string;
   deviceName: string;
-  serialNumber: string;
+  // Métadonnées réellement lues sur le capteur uniquement (jamais de valeur inventée)
+  serialNumber?: string;
   glucoseValue?: number;
   unit: 'g/L' | 'mg/dL';
-  trend: 'flat' | 'up_slow' | 'up_fast' | 'down_slow' | 'down_fast';
+  trend?: 'flat' | 'up_slow' | 'up_fast' | 'down_slow' | 'down_fast';
   timestamp: string;
+  // Caractéristiques du fabricant (durée de vie nominale), pas une mesure
   sensorExpiryDays: number;
-  mardScore: string;
-  batteryLevel: number;
+  mardScore?: string;
+  batteryLevel?: number;
   samplingInterval: string;
   specsHighlight: string;
   source: 'bluetooth_real' | 'bluetooth_simulated';
@@ -586,14 +588,10 @@ export async function connectLinxCGM(
             brand: 'linx',
             modelName: 'LinX CGMS (MicroTech Medical)',
             deviceName: device.name || 'LinX Sensor',
-            serialNumber: 'LX-883920',
             glucoseValue: finalVal,
             unit,
-            trend: 'flat',
             timestamp: (measuredAt || new Date()).toISOString(),
             sensorExpiryDays: 15,
-            mardScore: '8.9%',
-            batteryLevel: 94,
             samplingInterval: '1 minute (1440 pts/jour)',
             specsHighlight: 'Étanche IP68 • 15 Jours • Transmission continue BLE',
             source: 'bluetooth_real',
@@ -607,13 +605,9 @@ export async function connectLinxCGM(
           brand: 'linx',
           modelName: 'LinX CGMS (MicroTech Medical)',
           deviceName: device.name || 'LinX Sensor',
-          serialNumber: 'LX-883920',
           unit,
-          trend: 'flat',
           timestamp: new Date().toISOString(),
           sensorExpiryDays: 15,
-          mardScore: '8.9%',
-          batteryLevel: 94,
           samplingInterval: '1 minute',
           specsHighlight: 'Étanche IP68 • 15 Jours',
           source: 'bluetooth_real',
@@ -627,13 +621,9 @@ export async function connectLinxCGM(
         brand: 'linx',
         modelName: 'LinX CGMS (MicroTech)',
         deviceName: 'LinX CGM Sensor',
-        serialNumber: 'LX-883920',
         unit,
-        trend: 'flat',
         timestamp: new Date().toISOString(),
         sensorExpiryDays: 15,
-        mardScore: '8.9%',
-        batteryLevel: 94,
         samplingInterval: '1 minute',
         specsHighlight: 'Étanche IP68 • 15 Jours',
         source: 'bluetooth_real',
@@ -648,13 +638,9 @@ export async function connectLinxCGM(
     brand: 'linx',
     modelName: 'LinX CGMS (MicroTech)',
     deviceName: 'LinX CGM Sensor',
-    serialNumber: 'LX-883920',
     unit,
-    trend: 'flat',
     timestamp: new Date().toISOString(),
     sensorExpiryDays: 15,
-    mardScore: '8.9%',
-    batteryLevel: 94,
     samplingInterval: '1 minute',
     specsHighlight: 'Étanche IP68 • 15 Jours',
     source: 'bluetooth_real',
@@ -666,7 +652,6 @@ export async function connectLinxCGM(
 /**
  * Appairage et lecture directe pour le capteur chinois Syai Tag (Syai Health)
  * - Format ultra-léger 1.2g pièce de monnaie
- * - MARD 8.1% calibré d'usine
  * - Bluetooth Smart Low Energy (14 jours)
  */
 export async function connectSyaiTagCGM(
@@ -712,17 +697,13 @@ export async function connectSyaiTagCGM(
             success: true,
             brand: 'syai',
             modelName: 'Syai Tag CGMS (Syai Health)',
-            deviceName: device.name || 'SyaiTag-409182',
-            serialNumber: 'ST-409182',
+            deviceName: device.name || 'Syai Tag',
             glucoseValue: finalVal,
             unit,
-            trend: 'up_slow',
             timestamp: (measuredAt || new Date()).toISOString(),
             sensorExpiryDays: 14,
-            mardScore: '8.1% (Excellence clinique)',
-            batteryLevel: 97,
             samplingInterval: '1 à 3 minutes',
-            specsHighlight: 'Poids plume 1.2g • MARD 8.1% • Bluetooth Smart',
+            specsHighlight: 'Bluetooth Smart • 14 jours',
             source: 'bluetooth_real',
             isSimulation: false,
             message: `Syai Tag connecté via BLE physique (${device.name || 'Syai Tag'}). Glycémie réelle : ${finalVal} ${unit}`,
@@ -734,15 +715,11 @@ export async function connectSyaiTagCGM(
           brand: 'syai',
           modelName: 'Syai Tag CGMS (Syai Health)',
           deviceName: device.name || 'Syai Tag Sensor',
-          serialNumber: 'ST-409182',
           unit,
-          trend: 'flat',
           timestamp: new Date().toISOString(),
           sensorExpiryDays: 14,
-          mardScore: '8.1%',
-          batteryLevel: 95,
           samplingInterval: '1-3 min',
-          specsHighlight: 'Ultra-léger 1.2g • MARD 8.1%',
+          specsHighlight: 'Bluetooth Smart • 14 jours',
           source: 'bluetooth_real',
           isSimulation: false,
           message: `Capteur Syai Tag appairé (${device.name || 'Syai Tag'}), mais la trame propriétaire requiert la passerelle officielle Syai ou Nightscout. Aucune simulation autorisée.${readError ? ` (${readError})` : ''}`,
@@ -754,15 +731,11 @@ export async function connectSyaiTagCGM(
         brand: 'syai',
         modelName: 'Syai Tag CGMS (Syai Health)',
         deviceName: 'Syai Tag Sensor',
-        serialNumber: 'ST-409182',
         unit,
-        trend: 'flat',
         timestamp: new Date().toISOString(),
         sensorExpiryDays: 14,
-        mardScore: '8.1%',
-        batteryLevel: 95,
         samplingInterval: '1-3 min',
-        specsHighlight: 'Ultra-léger 1.2g • MARD 8.1%',
+        specsHighlight: 'Bluetooth Smart • 14 jours',
         source: 'bluetooth_real',
         isSimulation: false,
         message: 'Recherche Syai Tag annulée ou aucun capteur détecté. Aucune simulation autorisée.',
@@ -775,15 +748,11 @@ export async function connectSyaiTagCGM(
     brand: 'syai',
     modelName: 'Syai Tag CGMS (Syai Health)',
     deviceName: 'Syai Tag Sensor',
-    serialNumber: 'ST-409182',
     unit,
-    trend: 'flat',
     timestamp: new Date().toISOString(),
     sensorExpiryDays: 14,
-    mardScore: '8.1%',
-    batteryLevel: 95,
     samplingInterval: '1-3 min',
-    specsHighlight: 'Ultra-léger 1.2g • MARD 8.1%',
+    specsHighlight: 'Bluetooth Smart • 14 jours',
     source: 'bluetooth_real',
     isSimulation: false,
     message: 'Web Bluetooth non supporté par ce navigateur (Chrome ou Edge requis). Aucune simulation autorisée.',
