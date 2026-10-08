@@ -1,4 +1,11 @@
-import { AnalyzedMeal, UserProfileDT1, MealSlot, PhysicalActivityLevel, CalculatedBolusSummary } from '../types';
+import {
+  AnalyzedMeal,
+  UserProfileDT1,
+  MealSlot,
+  PhysicalActivityLevel,
+  CalculatedBolusSummary,
+  ProfileValidationIssue,
+} from '../types';
 import { syncMealToFirestore, syncProfileToFirestore, deleteMealFromFirestore } from '../services/firebase';
 
 const STORAGE_KEYS = {
@@ -184,10 +191,16 @@ export function loadUserProfile(): UserProfileDT1 {
 }
 
 /**
- * Sauvegarde le profil thérapeutique DT1
+ * Sauvegarde le profil thérapeutique DT1.
+ * Un profil hors bornes cliniques n'est PAS enregistré : la liste des problèmes est renvoyée.
  */
-export function saveUserProfile(profile: UserProfileDT1): void {
-  if (typeof window === 'undefined') return;
+export function saveUserProfile(profile: UserProfileDT1): ProfileValidationIssue[] {
+  const issues = validateTherapeuticProfile(profile);
+  if (issues.length > 0) {
+    console.warn('Profil DT1 refusé (hors bornes cliniques):', issues.map((i) => i.fr));
+    return issues;
+  }
+  if (typeof window === 'undefined') return issues;
   try {
     const sanitized = sanitizeUserProfile(profile);
     localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(sanitized));
@@ -196,6 +209,7 @@ export function saveUserProfile(profile: UserProfileDT1): void {
   } catch (err) {
     console.error('Erreur sauvegarde profil DT1:', err);
   }
+  return issues;
 }
 
 /**
@@ -218,8 +232,124 @@ export function getCurrentMealSlot(ramadanMode: boolean = false): MealSlot {
 export const MAX_SAFE_BOLUS_UNITS = 20.0;
 
 /**
+ * Bornes cliniques des paramètres thérapeutiques (par unité de glycémie).
+ * Les plages g/L et mg/dL ne se chevauchent pas : une valeur saisie dans la mauvaise
+ * unité (ex. ISF 0.4 dans un profil mg/dL) est donc toujours détectée.
+ */
+export const THERAPEUTIC_BOUNDS = {
+  icRatio: { min: 2, max: 60 }, // g de glucides couverts par 1 UI
+  isf: {
+    'g/L': { min: 0.05, max: 4 },
+    'mg/dL': { min: 5, max: 400 },
+  },
+  targetGlucose: {
+    'g/L': { min: 0.7, max: 2 },
+    'mg/dL': { min: 70, max: 200 },
+  },
+} as const;
+
+const SLOT_LABELS: Record<MealSlot, { fr: string; ar: string }> = {
+  morning: { fr: 'matin', ar: 'الصباح' },
+  lunch: { fr: 'midi', ar: 'الغداء' },
+  dinner: { fr: 'soir', ar: 'العشاء' },
+  snack: { fr: 'collation', ar: 'اللمجة' },
+  iftar: { fr: 'iftar', ar: 'الإفطار' },
+  sahriya: { fr: 'sahriya', ar: 'السهرية' },
+  shor: { fr: 'shor', ar: 'السحور' },
+};
+
+/**
+ * Vérifie que les paramètres d'insuline sont dans des bornes cliniques plausibles
+ * et cohérents avec l'unité de glycémie. Une liste vide signifie un profil valide.
+ */
+export function validateTherapeuticProfile(profile?: Partial<UserProfileDT1> | null): ProfileValidationIssue[] {
+  const safe = sanitizeUserProfile(profile);
+  const unit = safe.glucoseUnit;
+  const issues: ProfileValidationIssue[] = [];
+
+  const target = THERAPEUTIC_BOUNDS.targetGlucose[unit];
+  if (!(safe.targetGlucose >= target.min && safe.targetGlucose <= target.max)) {
+    issues.push({
+      field: 'targetGlucose',
+      fr: `Cible glycémique ${safe.targetGlucose} ${unit} hors bornes (${target.min} – ${target.max} ${unit}).`,
+      ar: `الهدف السكري ${safe.targetGlucose} ${unit} خارج الحدود (${target.min} – ${target.max} ${unit}).`,
+    });
+  }
+
+  const isf = THERAPEUTIC_BOUNDS.isf[unit];
+  if (!(safe.isf >= isf.min && safe.isf <= isf.max)) {
+    issues.push({
+      field: 'isf',
+      fr: `Sensibilité (ISF) ${safe.isf} ${unit}/UI hors bornes (${isf.min} – ${isf.max} ${unit}/UI). Vérifiez l'unité.`,
+      ar: `معامل الحساسية ${safe.isf} ${unit}/وحدة خارج الحدود (${isf.min} – ${isf.max}). تحقق من الوحدة.`,
+    });
+  }
+
+  const { min, max } = THERAPEUTIC_BOUNDS.icRatio;
+  (Object.keys(safe.icRatios) as MealSlot[]).forEach((slot) => {
+    const ratio = safe.icRatios[slot];
+    if (ratio === undefined) return;
+    if (!(ratio >= min && ratio <= max)) {
+      issues.push({
+        field: 'icRatio',
+        slot,
+        fr: `Ratio ${SLOT_LABELS[slot].fr} (1 UI / ${ratio} g) hors bornes (${min} – ${max} g/UI).`,
+        ar: `معامل ${SLOT_LABELS[slot].ar} (1 وحدة / ${ratio} غ) خارج الحدود (${min} – ${max} غ/وحدة).`,
+      });
+    }
+  });
+
+  return issues;
+}
+
+export type GlucoseInputInterpretation =
+  | { status: 'empty' }
+  | { status: 'ok'; value: number; converted: boolean }
+  | { status: 'invalid' };
+
+/**
+ * Interprète une glycémie saisie dans l'unité du profil.
+ * - Valeur plausible dans l'unité du profil : conservée.
+ * - Valeur sans ambiguïté dans l'autre unité (ex. 180 dans un profil g/L, 1.4 dans un profil mg/dL) : convertie.
+ * - Valeur ambiguë, notamment plausible en mmol/L (ex. 12 dans un profil g/L, 4.5 dans un profil mg/dL) :
+ *   rejetée, aucune dose n'est calculée. Convertir 4.5 mmol/L (0.81 g/L) en 450 mg/dL provoquerait
+ *   une correction massive.
+ */
+export function interpretGlucoseInput(
+  rawValue: number | undefined,
+  unit: 'g/L' | 'mg/dL'
+): GlucoseInputInterpretation {
+  if (rawValue === undefined || rawValue === null || Number.isNaN(rawValue)) {
+    return { status: 'empty' };
+  }
+  if (!Number.isFinite(rawValue) || rawValue <= 0) {
+    return { status: 'invalid' };
+  }
+  if (unit === 'g/L') {
+    if (rawValue >= 0.1 && rawValue <= 6) return { status: 'ok', value: rawValue, converted: false };
+    // ≥ 40 : forcément des mg/dL (une valeur en mmol/L ne dépasse pas ~33)
+    if (rawValue >= 40 && rawValue <= 600) {
+      return { status: 'ok', value: Number((rawValue / 100).toFixed(2)), converted: true };
+    }
+  } else {
+    if (rawValue >= 10 && rawValue <= 600) return { status: 'ok', value: rawValue, converted: false };
+    // < 2.2 : forcément des g/L (une valeur en mmol/L aussi basse serait une hypoglycémie extrême)
+    if (rawValue >= 0.1 && rawValue < 2.2) {
+      return { status: 'ok', value: Math.round(rawValue * 100), converted: true };
+    }
+  }
+  return { status: 'invalid' };
+}
+
+/**
  * Calcule la dose de bolus personnalisée (glucides + correction optionnelle - modulation activité physique)
- * avec plafond de sécurité médical strict (Safety Cap 20 UI max) et validation d'échelle d'unités
+ * avec plafond de sécurité médical strict (Safety Cap 20 UI max) et validation d'échelle d'unités.
+ *
+ * Aucune dose n'est proposée (totalBolus = 0, isBlocked = true) si :
+ * - le profil thérapeutique est hors bornes cliniques,
+ * - la quantité de glucides n'est pas un nombre valide,
+ * - la glycémie saisie est ininterprétable,
+ * - la glycémie (normalisée) est en hypoglycémie.
  */
 export function calculatePersonalizedBolus(
   totalCarbs: number,
@@ -229,9 +359,14 @@ export function calculatePersonalizedBolus(
   activityLevel: PhysicalActivityLevel = 'none'
 ): CalculatedBolusSummary {
   const safeProfile = sanitizeUserProfile(profile);
-  const icRatio = safeProfile.icRatios[slot] || 10;
+  const unit = safeProfile.glucoseUnit;
+  const icRatio = safeProfile.icRatios[slot] || safeProfile.icRatios.lunch;
+  const profileIssues = validateTherapeuticProfile(safeProfile);
+  const carbsAreValid = typeof totalCarbs === 'number' && Number.isFinite(totalCarbs) && totalCarbs >= 0;
+  const carbs = carbsAreValid ? totalCarbs : 0;
+
   // Bolus repas brut = Glucides / Ratio
-  const rawMealBolus = totalCarbs / icRatio;
+  const rawMealBolus = carbs / icRatio;
 
   // Réduction activité physique (Consensus ISPAD / SFD)
   let activityReductionPct = 0;
@@ -247,20 +382,23 @@ export function calculatePersonalizedBolus(
   const netMealBolus = Math.max(0, rawMealBolus - activityReductionUnits);
 
   // Détection d'anomalie d'échelle glycémique et normalisation sécurisée
-  let normalizedCurrentGlucose = currentGlucose;
-  let safetyWarning: string | undefined;
+  const glucose = interpretGlucoseInput(currentGlucose, unit);
+  const normalizedCurrentGlucose = glucose.status === 'ok' ? glucose.value : undefined;
+  const warnings: string[] = [];
 
-  if (typeof currentGlucose === 'number' && currentGlucose > 0) {
-    if (safeProfile.glucoseUnit === 'g/L' && currentGlucose > 5.0) {
-      // Patient a probablement saisi en mg/dL (ex: 180 au lieu de 1.80)
-      normalizedCurrentGlucose = Number((currentGlucose / 100).toFixed(2));
-      safetyWarning = `Attention : glycémie saisie (${currentGlucose}) interprétée en mg/dL et convertie en ${normalizedCurrentGlucose} g/L pour prévenir un surdosage d'insuline.`;
-    } else if (safeProfile.glucoseUnit === 'mg/dL' && currentGlucose < 25.0) {
-      // Patient a probablement saisi en g/L (ex: 1.40 au lieu de 140)
-      normalizedCurrentGlucose = Math.round(currentGlucose * 100);
-      safetyWarning = `Attention : glycémie saisie (${currentGlucose}) interprétée en g/L et convertie en ${normalizedCurrentGlucose} mg/dL.`;
-    }
+  if (glucose.status === 'ok' && glucose.converted) {
+    warnings.push(
+      unit === 'g/L'
+        ? `Attention : glycémie saisie (${currentGlucose}) interprétée en mg/dL et convertie en ${normalizedCurrentGlucose} g/L pour prévenir un surdosage d'insuline.`
+        : `Attention : glycémie saisie (${currentGlucose}) interprétée en g/L et convertie en ${normalizedCurrentGlucose} mg/dL.`
+    );
   }
+
+  const hypoThreshold = unit === 'g/L' ? 0.7 : 70;
+  const cautionThreshold = unit === 'g/L' ? 0.8 : 80;
+  const isHypoglycemia = normalizedCurrentGlucose !== undefined && normalizedCurrentGlucose < hypoThreshold;
+  const isCautionLow =
+    normalizedCurrentGlucose !== undefined && !isHypoglycemia && normalizedCurrentGlucose < cautionThreshold;
 
   // Bolus de correction (si glycémie renseignée et > cible)
   let rawCorrectionBolus = 0;
@@ -277,12 +415,37 @@ export function calculatePersonalizedBolus(
   const roundedTotal = Math.max(0, Math.round(rawTotal / step) * step);
 
   // Plafond de sécurité maximal absolu (Safety Cap à 20 UI)
-  const isCapped = roundedTotal > MAX_SAFE_BOLUS_UNITS;
-  const safeTotalBolus = isCapped ? MAX_SAFE_BOLUS_UNITS : roundedTotal;
+  const exceedsCap = roundedTotal > MAX_SAFE_BOLUS_UNITS;
+  let safeTotalBolus = exceedsCap ? MAX_SAFE_BOLUS_UNITS : roundedTotal;
 
-  if (isCapped) {
-    safetyWarning = (safetyWarning ? `${safetyWarning} ` : '') +
-      `⚠️ ALERTE SÉCURITÉ CLINIQUE : Dose calculée (${roundedTotal.toFixed(1)} UI) plafonnée d'office à ${MAX_SAFE_BOLUS_UNITS} UI max pour prévenir tout surdosage critique.`;
+  // Blocages de sécurité : aucune dose n'est proposée
+  let blockReason: CalculatedBolusSummary['blockReason'];
+  if (profileIssues.length > 0) {
+    blockReason = 'invalid_profile';
+    // Le détail des valeurs hors bornes est fourni dans profileIssues
+    warnings.push('⛔ Profil thérapeutique hors bornes cliniques : aucune dose calculée. Corrigez votre profil DT1.');
+  } else if (!carbsAreValid) {
+    blockReason = 'invalid_carbs';
+    warnings.push('⛔ Quantité de glucides invalide : aucune dose calculée. Vérifiez les aliments du repas.');
+  } else if (glucose.status === 'invalid') {
+    blockReason = 'invalid_glucose';
+    warnings.push(
+      `⛔ Glycémie saisie (${currentGlucose}) ininterprétable en ${unit} (valeur en mmol/L ?) : aucune dose calculée. Ressaisissez la valeur en ${unit}.`
+    );
+  } else if (isHypoglycemia) {
+    blockReason = 'hypoglycemia';
+    warnings.push(
+      `🚨 Hypoglycémie (${normalizedCurrentGlucose} ${unit}) : aucune dose d'insuline. Resucrez (15 g de sucre rapide), recontrôlez après 15 min, puis ressaisissez la glycémie pour recalculer le bolus.`
+    );
+  }
+  const isBlocked = blockReason !== undefined;
+  const isCapped = exceedsCap && !isBlocked;
+  if (isBlocked) {
+    safeTotalBolus = 0;
+  } else if (isCapped) {
+    warnings.push(
+      `⚠️ ALERTE SÉCURITÉ CLINIQUE : Dose calculée (${roundedTotal.toFixed(1)} UI) plafonnée d'office à ${MAX_SAFE_BOLUS_UNITS} UI max pour prévenir tout surdosage critique.`
+    );
   }
 
   // Prise en compte clinique de la phase de lune de miel (rémission partielle du DT1)
@@ -293,8 +456,9 @@ export function calculatePersonalizedBolus(
     honeymoonNotice =
       "🍯 Phase de lune de miel active : vos cellules bêta résiduelles sécrètent encore de l'insuline. Les besoins sont réduits. Surveillez attentivement la glycémie post-prandiale pour prévenir toute hypoglycémie.";
     if (icRatio < 8) {
-      safetyWarning = (safetyWarning ? `${safetyWarning} ` : '') +
-        `⚠️ Vigilance Lune de Miel : Le ratio paramétré (1 UI / ${icRatio}g) est très concentré pour une rémission partielle. En lune de miel, les ratios habituels sont souvent plus légers (ex: 1 UI pour 15 à 20g) pour éviter les hypoglycémies sévères.`;
+      warnings.push(
+        `⚠️ Vigilance Lune de Miel : Le ratio paramétré (1 UI / ${icRatio}g) est très concentré pour une rémission partielle. En lune de miel, les ratios habituels sont souvent plus légers (ex: 1 UI pour 15 à 20g) pour éviter les hypoglycémies sévères.`
+      );
     }
   }
 
@@ -307,7 +471,7 @@ export function calculatePersonalizedBolus(
     totalBolus: Number(safeTotalBolus.toFixed(1)),
     unclampedTotalBolus: Number(roundedTotal.toFixed(1)),
     isCapped,
-    safetyWarning,
+    safetyWarning: warnings.length > 0 ? warnings.join(' ') : undefined,
     isHoneymoonActive,
     honeymoonNotice,
     currentGlucose: normalizedCurrentGlucose,
@@ -316,6 +480,11 @@ export function calculatePersonalizedBolus(
     activityLevel,
     activityReductionPct,
     activityReductionUnits: Number(activityReductionUnits.toFixed(2)),
+    isHypoglycemia,
+    isCautionLow,
+    isBlocked,
+    blockReason,
+    profileIssues: profileIssues.length > 0 ? profileIssues : undefined,
   };
 }
 
@@ -345,6 +514,15 @@ export function exportUserDataBackup(): void {
 export function importUserDataBackup(jsonContent: string): { success: boolean; count?: number; error?: string } {
   try {
     const data = JSON.parse(jsonContent);
+    if (data.profile) {
+      const issues = validateTherapeuticProfile(data.profile);
+      if (issues.length > 0) {
+        return {
+          success: false,
+          error: `Profil thérapeutique du fichier refusé : ${issues.map((i) => i.fr).join(' ')}`,
+        };
+      }
+    }
     if (data.profile) {
       saveUserProfile(data.profile);
     }

@@ -81,6 +81,20 @@ export interface CalculatedBolusSummary {
   safetyWarning?: string; // Message d'alerte sécurité clinique si détection anomalie
   isHoneymoonActive?: boolean; // True si le mode rémission partielle / lune de miel est actif
   honeymoonNotice?: string; // Consigne clinique spécifique à la phase de lune de miel
+  isHypoglycemia?: boolean; // Glycémie normalisée < 0.70 g/L (70 mg/dL) : aucune dose proposée
+  isCautionLow?: boolean; // Glycémie normalisée < 0.80 g/L (80 mg/dL) : prudence
+  isBlocked?: boolean; // True si aucune dose ne doit être proposée (totalBolus forcé à 0)
+  blockReason?: BolusBlockReason;
+  profileIssues?: ProfileValidationIssue[]; // Paramètres thérapeutiques hors bornes cliniques
+}
+
+export type BolusBlockReason = 'invalid_profile' | 'invalid_carbs' | 'invalid_glucose' | 'hypoglycemia';
+
+export interface ProfileValidationIssue {
+  field: 'targetGlucose' | 'isf' | 'icRatio';
+  slot?: MealSlot;
+  fr: string;
+  ar: string;
 }
 
 export interface DualWaveSuggestion {

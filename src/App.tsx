@@ -42,7 +42,15 @@ import {
   savePostPrandialMeasurement,
   CGMConfig,
 } from './utils/cgmService';
-import { Sparkles, RefreshCw } from 'lucide-react';
+import { Sparkles, RefreshCw, AlertTriangle, X } from 'lucide-react';
+import { SAMPLE_MEAL_PRESETS } from './data/sampleMeals';
+import {
+  MealAnalysisError,
+  MealAnalysisResult,
+  buildMealFromPreset,
+  requestMealAnalysis,
+  toAnalyzedMeal,
+} from './utils/mealAnalysis';
 import { useLanguage } from './i18n/LanguageContext';
 
 export default function App() {
@@ -65,6 +73,7 @@ export default function App() {
   );
   const [currentMealDraft, setCurrentMealDraft] = useState<AnalyzedMeal | null>(null);
   const [mealFlowState, setMealFlowState] = useState<'idle' | 'analyzing' | 'review' | 'success'>('idle');
+  const [analysisError, setAnalysisError] = useState<string | null>(null);
 
   // DT1 Therapeutic Profile
   const [userProfile, setUserProfile] = useState<UserProfileDT1>(() => loadUserProfile());
@@ -118,14 +127,17 @@ export default function App() {
   // Saved Meals persistence with LocalStorage & Cloud Sync capability
   const [savedMeals, setSavedMeals] = useState<AnalyzedMeal[]>(() => loadSavedMeals());
 
+  // Un profil hors bornes cliniques est refusé par saveUserProfile : l'état n'est alors pas modifié
   const handleApplyTitrationRatios = (updatedProfile: UserProfileDT1) => {
-    setUserProfile(updatedProfile);
-    saveUserProfile(updatedProfile);
+    if (saveUserProfile(updatedProfile).length === 0) {
+      setUserProfile(updatedProfile);
+    }
   };
 
   const handleSaveProfile = (newProfile: UserProfileDT1) => {
-    setUserProfile(newProfile);
-    saveUserProfile(newProfile);
+    if (saveUserProfile(newProfile).length === 0) {
+      setUserProfile(newProfile);
+    }
   };
 
   const handleToggleFavorite = (mealId: string) => {
@@ -166,232 +178,99 @@ export default function App() {
     saveUserProfile(updatedProfile);
   };
 
-  // Handle Photo Analysis
-  const handleAnalyzePhoto = async (imageData: string, presetName?: string) => {
+  // Lance une analyse de repas. En cas d'échec, aucune estimation n'est inventée :
+  // l'utilisateur revient à l'accueil avec un message d'erreur explicite.
+  const runMealAnalysis = async (
+    stepLabel: string,
+    inputType: InputMode,
+    defaultName: string,
+    getResult: () => Promise<MealAnalysisResult>
+  ) => {
     setIsAnalyzing(true);
-    setAnalysisStepLabel(
-      isAr ? 'التعرف البصري على الأطعمة…' : 'Identification visuelle des aliments…'
-    );
+    setAnalysisError(null);
+    setAnalysisStepLabel(stepLabel);
     setActiveInputModal(null);
     setMealFlowState('analyzing');
 
     try {
-      setTimeout(() => {
-        setAnalysisStepLabel(
-          isAr ? 'تقدير الأحجام والحصص في الصحن…' : 'Estimation des volumes et portions…'
-        );
-      }, 500);
-
-      setTimeout(() => {
-        setAnalysisStepLabel(
-          isAr ? 'الربط مع قاعدة الأطعمة التونسية المعتمدة…' : 'Interrogation de la base certifiée tunisienne…'
-        );
-      }, 1000);
-
-      const response = await fetch('/api/analyze-meal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mode: 'photo',
-          image: imageData,
-          presetName,
-        }),
-      });
-
-      const data = await response.json();
-      const analyzedMeal: AnalyzedMeal = {
-        id: `meal-${Date.now()}`,
-        user_id: auth.currentUser?.uid || 'user-local',
-        meal_name: data.meal_name || presetName || (isAr ? 'وجبة مصورة' : 'Repas photographié'),
-        meal_name_ar: data.meal_name_ar || '',
-        created_at: new Date().toISOString(),
-        input_type: 'photo',
-        total_carbs: data.total_carbs,
-        overall_confidence: data.overall_confidence || 'high',
-        confidence_score: data.confidence_score || 90,
-        notes: data.notes,
-        items: data.items || [],
-      };
-
-      setCurrentMealDraft(analyzedMeal);
+      const result = await getResult();
+      setCurrentMealDraft(toAnalyzedMeal(result, inputType, defaultName, auth.currentUser?.uid || 'user-local'));
       setMealFlowState('review');
     } catch (err) {
-      console.error('Photo analysis error:', err);
+      console.error(`Meal analysis error (${inputType}):`, err);
+      const message =
+        err instanceof MealAnalysisError
+          ? err.message
+          : 'Analyse impossible. Réessayez ou saisissez votre repas manuellement.';
+      setAnalysisError(
+        isAr
+          ? `تعذر تحليل الوجبة، لم يتم احتساب أي جرعة. (${message})`
+          : `${message} Aucune estimation de glucides ni de dose n'a été calculée.`
+      );
+      setCurrentMealDraft(null);
+      setMealFlowState('idle');
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  // Handle Photo Analysis
+  const handleAnalyzePhoto = async (imageData: string, presetName?: string) => {
+    const preset = presetName ? SAMPLE_MEAL_PRESETS.find((p) => p.name === presetName) : undefined;
+    await runMealAnalysis(
+      isAr ? 'التعرف البصري على الأطعمة…' : 'Identification visuelle des aliments…',
+      'photo',
+      presetName || (isAr ? 'وجبة مصورة' : 'Repas photographié'),
+      // Les exemples de démonstration utilisent leur composition de référence (pas d'analyse IA de l'image d'exemple)
+      () => (preset ? Promise.resolve(buildMealFromPreset(preset)) : requestMealAnalysis({ mode: 'photo', image: imageData }))
+    );
   };
 
   // Handle Text Analysis
   const handleAnalyzeText = async (text: string) => {
-    setIsAnalyzing(true);
-    setAnalysisStepLabel(
-      isAr ? 'تحليل النص واستخراج الكميات والمكونات…' : 'Analyse du texte et extraction des quantités…'
+    await runMealAnalysis(
+      isAr ? 'تحليل النص واستخراج الكميات والمكونات…' : 'Analyse du texte et extraction des quantités…',
+      'text',
+      isAr ? 'وجبة مكتوبة' : 'Repas décrit',
+      () => requestMealAnalysis({ mode: 'text', text })
     );
-    setActiveInputModal(null);
-    setMealFlowState('analyzing');
-
-    try {
-      const response = await fetch('/api/analyze-meal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'text', text }),
-      });
-
-      const data = await response.json();
-      const analyzedMeal: AnalyzedMeal = {
-        id: `meal-${Date.now()}`,
-        user_id: auth.currentUser?.uid || 'user-local',
-        meal_name: data.meal_name || (isAr ? 'وجبة مكتوبة' : 'Repas décrit'),
-        meal_name_ar: data.meal_name_ar || '',
-        created_at: new Date().toISOString(),
-        input_type: 'text',
-        total_carbs: data.total_carbs,
-        overall_confidence: data.overall_confidence || 'high',
-        confidence_score: data.confidence_score || 88,
-        notes: data.notes,
-        items: data.items || [],
-      };
-
-      setCurrentMealDraft(analyzedMeal);
-      setMealFlowState('review');
-    } catch (err) {
-      console.error('Text analysis error:', err);
-    } finally {
-      setIsAnalyzing(false);
-    }
   };
 
   // Handle Voice Analysis
   const handleAnalyzeVoice = async (transcript: string, voiceLang?: string) => {
-    setIsAnalyzing(true);
-    setAnalysisStepLabel(
+    await runMealAnalysis(
       isAr
         ? 'التعرف على الصوت واستخراج القيم الغذائية…'
-        : 'Transcription Derja / Français et extraction nutritionnelle…'
+        : 'Transcription Derja / Français et extraction nutritionnelle…',
+      'voice',
+      isAr ? 'وجبة مسجلة صوتياً' : 'Repas dicté',
+      () => requestMealAnalysis({ mode: 'voice', audioTranscript: transcript, voiceLang: voiceLang || 'fr-FR' })
     );
-    setActiveInputModal(null);
-    setMealFlowState('analyzing');
-
-    try {
-      const response = await fetch('/api/analyze-meal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'voice', audioTranscript: transcript, voiceLang: voiceLang || 'fr-FR' }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`API error ${response.status}`);
-      }
-
-      const data = await response.json();
-      const analyzedMeal: AnalyzedMeal = {
-        id: `meal-${Date.now()}`,
-        user_id: auth.currentUser?.uid || 'user-local',
-        meal_name: data.meal_name || (isAr ? 'وجبة مسجلة صوتياً' : 'Repas dicté'),
-        meal_name_ar: data.meal_name_ar || '',
-        created_at: new Date().toISOString(),
-        input_type: 'voice',
-        total_carbs: data.total_carbs,
-        overall_confidence: data.overall_confidence || 'high',
-        confidence_score: data.confidence_score || 90,
-        notes: data.notes,
-        items: data.items || [],
-      };
-
-      setCurrentMealDraft(analyzedMeal);
-      setMealFlowState('review');
-    } catch (err) {
-      console.error('Voice analysis error:', err);
-      setMealFlowState('idle'); // Unblock UI so user can retry
-    } finally {
-      setIsAnalyzing(false);
-    }
   };
 
   // Handle Barcode
   const handleAnalyzeBarcode = async (code: string) => {
-    setIsAnalyzing(true);
-    setAnalysisStepLabel(
+    await runMealAnalysis(
       isAr
         ? 'البحث عن رمز EAN وقراءة الحقائق الغذائية للمنتج…'
-        : 'Interrogation du code EAN et extraction nutritionnelle…'
+        : 'Interrogation du code EAN et extraction nutritionnelle…',
+      'barcode',
+      isAr ? 'منتج غذائي' : 'Produit industriel',
+      () => requestMealAnalysis({ mode: 'barcode', barcode: code })
     );
-    setActiveInputModal(null);
-    setMealFlowState('analyzing');
-
-    try {
-      const response = await fetch('/api/analyze-meal', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mode: 'barcode', barcode: code }),
-      });
-
-      const data = await response.json();
-      const analyzedMeal: AnalyzedMeal = {
-        id: `meal-${Date.now()}`,
-        user_id: auth.currentUser?.uid || 'user-local',
-        meal_name: data.meal_name || (isAr ? 'منتج غذائي' : 'Produit industriel'),
-        meal_name_ar: data.meal_name_ar || '',
-        created_at: new Date().toISOString(),
-        input_type: 'barcode',
-        total_carbs: data.total_carbs,
-        overall_confidence: data.overall_confidence || 'high',
-        confidence_score: data.confidence_score || 98,
-        notes: data.notes,
-        items: data.items || [],
-      };
-
-      setCurrentMealDraft(analyzedMeal);
-      setMealFlowState('review');
-    } catch (err) {
-      console.error('Barcode analysis error:', err);
-    } finally {
-      setIsAnalyzing(false);
-    }
   };
 
   // Handle Nutrition Label OCR
   const handleAnalyzeLabel = async (imageOrText: string, isImage?: boolean) => {
     if (isImage || imageOrText.startsWith('data:image')) {
-      setIsAnalyzing(true);
-      setAnalysisStepLabel(
+      await runMealAnalysis(
         isAr
           ? 'قراءة جدول القيمة الغذائية بالذكاء الاصطناعي (OCR)…'
-          : "Lecture OCR de l'étiquette nutritionnelle par IA…"
+          : "Lecture OCR de l'étiquette nutritionnelle par IA…",
+        'barcode',
+        isAr ? 'منتج ممسوح (البطاقة الغذائية)' : 'Produit scanné (Étiquette)',
+        () => requestMealAnalysis({ mode: 'label_photo', image: imageOrText })
       );
-      setActiveInputModal(null);
-      setMealFlowState('analyzing');
-
-      try {
-        const response = await fetch('/api/analyze-meal', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ mode: 'label_photo', image: imageOrText }),
-        });
-
-        const data = await response.json();
-        const analyzedMeal: AnalyzedMeal = {
-          id: `meal-${Date.now()}`,
-          user_id: auth.currentUser?.uid || 'user-local',
-          meal_name: data.meal_name || (isAr ? 'منتج ممسوح (البطاقة الغذائية)' : 'Produit scanné (Étiquette)'),
-          meal_name_ar: data.meal_name_ar || '',
-          created_at: new Date().toISOString(),
-          input_type: 'barcode',
-          total_carbs: data.total_carbs,
-          overall_confidence: data.overall_confidence || 'high',
-          confidence_score: data.confidence_score || 96,
-          notes: data.notes,
-          items: data.items || [],
-        };
-
-        setCurrentMealDraft(analyzedMeal);
-        setMealFlowState('review');
-      } catch (err) {
-        console.error('Label OCR analysis error:', err);
-      } finally {
-        setIsAnalyzing(false);
-      }
     } else {
       handleAnalyzeText(imageOrText);
     }
@@ -406,6 +285,7 @@ export default function App() {
   };
 
   const handleStartNewMeal = () => {
+    setAnalysisError(null);
     setCurrentMealDraft(null);
     setMealFlowState('idle');
     setCurrentTab('app');
@@ -509,6 +389,26 @@ export default function App() {
         {/* Tab 1: App Workflow */}
         {currentTab === 'app' && (
           <div>
+            {mealFlowState === 'idle' && analysisError && (
+              <div className="max-w-3xl mx-auto px-4 pt-4">
+                <div
+                  role="alert"
+                  className="p-3.5 rounded-2xl bg-rose-50 border border-rose-300 text-rose-900 text-xs font-semibold flex items-start gap-2.5"
+                >
+                  <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span className="flex-1">{analysisError}</span>
+                  <button
+                    type="button"
+                    onClick={() => setAnalysisError(null)}
+                    className="text-rose-700 hover:text-rose-900 cursor-pointer"
+                    aria-label={isAr ? 'إغلاق' : 'Fermer'}
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {mealFlowState === 'idle' && (
               <HomeMealEntry
                 onSelectMode={(mode) => setActiveInputModal(mode)}
@@ -610,7 +510,6 @@ export default function App() {
           <DoctorPortalView
             meals={savedMeals}
             userProfile={userProfile}
-            onUpdateProfile={handleSaveProfile}
             onOpenMedicalReport={() => setIsReportModalOpen(true)}
           />
         )}
@@ -680,6 +579,8 @@ export default function App() {
         isOpen={isCloudSyncOpen}
         onClose={() => setIsCloudSyncOpen(false)}
         onSyncComplete={handleRefreshHistory}
+        currentProfile={userProfile}
+        onProfileApplied={(profile) => setUserProfile(profile)}
       />
 
       {/* Post-Prandial H+2 Entry Modal */}

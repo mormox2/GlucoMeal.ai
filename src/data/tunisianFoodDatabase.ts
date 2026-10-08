@@ -2869,105 +2869,190 @@ export function normalizeCulinaryTerm(str: string): string {
     .trim();
 }
 
-/**
- * Deterministic helper to lookup food by French, Arabic, Derja or alias
- */
-export function findFoodInDatabase(query: string): FoodItem | undefined {
-  if (!query) return undefined;
-  const rawQ = query.toLowerCase().trim();
-  const normQ = normalizeCulinaryTerm(query);
+// Mots vides et qualificatifs génériques ignorés lors de la comparaison par mots-clés
+const MATCH_STOPWORDS = new Set([
+  'de', 'du', 'des', 'la', 'le', 'les', 'l', 'd', 'a', 'au', 'aux', 'et', 'en', 'avec', 'un', 'une',
+  'w', 'b', 'bel', 'bil', 'fel', 'el',
+]);
+const MATCH_GENERIC_WORDS = new Set([
+  'cuit', 'cuits', 'cuite', 'cuites', 'vapeur', 'nature', 'maison', 'standard', 'classique',
+  'traditionnel', 'traditionnelle', 'traditionnels', 'tunisien', 'tunisienne', 'tunisiens', 'tunisiennes',
+  'frais', 'fraiche', 'fraiches', 'artisanal', 'artisanale', 'morceau', 'piece',
+]);
+// Mots introduisant une négation : « sans sucre » ne doit jamais correspondre à « sucre »
+const NEGATION_WORDS = new Set(['sans', 'بدون', 'بلا']);
 
-  // 1. Direct Aliases Match (Specific cuts, dishes, and culinary phrases)
-  
+const ARABIC_SCRIPT = /[؀-ۿ]/;
+
+/**
+ * Normalisation pour la recherche : minuscules, sans accents latins, ponctuation remplacée par des espaces.
+ */
+function foldForMatching(str: string): string {
+  return normalizeCulinaryTerm(str)
+    .replace(/œ/g, 'oe')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+
+function significantTokens(folded: string): string[] {
+  return folded.split(' ').filter((t) => t && !MATCH_STOPWORDS.has(t));
+}
+
+function containsPhrase(haystack: string, phrase: string): boolean {
+  if (ARABIC_SCRIPT.test(phrase)) {
+    // En arabe, les préfixes (ال، بال، و…) sont collés au mot : recherche de sous-chaîne
+    return haystack.includes(phrase);
+  }
+  return ` ${haystack} `.includes(` ${phrase} `);
+}
+
+function negatedTokens(folded: string): Set<string> {
+  const tokens = folded.split(' ');
+  const negated = new Set<string>();
+  tokens.forEach((t, i) => {
+    if (NEGATION_WORDS.has(t) && tokens[i + 1]) negated.add(tokens[i + 1]);
+  });
+  return negated;
+}
+
+interface MatchCandidate {
+  item: FoodItem;
+  phrase: string;
+  core: string[]; // mots significatifs hors qualificatifs génériques
+  primary: boolean; // false pour les variantes extraites d'une parenthèse (moins spécifiques)
+}
+
+export type FoodMatchQuality = 'exact' | 'phrase' | 'prefix' | 'keyword';
+
+export interface FoodMatch {
+  item: FoodItem;
+  quality: FoodMatchQuality;
+}
+
+let matchCandidatesCache: MatchCandidate[] | null = null;
+
+/**
+ * Expressions de recherche de chaque aliment : nom complet, alias, nom avant parenthèse et
+ * chaque variante séparée par « / » (variantes principales), puis les variantes entre parenthèses.
+ */
+function getMatchCandidates(): MatchCandidate[] {
+  if (matchCandidatesCache) return matchCandidatesCache;
+  const candidates: MatchCandidate[] = [];
   for (const item of TUNISIAN_FOOD_DATABASE) {
-    if (item.aliases && item.aliases.length > 0) {
-      for (const alias of item.aliases) {
-        const normAlias = normalizeCulinaryTerm(alias);
-        if (normQ === normAlias || normQ.includes(normAlias) || normAlias.includes(normQ)) {
-          return item;
-        }
-      }
+    const sources = [item.name_fr, item.name_tn, item.name_ar || '', ...(item.aliases || [])];
+    const phrases = new Map<string, boolean>();
+    const addPhrase = (variant: string, primary: boolean) => {
+      const folded = foldForMatching(variant);
+      if (folded.replace(/\s/g, '').length < 3) return;
+      phrases.set(folded, phrases.get(folded) || primary);
+    };
+    for (const source of sources) {
+      if (!source) continue;
+      const head = source.split('(')[0];
+      [source, head, ...head.split('/')].forEach((variant) => addPhrase(variant, true));
+      const parenthetical = source.match(/\(([^)]*)\)/g) || [];
+      parenthetical.forEach((group) => group.slice(1, -1).split('/').forEach((variant) => addPhrase(variant, false)));
+    }
+    for (const [phrase, primary] of phrases) {
+      candidates.push({
+        item,
+        phrase,
+        core: significantTokens(phrase).filter((t) => !MATCH_GENERIC_WORDS.has(t)),
+        primary,
+      });
     }
   }
+  matchCandidatesCache = candidates;
+  return candidates;
+}
 
-  // 2. Specific High-Priority Tunisian Food & Beverage Matches
-  // Gazouza / Soda detection (Crucial for T1D fast-sugar bolus calculation)
+function hasWord(folded: string, word: string): boolean {
+  return ` ${folded} `.includes(` ${word} `);
+}
+
+/**
+ * Recherche déterministe d'un aliment par nom français, arabe, derja ou alias.
+ *
+ * Les correspondances sont classées par score (la plus spécifique gagne) :
+ * 1. expression identique à la requête ;
+ * 2. expression connue contenue dans la requête, en mots entiers, ou tous les mots-clés (≥ 2)
+ *    d'une expression connue présents dans la requête (la plus grande quantité de texte reconnue gagne) ;
+ * 3. requête qui forme le début d'une expression connue (ex. « Riz » → « Riz blanc cuit »).
+ * Une requête n'est jamais rattachée à un aliment dont elle n'est qu'un ingrédient secondaire
+ * (ex. « Lait » ne correspond plus au « Droo … au lait ») ni à un mot nié (« sans sucre »).
+ * Sans correspondance fiable, la fonction renvoie undefined : l'appelant doit alors signaler
+ * une estimation à vérifier.
+ */
+export function findFoodInDatabase(query: string): FoodItem | undefined {
+  return findFoodMatch(query)?.item;
+}
+
+/**
+ * Comme findFoodInDatabase, avec la qualité de la correspondance : une correspondance 'prefix'
+ * ou 'keyword' est approximative et doit être signalée à l'utilisateur comme valeur à vérifier.
+ */
+export function findFoodMatch(query: string): FoodMatch | undefined {
+  if (!query) return undefined;
+  const q = foldForMatching(query);
+  if (q.replace(/\s/g, '').length < 2) return undefined;
+
+  const qTokens = new Set(significantTokens(q));
+  const qNegated = negatedTokens(q);
+
+  let best: { item: FoodItem; score: number; quality: FoodMatchQuality } | undefined;
+  for (const candidate of getMatchCandidates()) {
+    const { phrase, core, item, primary } = candidate;
+
+    // Garde-fou négation : la requête nie un mot que l'expression affirme
+    const phraseNegated = negatedTokens(phrase);
+    if (core.some((t) => qNegated.has(t) && !phraseNegated.has(t))) continue;
+
+    // Les correspondances partielles sont départagées par la quantité de texte reconnue ;
+    // à score égal, l'aliment le plus haut dans la base (aliments de base en premier) l'emporte.
+    const coreLength = core.join('').length;
+    const bonus = primary ? 5 : 0;
+    let score = 0;
+    let quality: FoodMatchQuality = 'phrase';
+    if (phrase === q) {
+      score = 1000 + bonus;
+      quality = 'exact';
+    } else if (containsPhrase(q, phrase)) {
+      score = 410 + coreLength + bonus;
+    } else if (core.length >= 2 && core.every((t) => qTokens.has(t))) {
+      score = 400 + coreLength + bonus;
+    } else if (q.length >= 3 && (phrase.startsWith(`${q} `) || (ARABIC_SCRIPT.test(q) && phrase.startsWith(q)))) {
+      score = 300 + bonus;
+      quality = 'prefix';
+    }
+
+    if (score > 0 && (!best || score > best.score)) {
+      best = { item, score, quality };
+    }
+  }
+  if (best) return { item: best.item, quality: best.quality };
+
+  // Règles de repli pour les boissons gazeuses (sucre rapide, crucial pour le bolus)
   const isSoda =
-    normQ.includes('قازوز') || // catches ڤازوزة, قازوزة, غازوزة, ڤازوز, قازوز, غازوز
-    rawQ.includes('gazouz') ||
-    rawQ.includes('gazouza') ||
-    rawQ.includes('soda') ||
-    rawQ.includes('coca') ||
-    rawQ.includes('boga') ||
-    rawQ.includes('boisson gazeuse') ||
-    rawQ.includes('canette');
+    q.includes('قازوز') || // catches ڤازوزة, قازوزة, غازوزة, ڤازوز, قازوز, غازوز
+    ['gazouz', 'gazouza', 'soda', 'coca', 'boga', 'canette', 'fanta'].some((w) => hasWord(q, w)) ||
+    q.includes('boisson gazeuse');
 
   if (isSoda) {
     const isLight =
-      normQ.includes('لايت') ||
-      normQ.includes('زيرو') ||
-      normQ.includes('بدون سكر') ||
-      normQ.includes('بلا سكر') ||
-      rawQ.includes('light') ||
-      rawQ.includes('zero') ||
-      rawQ.includes('zéro') ||
-      rawQ.includes('sans sucre');
+      q.includes('لايت') ||
+      q.includes('زيرو') ||
+      q.includes('بدون سكر') ||
+      q.includes('بلا سكر') ||
+      ['light', 'zero'].some((w) => hasWord(q, w)) ||
+      q.includes('sans sucre');
 
-    const found = TUNISIAN_FOOD_DATABASE.find((i) => i.id === (isLight ? 'div-08' : 'div-07'));
-    if (found) return found;
+    const soda = TUNISIAN_FOOD_DATABASE.find((i) => i.id === (isLight ? 'div-08' : 'div-07'));
+    return soda ? { item: soda, quality: 'keyword' } : undefined;
   }
 
-  // Poulet / Viande de poulet
-  if (normQ.includes('دجاج') || rawQ.includes('poulet') || rawQ.includes('djej')) {
-    const found = TUNISIAN_FOOD_DATABASE.find((i) => i.id === 'div-16');
-    if (found) return found;
-  }
-
-  // Couscous (Semoule de couscous)
-  const isCouscous =
-    normQ.includes('كسكسي') ||
-    rawQ.includes('couscous') ||
-    rawQ.includes('kousksi');
-
-  const isStrictlyVegetables =
-    normQ.startsWith('خضرة') ||
-    normQ.startsWith('خضار') ||
-    rawQ.startsWith('legume') ||
-    rawQ.startsWith('légume') ||
-    rawQ.includes('légumes de') ||
-    rawQ.includes('legumes de');
-
-  if (isCouscous && !isStrictlyVegetables) {
-    const found = TUNISIAN_FOOD_DATABASE.find((i) => i.id === 'fec-07' || i.id === 'plat-01');
-    if (found) return found;
-  }
-
-  // Légumes mijotés de couscous
-  if (
-    normQ.includes('خضرة') ||
-    normQ.includes('خضار') ||
-    rawQ.includes('legume') ||
-    rawQ.includes('légume') ||
-    rawQ.includes('khodhra')
-  ) {
-    const found = TUNISIAN_FOOD_DATABASE.find((i) => i.id === 'div-17');
-    if (found) return found;
-  }
-
-  // 3. Name Match in Arabic, French, Tunisian Derja
-  return TUNISIAN_FOOD_DATABASE.find((item) => {
-    const itemNormAr = normalizeCulinaryTerm(item.name_ar || '');
-    const itemNormFr = item.name_fr.toLowerCase();
-    const itemNormTn = item.name_tn.toLowerCase();
-
-    return (
-      itemNormFr.includes(rawQ) ||
-      itemNormTn.includes(rawQ) ||
-      rawQ.includes(itemNormFr) ||
-      rawQ.includes(itemNormTn) ||
-      (itemNormAr && (normQ.includes(itemNormAr) || itemNormAr.includes(normQ)))
-    );
-  });
+  return undefined;
 }
 
 /**

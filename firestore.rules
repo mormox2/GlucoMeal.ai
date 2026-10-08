@@ -76,14 +76,32 @@ service cloud.firestore {
       }
     }
 
-    // Codes de transfert et de liaison inter-appareils haute entropie (ex: GLUCO-7K2X-9B4F)
-    match /syncCodes/{code} {
-      allow get: if isSignedIn() && isValidId(code);
-      allow create, update: if isSignedIn() && isValidId(code)
-        && incoming().syncCode == code
+    // Codes de transfert inter-appareils (80 bits aléatoires, ex: GLUCO-7K2X-9B4F-QM3T-H8WZ)
+    function isValidSyncCode(code) {
+      return code is string && code.matches('^GLUCO(-[A-HJ-NP-Z2-9]{4}){4}$');
+    }
+
+    function isValidSyncRecord(code) {
+      return incoming().syncCode == code
+        && incoming().creatorUid == request.auth.uid
         && incoming().userProfile is map
-        && incoming().meals is list;
-      allow delete: if isSignedIn() && isValidId(code);
+        && !('cgmConfig' in incoming().userProfile)
+        && incoming().meals is list
+        && incoming().expiresAt is timestamp
+        && incoming().expiresAt > request.time
+        && incoming().expiresAt < request.time + duration.value(8, 'd');
+    }
+
+    match /syncCodes/{code} {
+      // Lecture par toute personne connectée qui connaît le code, tant qu'il n'a pas expiré
+      allow get: if isSignedIn() && isValidSyncCode(code)
+        && resource.data.expiresAt is timestamp
+        && request.time < resource.data.expiresAt;
+      // Création : le document est lié au compte qui le crée
+      allow create: if isSignedIn() && isValidSyncCode(code) && isValidSyncRecord(code);
+      // Mise à jour et suppression : uniquement par le compte créateur
+      allow update: if isSignedIn() && resource.data.creatorUid == request.auth.uid && isValidSyncRecord(code);
+      allow delete: if isSignedIn() && resource.data.creatorUid == request.auth.uid;
     }
 
     // Interdiction stricte de toute autre collection non déclarée

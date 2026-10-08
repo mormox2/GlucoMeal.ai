@@ -2,6 +2,30 @@
 
 _Date : 8 octobre 2026 — périmètre : tout le dépôt (`server.ts`, `src/`, règles Firebase, configuration Vercel/PWA, dépendances, tests, documentation)._
 
+## Statut des corrections
+
+**P0 corrigés** (branche `ccr-cf91edbc-mev0ol`) :
+
+| Constat | Correction | Vérification |
+|---|---|---|
+| C1 Glucides inventés | `/api/analyze-meal` renvoie une erreur explicite (`{ error, code }`, 400/404/422/503) au lieu de tout repli fictif ; l'app affiche l'erreur et revient à l'accueil sans dose ; aliments hors base ou approximatifs marqués « confiance faible » ; les exemples photo utilisent leur composition de référence, signalée « démonstration » | `src/__tests__/analyzeMealApi.test.ts` + test navigateur |
+| C2 Hypo masquée | `calculatePersonalizedBolus` normalise la glycémie, détecte l'hypo et renvoie `isBlocked` / `totalBolus = 0` ; l'écran utilise ces valeurs ; les saisies ambiguës (ex. mmol/L) bloquent la dose | `bolusSafety.test.ts` + test navigateur (« 65 » → alerte 0,65 g/L, 0 UI) |
+| C3 Codes de synchronisation | Règles Firestore : écriture et suppression réservées au créateur, expiration de 7 jours imposée, format 80 bits, secret CGM interdit ; codes générés par `crypto.getRandomValues` ; le profil d'insuline reçu n'est appliqué qu'après confirmation et contrôle des bornes | 16 scénarios validés dans l'émulateur Firestore |
+| C4 API `/api/sync/*` | API retirée (410), stockage `/tmp` supprimé, plus aucun envoi miroir ; limiteur de débit indexé par IP seulement | `analyzeMealApi.test.ts` |
+| C5 Correspondance d'aliments | Correspondance par score en mots entiers, gestion des négations, qualité de correspondance exposée (`findFoodMatch`) | `foodMatching.test.ts` (33 cas, dont tous les noms et alias de la base) |
+| C6 Bornes du profil | `validateTherapeuticProfile` (bornes par unité) ; profil hors bornes refusé à l'enregistrement, à l'import et à la synchronisation, et dose bloquée | `bolusSafety.test.ts` |
+| H3 Portail médecin | Portail en lecture seule, code public supprimé | — |
+
+Autres corrections faites en chemin :
+- Firestore refusait les champs `undefined` du profil. Le partage par code échouait donc probablement et passait par l'API non protégée. Corrigé avec `ignoreUndefinedProperties`.
+- L'ancien moteur rattachait « Couscous au poulet » au poulet seul (0 g/100 g) et « Couscous osban » à l'osban (3,5 g/100 g).
+
+À noter pour la suite :
+- Les anciens codes de synchronisation (format court) ne sont plus lisibles.
+- Une politique TTL Firestore sur `syncCodes.expiresAt` reste à activer dans la console.
+- La base d'aliments contient des identifiants en double (`reg-01` à `reg-08`) ; à dédoublonner.
+- Les priorités P1 et P2 restent ouvertes.
+
 ## 0. Synthèse
 
 GlucoMeal.ai calcule des **doses d'insuline** à partir d'estimations de glucides. Toute erreur de calcul ou toute donnée inventée peut donc conduire à une hypoglycémie sévère (surdosage) ou à une hyperglycémie (sous-dosage). C'est le critère qui fixe la gravité de chaque constat ci-dessous.

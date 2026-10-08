@@ -15,6 +15,7 @@ import {
   deleteDoc,
   getDoc,
   getDocs,
+  Timestamp,
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -36,6 +37,7 @@ import {
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
+import { generateSyncCode, isValidSyncCode, normalizeSyncCode } from '../utils/syncCode';
 
 let app: FirebaseApp;
 if (!getApps().length) {
@@ -76,6 +78,8 @@ try {
           localCache: persistentLocalCache({
             tabManager: persistentMultipleTabManager(),
           }),
+          // Les objets de l'application contiennent des champs optionnels à undefined (refusés sinon par Firestore)
+          ignoreUndefinedProperties: true,
         },
         dbId
       )
@@ -83,6 +87,7 @@ try {
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager(),
         }),
+        ignoreUndefinedProperties: true,
       });
 } catch (err) {
   try {
@@ -92,11 +97,13 @@ try {
           app,
           {
             localCache: memoryLocalCache(),
+            ignoreUndefinedProperties: true,
           },
           dbId
         )
       : initializeFirestore(app, {
           localCache: memoryLocalCache(),
+          ignoreUndefinedProperties: true,
         });
   } catch {
     // Fallback si déjà initialisé
@@ -351,70 +358,77 @@ export interface CloudSyncPayload {
   learnedPortions?: any[];
 }
 
+const SYNC_CODE_VALIDITY_MS = 7 * 24 * 3600 * 1000; // 7 jours
+
 /**
- * Sauvegarde le dossier complet sous un code de synchronisation haute entropie directement dans Firestore
+ * Le partage par code ne transporte jamais de secrets d'appareil (ex. clé API Nightscout).
  */
-export async function pushSyncCodeToFirestore(
-  customCode?: string,
-  payload?: CloudSyncPayload
-): Promise<{ success: boolean; syncCode: string; lastUpdated: string; totalMeals: number }> {
-  try {
-    let creatorUid = 'anonymous';
-    try {
-      const user = await ensureAuthenticatedUser();
-      creatorUid = user.uid;
-    } catch {
-      // Authentification non initialisée ou anonyme désactivée
-    }
-
-    let syncCode = customCode?.trim().toUpperCase();
-    if (!syncCode) {
-      const p1 = Math.random().toString(36).substring(2, 6).toUpperCase();
-      const p2 = Math.random().toString(36).substring(2, 6).toUpperCase();
-      syncCode = `GLUCO-${p1}-${p2}`;
-    }
-
-    const docRef = doc(db, 'syncCodes', syncCode);
-    const now = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(); // 7 jours de validité
-
-    await setDoc(docRef, {
-      syncCode,
-      creatorUid,
-      userProfile: payload?.userProfile || {},
-      meals: payload?.meals || [],
-      learnedPortions: payload?.learnedPortions || [],
-      lastUpdated: now,
-      expiresAt,
-    });
-
-    return {
-      success: true,
-      syncCode,
-      lastUpdated: now,
-      totalMeals: payload?.meals?.length || 0,
-    };
-  } catch (err) {
-    console.error('Erreur pushSyncCodeToFirestore:', err);
-    throw err;
-  }
+export function stripSecretsFromProfile(profile: UserProfileDT1): Omit<UserProfileDT1, 'cgmConfig'> {
+  const { cgmConfig: _secret, ...shareable } = profile;
+  return shareable;
 }
 
 /**
- * Récupère le dossier complet depuis un code de synchronisation Firestore
+ * Sauvegarde le dossier sous un code de synchronisation dans Firestore.
+ * Seul le compte qui a créé un code peut le mettre à jour (règles Firestore) : si le code existant
+ * appartient à un autre compte (ex. code importé depuis un autre appareil), un nouveau code est créé.
+ */
+export async function pushSyncCodeToFirestore(
+  existingCode?: string,
+  payload?: CloudSyncPayload
+): Promise<{ success: boolean; syncCode: string; lastUpdated: string; totalMeals: number }> {
+  const user = await ensureAuthenticatedUser();
+  const now = new Date();
+
+  const writeRecord = async (syncCode: string) => {
+    await setDoc(doc(db, 'syncCodes', syncCode), {
+      syncCode,
+      creatorUid: user.uid,
+      userProfile: payload?.userProfile ? stripSecretsFromProfile(payload.userProfile) : {},
+      meals: payload?.meals || [],
+      learnedPortions: payload?.learnedPortions || [],
+      lastUpdated: now.toISOString(),
+      expiresAt: Timestamp.fromMillis(now.getTime() + SYNC_CODE_VALIDITY_MS),
+    });
+  };
+
+  const candidate = existingCode ? normalizeSyncCode(existingCode) : '';
+  let syncCode = isValidSyncCode(candidate) ? candidate : generateSyncCode();
+  try {
+    await writeRecord(syncCode);
+  } catch (err: any) {
+    if (err?.code !== 'permission-denied' || syncCode !== candidate) {
+      console.error('Erreur pushSyncCodeToFirestore:', err);
+      throw err;
+    }
+    syncCode = generateSyncCode();
+    await writeRecord(syncCode);
+  }
+
+  return {
+    success: true,
+    syncCode,
+    lastUpdated: now.toISOString(),
+    totalMeals: payload?.meals?.length || 0,
+  };
+}
+
+/**
+ * Récupère le dossier complet depuis un code de synchronisation Firestore (lecture seule, code non expiré).
  */
 export async function pullSyncCodeFromFirestore(
   syncCode: string
 ): Promise<{ success: boolean; message: string; record?: any }> {
+  const cleanCode = normalizeSyncCode(syncCode);
+  if (!isValidSyncCode(cleanCode)) {
+    return {
+      success: false,
+      message: 'Format de code invalide (attendu : GLUCO-XXXX-XXXX-XXXX-XXXX).',
+    };
+  }
   try {
-    try {
-      await ensureAuthenticatedUser();
-    } catch {
-      // Continue en lecture directe si autorisé
-    }
-    const cleanCode = syncCode.trim().toUpperCase();
-    const docRef = doc(db, 'syncCodes', cleanCode);
-    const snap = await getDoc(docRef);
+    await ensureAuthenticatedUser();
+    const snap = await getDoc(doc(db, 'syncCodes', cleanCode));
 
     if (!snap.exists()) {
       return {
@@ -430,6 +444,10 @@ export async function pullSyncCodeFromFirestore(
       record: data,
     };
   } catch (err: any) {
+    // Les règles refusent la lecture d'un code inexistant ou expiré
+    if (err?.code === 'permission-denied') {
+      return { success: false, message: 'Code de synchronisation introuvable ou expiré.' };
+    }
     console.error('Erreur pullSyncCodeFromFirestore:', err);
     return {
       success: false,
@@ -437,4 +455,3 @@ export async function pullSyncCodeFromFirestore(
     };
   }
 }
-

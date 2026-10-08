@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, ShieldCheck, Clock, Activity, Target, Save, X, RotateCcw, Sparkles, CheckCircle2, Moon, AlertTriangle, LogOut, Cloud } from 'lucide-react';
-import { UserProfileDT1 } from '../types';
-import { DEFAULT_USER_PROFILE, sanitizeUserProfile } from '../utils/storage';
+import { ProfileValidationIssue, UserProfileDT1 } from '../types';
+import { DEFAULT_USER_PROFILE, sanitizeUserProfile, validateTherapeuticProfile } from '../utils/storage';
 import { auth, logoutUser } from '../services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -25,6 +25,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const profile = propProfile || currentProfile || DEFAULT_USER_PROFILE;
   const [formData, setFormData] = useState<UserProfileDT1>(() => sanitizeUserProfile(profile));
   const [savedFeedback, setSavedFeedback] = useState(false);
+  const [profileIssues, setProfileIssues] = useState<ProfileValidationIssue[]>([]);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(
     () => auth.currentUser?.email || profile?.parentEmail || null
   );
@@ -33,6 +34,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     const active = propProfile || currentProfile;
     if (active) {
       setFormData(sanitizeUserProfile(active));
+      setProfileIssues([]);
       setCurrentUserEmail(auth.currentUser?.email || active?.parentEmail || null);
     }
   }, [propProfile, currentProfile, isOpen]);
@@ -82,6 +84,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanProfile = sanitizeUserProfile(formData);
+    // Garde-fou clinique : un profil hors bornes (ex. ISF 0.4 dans un profil mg/dL) n'est jamais enregistré
+    const issues = validateTherapeuticProfile(cleanProfile);
+    setProfileIssues(issues);
+    if (issues.length > 0) return;
     onSave(cleanProfile);
     setSavedFeedback(true);
     setTimeout(() => {
@@ -880,6 +886,19 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             )}
           </div>
 
+          {profileIssues.length > 0 && (
+            <div role="alert" className="w-full p-3 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 text-[11px] space-y-1">
+              <p className="font-extrabold flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {language === 'ar' ? 'لم يتم الحفظ : قيم خارج الحدود السريرية' : 'Profil non enregistré : valeurs hors bornes cliniques'}
+              </p>
+              <ul className="list-disc ps-4 space-y-0.5">
+                {profileIssues.map((issue) => (
+                  <li key={`${issue.field}-${issue.slot || ''}`}>{language === 'ar' ? issue.ar : issue.fr}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           {/* Action Buttons */}
           <div className="flex items-center justify-between pt-2 border-t border-slate-100">
             <button

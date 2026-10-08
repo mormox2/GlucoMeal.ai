@@ -141,10 +141,10 @@ Support étendu des capteurs de glycémie en continu :
 
 ### 6. Portail Médical & Diabétologue (Doctor Portal)
 
-- **Accès sécurisé par code praticien PIN**.
-- Synthèse du profil ambulatoire de glucose (**AGP**).
+- Vue de consultation **en lecture seule** : elle ne modifie jamais le profil d'insuline (les ratios se modifient dans le profil DT1, sur prescription).
+- Synthèse des glycémies post-prandiales et pistes de titration à discuter.
 - Historique complet des repas corrélés avec les doses d'insuline injectées et les glycémies à 2 heures.
-- Espace de saisie pour notes de consultation et validation formelle des ratios prescrits.
+- Espace de saisie pour notes de consultation.
 
 ---
 
@@ -183,7 +183,7 @@ GlucoMeal intègre son propre banc d'essai métrologique fondé sur le standard 
 
 - **Fonctionnement Offline First (PWA)** : Données persistées localement via IndexedDB / LocalStorage et Service Worker.
 - **Synchronisation Cloud Firestore** : Sauvegarde instantanée dès reconnexion.
-- **Code de partage patient/famille** : Permet aux parents d'un enfant DT1 ou à l'équipe médicale de suivre les repas et doses injectées à distance.
+- **Code de partage patient/famille** : code aléatoire de 80 bits (`GLUCO-XXXX-XXXX-XXXX-XXXX`), valable 7 jours, modifiable uniquement par le compte qui l'a créé. Les repas sont restaurés ; les paramètres d'insuline reçus ne sont appliqués qu'après confirmation explicite et contrôle des bornes cliniques. Les secrets d'appareil (clé Nightscout) ne sont jamais partagés.
 
 ---
 
@@ -351,8 +351,9 @@ Cette commande compile le frontend Vite dans `/dist` et bundle `server.ts` avec 
 | `GET` | `/api/benchmark/dataset` | Récupération du dataset d'évaluation métrologique | Illimité |
 | `POST` | `/api/benchmark/evaluate` | Lancement de l'évaluation automatisée de précision | 10 req/min |
 | `POST` | `/api/benchmark/live-vision` | Test d'inférence en direct sur un échantillon de plat | 30 req/min |
-| `POST` | `/api/sync/push` | Sauvegarde télémétrique chiffrée pour télé-surveillance | 40 req/min |
-| `GET` | `/api/sync/pull/:syncCode` | Récupération du journal patient via code de partage | 60 req/min |
+| `*` | `/api/sync/*` | Retirée (410 Gone) : la synchronisation passe uniquement par Firestore | — |
+
+En cas d'échec (IA indisponible, aliment ou code-barres inconnu, glucides illisibles), `/api/analyze-meal` renvoie une erreur explicite (`{ error, code }`, HTTP 4xx/5xx) et **jamais** une estimation de glucides par défaut.
 
 ---
 
