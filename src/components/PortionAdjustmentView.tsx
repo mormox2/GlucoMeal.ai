@@ -473,7 +473,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           <div className="flex flex-col sm:items-end gap-2">
             {confidenceBadge()}
             <span className="text-[11px] text-slate-500">
-              {language === 'ar' ? 'معادلة دقيقة معتمدة وفق المعهد الوطني للتغذية بتونس (INNT)' : 'Formule déterministe certifiée INNT Tunis'}
+              {language === 'ar' ? 'معادلة محددة : الوزن × الكربوهيدرات لكل 100 غ' : 'Formule déterministe : poids × glucides / 100 g'}
             </span>
           </div>
         </div>
@@ -1233,7 +1233,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               <div className="flex items-center gap-2">
                 <PlusCircle className="w-5 h-5 text-emerald-600" />
                 <h3 className="text-sm font-bold text-slate-900">
-                  {language === 'ar' ? 'إضافة صنف غذائي تونسي معتمد' : 'Ajouter un aliment tunisien certifié'}
+                  {language === 'ar' ? 'إضافة صنف من القاعدة التونسية' : 'Ajouter un aliment de la base tunisienne'}
                 </h3>
               </div>
               <button

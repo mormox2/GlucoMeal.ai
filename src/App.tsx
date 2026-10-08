@@ -1,28 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { Header } from './components/Header';
 import { HomeMealEntry } from './components/HomeMealEntry';
 import { PhotoInputModal } from './components/PhotoInputModal';
 import { TextInputModal } from './components/TextInputModal';
 import { VoiceInputModal } from './components/VoiceInputModal';
-import { BarcodeModal } from './components/BarcodeModal';
 import { PortionAdjustmentView } from './components/PortionAdjustmentView';
 import { MealValidationSuccess } from './components/MealValidationSuccess';
 import { FoodDatabaseView } from './components/FoodDatabaseView';
-import { BenchmarkView } from './components/BenchmarkView';
 import { HistoryView } from './components/HistoryView';
 import { UserProfileModal } from './components/UserProfileModal';
-import { MedicalReportModal } from './components/MedicalReportModal';
-import { CGMSyncModal } from './components/CGMSyncModal';
 import { PostPrandialEntryModal } from './components/PostPrandialEntryModal';
 import { AutoTitrationModal } from './components/AutoTitrationModal';
 import { CloudSyncModal } from './components/CloudSyncModal';
-import { DoctorPortalView } from './components/DoctorPortalView';
 import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { PWAInstallModal } from './components/PWAInstallModal';
 import { PostPrandialReminderBanner } from './components/PostPrandialReminderBanner';
 import { BottomNav } from './components/BottomNav';
 import { LandingPageView } from './components/LandingPageView';
 import { AuthScreen } from './components/AuthScreen';
+import { ConsentScreen } from './components/ConsentScreen';
+import { Analytics } from '@vercel/analytics/react';
+import { ConsentState, loadConsent } from './utils/consent';
 import { AnalyzedMeal, InputMode, UserProfileDT1 } from './types';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth, subscribeToMeals } from './services/firebase';
@@ -43,6 +41,23 @@ import {
   CGMConfig,
 } from './utils/cgmService';
 import { Sparkles, RefreshCw, AlertTriangle, X } from 'lucide-react';
+
+// Vues et fenêtres lourdes (graphiques, lecteur de code-barres, capteurs) chargées à la demande
+const BarcodeModal = lazy(() => import('./components/BarcodeModal').then((m) => ({ default: m.BarcodeModal })));
+const BenchmarkView = lazy(() => import('./components/BenchmarkView').then((m) => ({ default: m.BenchmarkView })));
+const MedicalReportModal = lazy(() =>
+  import('./components/MedicalReportModal').then((m) => ({ default: m.MedicalReportModal }))
+);
+const CGMSyncModal = lazy(() => import('./components/CGMSyncModal').then((m) => ({ default: m.CGMSyncModal })));
+const DoctorPortalView = lazy(() =>
+  import('./components/DoctorPortalView').then((m) => ({ default: m.DoctorPortalView }))
+);
+
+const lazyFallback = (
+  <div className="py-16 flex justify-center text-emerald-700">
+    <RefreshCw className="w-6 h-6 animate-spin" />
+  </div>
+);
 import { SAMPLE_MEAL_PRESETS } from './data/sampleMeals';
 import {
   MealAnalysisError,
@@ -64,6 +79,10 @@ export default function App() {
     return 'landing'; // Default to landing page
   });
   const [authInitialMode, setAuthInitialMode] = useState<'login' | 'signup'>('signup');
+  // Consentement au traitement des données de santé (demandé avant d'entrer dans l'application)
+  const [consent, setConsent] = useState<ConsentState | null>(() => loadConsent());
+  // Mesure d'audience uniquement avec l'accord de l'utilisateur
+  const analytics = consent?.analytics ? <Analytics /> : null;
 
   const [currentTab, setCurrentTab] = useState<'app' | 'history' | 'database' | 'benchmark' | 'doctor'>('app');
   const [activeInputModal, setActiveInputModal] = useState<InputMode | null>(null);
@@ -296,9 +315,22 @@ export default function App() {
     setCurrentTab('app');
   };
 
+  if (viewScreen !== 'landing' && !consent) {
+    return (
+      <ConsentScreen
+        onAccept={(accepted) => setConsent(accepted)}
+        onDecline={() => {
+          localStorage.removeItem('glucomal_screen_preference_v1');
+          setViewScreen('landing');
+        }}
+      />
+    );
+  }
+
   if (viewScreen === 'landing') {
     return (
       <>
+        {analytics}
         <LandingPageView
           onStartSignUp={() => {
             setAuthInitialMode('signup');
@@ -335,25 +367,31 @@ export default function App() {
 
   if (viewScreen === 'auth') {
     return (
-      <AuthScreen
-        initialMode={authInitialMode}
-        onSuccess={(updatedProfile) => {
-          setUserProfile(updatedProfile);
-          setSavedMeals(loadSavedMeals());
-          localStorage.setItem('glucomal_screen_preference_v1', 'app');
-          setViewScreen('app');
-        }}
-        onCancel={() => {
-          localStorage.setItem('glucomal_screen_preference_v1', 'app');
-          setViewScreen('app');
-        }}
-        onBackToLanding={() => setViewScreen('landing')}
-      />
+      <>
+        {analytics}
+        <AuthScreen
+          initialMode={authInitialMode}
+          onSuccess={(updatedProfile) => {
+            setUserProfile(updatedProfile);
+            // La connexion à un compte active la sauvegarde cloud (voir AuthScreen)
+            setConsent(loadConsent());
+            setSavedMeals(loadSavedMeals());
+            localStorage.setItem('glucomal_screen_preference_v1', 'app');
+            setViewScreen('app');
+          }}
+          onCancel={() => {
+            localStorage.setItem('glucomal_screen_preference_v1', 'app');
+            setViewScreen('app');
+          }}
+          onBackToLanding={() => setViewScreen('landing')}
+        />
+      </>
     );
   }
 
   return (
     <div className={`min-h-screen bg-slate-50/50 text-slate-900 flex flex-col font-sans selection:bg-emerald-100 selection:text-emerald-900 ${isRtl ? 'font-arabic' : ''}`} dir={isRtl ? 'rtl' : 'ltr'}>
+      {analytics}
       {/* PWA offline alert & install banner */}
       <PWAInstallBanner onOpenInstallModal={() => setIsPWAInstallModalOpen(true)} />
 
@@ -509,15 +547,21 @@ export default function App() {
         {currentTab === 'database' && <FoodDatabaseView />}
 
         {/* Tab 4: Benchmark Dataset — dev-only QA tool, hidden in production */}
-        {import.meta.env.DEV && currentTab === 'benchmark' && <BenchmarkView />}
+        {import.meta.env.DEV && currentTab === 'benchmark' && (
+          <Suspense fallback={lazyFallback}>
+            <BenchmarkView />
+          </Suspense>
+        )}
 
         {/* Tab 5: Diabetologist Portal & Telemonitoring */}
         {currentTab === 'doctor' && (
-          <DoctorPortalView
-            meals={savedMeals}
-            userProfile={userProfile}
-            onOpenMedicalReport={() => setIsReportModalOpen(true)}
-          />
+          <Suspense fallback={lazyFallback}>
+            <DoctorPortalView
+              meals={savedMeals}
+              userProfile={userProfile}
+              onOpenMedicalReport={() => setIsReportModalOpen(true)}
+            />
+          </Suspense>
         )}
       </main>
 
@@ -538,6 +582,8 @@ export default function App() {
 
       {/* DT1 Therapeutic Profile Modal */}
       <UserProfileModal
+        consent={consent}
+        onConsentChange={setConsent}
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
         onSave={handleSaveProfile}
@@ -546,21 +592,29 @@ export default function App() {
       />
 
       {/* Medical Report / Diabetologist Consultation Modal */}
-      <MedicalReportModal
-        isOpen={isReportModalOpen}
-        onClose={() => setIsReportModalOpen(false)}
-        meals={savedMeals}
-        userProfile={userProfile}
-      />
+      {isReportModalOpen && (
+        <Suspense fallback={null}>
+          <MedicalReportModal
+            isOpen={isReportModalOpen}
+            onClose={() => setIsReportModalOpen(false)}
+            meals={savedMeals}
+            userProfile={userProfile}
+          />
+        </Suspense>
+      )}
 
       {/* CGM Sensor Gateway Modal */}
-      <CGMSyncModal
-        isOpen={isCGMModalOpen}
-        onClose={() => setIsCGMModalOpen(false)}
-        config={cgmConfig}
-        userProfile={userProfile}
-        onSaveConfig={handleSaveCGMConfig}
-      />
+      {isCGMModalOpen && (
+        <Suspense fallback={null}>
+          <CGMSyncModal
+            isOpen={isCGMModalOpen}
+            onClose={() => setIsCGMModalOpen(false)}
+            config={cgmConfig}
+            userProfile={userProfile}
+            onSaveConfig={handleSaveCGMConfig}
+          />
+        </Suspense>
+      )}
 
       {/* Auto-Titration Algorithmic Engine Modal */}
       <AutoTitrationModal
@@ -623,13 +677,17 @@ export default function App() {
         isAnalyzing={isAnalyzing}
       />
 
-      <BarcodeModal
-        isOpen={activeInputModal === 'barcode'}
-        onClose={() => setActiveInputModal(null)}
-        onAnalyzeBarcode={handleAnalyzeBarcode}
-        onAnalyzeNutritionLabel={handleAnalyzeLabel}
-        isAnalyzing={isAnalyzing}
-      />
+      {activeInputModal === 'barcode' && (
+        <Suspense fallback={null}>
+          <BarcodeModal
+            isOpen
+            onClose={() => setActiveInputModal(null)}
+            onAnalyzeBarcode={handleAnalyzeBarcode}
+            onAnalyzeNutritionLabel={handleAnalyzeLabel}
+            isAnalyzing={isAnalyzing}
+          />
+        </Suspense>
+      )}
 
       {/* PWA Install Instructions & 1-Click Action Modal */}
       <PWAInstallModal

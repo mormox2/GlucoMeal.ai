@@ -10,12 +10,12 @@ import {
   setDoc,
   collection,
   onSnapshot,
-  query,
-  orderBy,
   deleteDoc,
   getDoc,
   getDocs,
   Timestamp,
+  terminate,
+  clearIndexedDbPersistence,
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -25,6 +25,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
+  deleteUser,
   User,
 } from 'firebase/auth';
 import {
@@ -32,12 +33,15 @@ import {
   ref,
   uploadString,
   getDownloadURL,
+  listAll,
+  deleteObject,
   FirebaseStorage,
 } from 'firebase/storage';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
 import { generateSyncCode, isValidSyncCode, normalizeSyncCode } from '../utils/syncCode';
+import { isCloudSyncAllowed } from '../utils/consent';
 
 let app: FirebaseApp;
 if (!getApps().length) {
@@ -178,6 +182,8 @@ export async function ensureAuthenticatedUser(): Promise<User> {
  * Synchroniser le profil patient vers Firestore
  */
 export async function syncProfileToFirestore(profile: UserProfileDT1): Promise<void> {
+  // Aucune donnée de santé n'est envoyée dans le cloud sans l'accord de l'utilisateur
+  if (!isCloudSyncAllowed()) return;
   try {
     const user = await ensureAuthenticatedUser();
     const userDocRef = doc(db, 'users', user.uid);
@@ -210,6 +216,7 @@ export async function syncProfileToFirestore(profile: UserProfileDT1): Promise<v
  * Sauvegarder ou mettre à jour un repas dans Firestore
  */
 export async function syncMealToFirestore(meal: AnalyzedMeal): Promise<void> {
+  if (!isCloudSyncAllowed()) return;
   try {
     const user = await ensureAuthenticatedUser();
     const mealDocRef = doc(db, 'users', user.uid, 'meals', meal.id);
@@ -231,8 +238,10 @@ export async function syncMealToFirestore(meal: AnalyzedMeal): Promise<void> {
  * Supprimer un repas de Firestore
  */
 export async function deleteMealFromFirestore(mealId: string): Promise<void> {
+  // La suppression a lieu même si la synchronisation a été désactivée depuis (sans créer de compte)
+  const user = auth.currentUser;
+  if (!user) return;
   try {
-    const user = await ensureAuthenticatedUser();
     const mealDocRef = doc(db, 'users', user.uid, 'meals', mealId);
     await deleteDoc(mealDocRef);
   } catch (err) {
@@ -248,21 +257,81 @@ export function subscribeToMeals(
   onUpdate: (meals: AnalyzedMeal[]) => void
 ): () => void {
   const mealsColRef = collection(db, 'users', userId, 'meals');
-  const q = query(mealsColRef, orderBy('created_at', 'desc'));
 
+  // Pas de orderBy('created_at') : Firestore exclurait les repas qui n'ont que « timestamp »
   return onSnapshot(
-    q,
+    mealsColRef,
     (snapshot) => {
       const meals: AnalyzedMeal[] = [];
       snapshot.forEach((docSnap) => {
         meals.push(docSnap.data() as AnalyzedMeal);
       });
-      onUpdate(meals);
+      onUpdate(sortMealsByDateDesc(meals));
     },
     (err) => {
       console.warn('Écouteur Firestore repas:', err);
     }
   );
+}
+
+function sortMealsByDateDesc(meals: AnalyzedMeal[]): AnalyzedMeal[] {
+  const time = (m: AnalyzedMeal) => Date.parse(m.created_at || m.timestamp || '') || 0;
+  return [...meals].sort((a, b) => time(b) - time(a));
+}
+
+/**
+ * Supprime tous les repas du compte dans Firestore (sans créer de compte s'il n'y en a pas).
+ */
+export async function deleteAllMealsFromFirestore(): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) return;
+  const snap = await getDocs(collection(db, 'users', user.uid, 'meals'));
+  await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+}
+
+/**
+ * Droit à l'effacement : supprime toutes les données cloud du compte (repas, profil, CGM, délégations,
+ * photos, code de partage créé) puis le compte Firebase lui-même.
+ * Un compte e-mail peut exiger une reconnexion récente (erreur auth/requires-recent-login).
+ */
+export async function deleteAllCloudData(ownedSyncCode?: string | null): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) return;
+  const uid = user.uid;
+
+  for (const sub of ['meals', 'cgm', 'delegates']) {
+    const snap = await getDocs(collection(db, 'users', uid, sub));
+    await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+  }
+  await deleteDoc(doc(db, 'users', uid));
+
+  if (ownedSyncCode && isValidSyncCode(ownedSyncCode)) {
+    // Refusé par les règles si le code appartient à un autre compte : on ignore ce cas
+    await deleteDoc(doc(db, 'syncCodes', ownedSyncCode)).catch(() => {});
+  }
+
+  try {
+    const photos = await listAll(ref(storage, `users/${uid}/meals`));
+    await Promise.all(photos.items.map((item) => deleteObject(item)));
+  } catch (err) {
+    console.warn('Suppression des photos Storage:', err);
+  }
+
+  await deleteUser(user);
+}
+
+/**
+ * Efface le cache local de Firestore (IndexedDB), qui contient une copie des données synchronisées.
+ * À appeler juste avant de recharger la page : Firestore n'est plus utilisable ensuite.
+ */
+export async function clearLocalFirestoreCache(): Promise<void> {
+  try {
+    await signOut(auth);
+    await terminate(db);
+    await clearIndexedDbPersistence(db);
+  } catch (err) {
+    console.warn('Effacement du cache Firestore:', err);
+  }
 }
 
 /**
@@ -299,15 +368,13 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<Remote
       profile = userSnap.data() as UserProfileDT1;
     }
 
-    const mealsColRef = collection(db, 'users', userId, 'meals');
-    const q = query(mealsColRef, orderBy('created_at', 'desc'));
-    const mealsSnap = await getDocs(q);
+    const mealsSnap = await getDocs(collection(db, 'users', userId, 'meals'));
     const meals: AnalyzedMeal[] = [];
     mealsSnap.forEach((docSnap) => {
       meals.push(docSnap.data() as AnalyzedMeal);
     });
 
-    return { profile, meals };
+    return { profile, meals: sortMealsByDateDesc(meals) };
   } catch (err) {
     console.warn('Erreur récupération données Firestore:', err);
     return { profile: null, meals: [] };
@@ -318,7 +385,7 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<Remote
  * Synchronise une liste de repas (ex: locaux) vers Firestore pour l'utilisateur connecté
  */
 export async function syncBatchMealsToFirestore(meals: AnalyzedMeal[]): Promise<void> {
-  if (!meals || meals.length === 0) return;
+  if (!meals || meals.length === 0 || !isCloudSyncAllowed()) return;
   try {
     const user = await ensureAuthenticatedUser();
     for (const meal of meals) {
@@ -387,6 +454,9 @@ export async function pushSyncCodeToFirestore(
   existingCode?: string,
   payload?: CloudSyncPayload
 ): Promise<{ success: boolean; syncCode: string; lastUpdated: string; totalMeals: number }> {
+  if (!isCloudSyncAllowed()) {
+    throw new Error('Sauvegarde cloud désactivée : activez-la dans Profil > Confidentialité pour partager vos données.');
+  }
   const user = await ensureAuthenticatedUser();
   const now = new Date();
 
@@ -429,6 +499,12 @@ export async function pushSyncCodeToFirestore(
 export async function pullSyncCodeFromFirestore(
   syncCode: string
 ): Promise<{ success: boolean; message: string; record?: any }> {
+  if (!isCloudSyncAllowed()) {
+    return {
+      success: false,
+      message: 'Sauvegarde cloud désactivée : activez-la dans Profil > Confidentialité pour importer un dossier.',
+    };
+  }
   const cleanCode = normalizeSyncCode(syncCode);
   if (!isValidSyncCode(cleanCode)) {
     return {

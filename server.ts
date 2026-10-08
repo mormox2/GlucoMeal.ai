@@ -1,53 +1,68 @@
 import 'dotenv/config';
 import express from 'express';
 import path from 'path';
-import { GoogleGenAI, Type } from '@google/genai';
-import {
-  TUNISIAN_FOOD_DATABASE,
-  findFoodInDatabase,
-  findFoodMatch,
-  calculateCarbsDeterministically,
-  normalizeCulinaryTerm,
-} from './src/data/tunisianFoodDatabase';
-import { TUNISIAN_DATASET, TUNISIAN_DATASET_100, generateExpandedDataset } from './src/types/benchmark';
+import { TUNISIAN_FOOD_DATABASE } from './src/data/tunisianFoodDatabase';
+import { TUNISIAN_DATASET, TUNISIAN_DATASET_100 } from './src/types/benchmark';
 import { runAutomatedBenchmark } from './src/utils/benchmarkEvaluator';
-
-// Lazy initialize Gemini client to avoid crashes if key is initially absent
-let aiClient: GoogleGenAI | null = null;
-function getGeminiClient(): GoogleGenAI | null {
-  if (!aiClient && process.env.GEMINI_API_KEY) {
-    aiClient = new GoogleGenAI({
-      apiKey: process.env.GEMINI_API_KEY,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
-    });
-  }
-  return aiClient;
-}
+import { getGeminiClient, getGeminiModel } from './server/gemini';
+import {
+  AnalysisFailure,
+  MAX_MEAL_TEXT_LENGTH,
+  analyzeMealPhoto,
+  analyzeMealText,
+  analyzeNutritionLabel,
+} from './server/analysis';
+import { parseTextLocally } from './server/localParser';
+import { lookupBarcodeProduct } from './server/barcode';
 
 const app = express();
 
-// En-têtes de sécurité HTTP & protection d'accès
+// Derrière le proxy Vercel, l'IP du client est lue dans X-Forwarded-For (nécessaire au limiteur de débit)
+app.set('trust proxy', process.env.TRUST_PROXY ? Number(process.env.TRUST_PROXY) : process.env.VERCEL ? 1 : false);
+
+// Origines autorisées à appeler l'API depuis un autre site (en plus de l'origine de l'application elle-même)
+const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS || 'https://glucomeal-ai.vercel.app')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+function isAllowedOrigin(req: express.Request, origin: string): boolean {
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  // Même origine que l'application (ex. http://localhost:3000 en développement, prévisualisations)
+  try {
+    return new URL(origin).host === req.headers.host;
+  } catch {
+    return false;
+  }
+}
+
+// En-têtes de sécurité et CORS restreint (les en-têtes des pages statiques sont dans vercel.json)
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  res.setHeader('X-XSS-Protection', '1; mode=block');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.path.startsWith('/api')) {
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'");
+    res.setHeader('Cache-Control', 'no-store');
+  }
+
+  const origin = req.headers.origin;
+  const originAllowed = Boolean(origin && isAllowedOrigin(req, origin));
+  if (origin && originAllowed) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  }
   if (req.method === 'OPTIONS') {
-    return res.sendStatus(204);
+    return res.sendStatus(originAllowed ? 204 : 403);
   }
   next();
 });
 
-// Limiteur de débit (Rate Limiter) en mémoire pour protéger l'API Gemini et le serveur.
-// Chaque limiteur a son propre compteur par IP : la clé ne dépend pas du chemin, qui peut contenir
-// des paramètres choisis par le client (sinon chaque valeur testée obtiendrait un nouveau compteur).
+// Limiteur de débit en mémoire. Chaque limiteur a son propre compteur par IP (la clé ne dépend pas du
+// chemin). Sur Vercel, chaque instance a sa mémoire : la limite est donc par instance ; un stockage
+// partagé (Redis / Vercel KV) serait nécessaire pour une limite globale.
 function rateLimiter(maxRequests: number, windowMs: number, customMessage?: string) {
   const hits = new Map<string, { count: number; resetTime: number }>();
   return (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -113,1231 +128,205 @@ app.all('/api/sync/*', (req, res) => {
   });
 });
 
-  // Food search API
-  app.get('/api/foods', (req, res) => {
-    const q = (req.query.q as string || '').toLowerCase().trim();
-    const category = req.query.category as string || '';
+// Food search API
+app.get('/api/foods', (req, res) => {
+  const q = ((req.query.q as string) || '').toLowerCase().trim();
+  const category = (req.query.category as string) || '';
 
-    let results = TUNISIAN_FOOD_DATABASE;
-    if (category) {
-      results = results.filter((f) => f.category === category);
-    }
-    if (q) {
-      results = results.filter(
-        (f) =>
-          f.name_fr.toLowerCase().includes(q) ||
-          f.name_tn.toLowerCase().includes(q) ||
-          (f.name_ar && f.name_ar.includes(q))
-      );
-    }
-    res.json({ total: results.length, foods: results });
+  let results = TUNISIAN_FOOD_DATABASE;
+  if (category) {
+    results = results.filter((f) => f.category === category);
+  }
+  if (q) {
+    results = results.filter(
+      (f) =>
+        f.name_fr.toLowerCase().includes(q) ||
+        f.name_tn.toLowerCase().includes(q) ||
+        (f.name_ar && f.name_ar.includes(q))
+    );
+  }
+  res.json({ total: results.length, foods: results });
+});
+
+// Benchmark : jeu de référence (5 repas) ou jeu étendu SYNTHÉTIQUE (100 variantes générées)
+app.get('/api/benchmark/dataset', (req, res) => {
+  const count = parseInt(req.query.count as string, 10);
+  const meals = count === 100 ? TUNISIAN_DATASET_100 : TUNISIAN_DATASET;
+  res.json({
+    name: count === 100 ? 'TUNISIAN_DATASET_100' : 'TUNISIAN_DATASET',
+    synthetic: count === 100,
+    total: meals.length,
+    meals,
   });
+});
 
-  // Benchmark Dataset API (Step 2 - 5 Representative Meals or Extended 100 entries)
-  app.get('/api/benchmark/dataset', (req, res) => {
-    const count = parseInt(req.query.count as string, 10);
-    const meals = count === 100 ? TUNISIAN_DATASET_100 : TUNISIAN_DATASET;
+// Benchmark : évaluation des prédictions RÉELLES fournies (aucune prédiction n'est simulée)
+app.post('/api/benchmark/evaluate', (req, res) => {
+  try {
+    const { predictions, count } = req.body || {};
+    const cleanPredictions: Record<string, number> = {};
+    if (predictions && typeof predictions === 'object') {
+      for (const [id, value] of Object.entries(predictions)) {
+        if (typeof value === 'number' && Number.isFinite(value) && value >= 0) cleanPredictions[id] = value;
+      }
+    }
+    const targetDataset = count === 100 ? TUNISIAN_DATASET_100 : TUNISIAN_DATASET;
+    res.json({ success: true, report: runAutomatedBenchmark(targetDataset, cleanPredictions) });
+  } catch (err: any) {
+    console.error('Benchmark evaluation error:', err);
+    res.status(500).json({ error: 'Erreur lors de l’évaluation du benchmark', code: 'SERVER_ERROR' });
+  }
+});
+
+// Benchmark : inférence réelle sur une PHOTO du repas de référence, avec le même pipeline que
+// l'application (le modèle ne reçoit ni le nom, ni le poids, ni les ingrédients du plat).
+app.post('/api/benchmark/live-vision', rateLimiter(30, 60 * 1000, 'Trop de tests de vision.'), async (req, res) => {
+  const startTime = Date.now();
+  const { mealId, imageBase64 } = req.body || {};
+  const targetMeal = [...TUNISIAN_DATASET, ...TUNISIAN_DATASET_100].find((m) => String(m.id) === String(mealId));
+  if (!targetMeal) {
+    return res.status(404).json({ error: 'Repas de référence introuvable.', code: 'MEAL_NOT_FOUND' });
+  }
+  if (!imageBase64) {
+    return res.status(400).json({ error: 'Une photo du repas est nécessaire pour un test de vision.', code: 'IMAGE_REQUIRED' });
+  }
+  const ai = getGeminiClient();
+  if (!ai) {
+    return res.status(503).json({ error: 'Service d’IA non configuré : test impossible.', code: 'AI_UNAVAILABLE' });
+  }
+
+  try {
+    const analysis = await analyzeMealPhoto(ai, imageBase64);
+    const predictedCarbs = analysis.total_carbs;
+    const deltaCarbs = Math.abs(predictedCarbs - targetMeal.carbs_g);
+    const relativeErrorPct = Number(((deltaCarbs / targetMeal.carbs_g) * 100).toFixed(1));
+
     res.json({
-      name: count === 100 ? 'TUNISIAN_DATASET_100' : 'TUNISIAN_DATASET',
-      step: 2,
-      total: meals.length,
-      meals,
+      success: true,
+      meal_id: targetMeal.id,
+      meal_name: targetMeal.name_fr,
+      reference_carbs_g: targetMeal.carbs_g,
+      predicted_carbs_g: predictedCarbs,
+      delta_carbs_g: deltaCarbs,
+      relative_error_pct: relativeErrorPct,
+      passed_clinical_threshold: relativeErrorPct <= 15.0,
+      insulin_impact_units: Number((deltaCarbs / 10).toFixed(1)),
+      latency_ms: Date.now() - startTime,
+      model: getGeminiModel(),
+      detected_meal_name: analysis.meal_name,
+      detected_components: analysis.items.map((item) => ({
+        name: item.name_fr,
+        weight_g: item.estimated_weight_g,
+        carbs_per_100g: item.carbs_per_100g,
+        calculated_carbs_g: item.calculated_carbs,
+        confidence: item.confidence,
+      })),
+      visual_notes: analysis.notes,
+      timestamp: new Date().toISOString(),
     });
-  });
-
-  // Benchmark Automated Evaluation Suite (Step 2)
-  app.post('/api/benchmark/evaluate', async (req, res) => {
-    try {
-      const { predictions, count } = req.body || {};
-      const targetDataset = count === 100 ? TUNISIAN_DATASET_100 : TUNISIAN_DATASET;
-      const report = runAutomatedBenchmark(targetDataset, predictions);
-      res.json({ success: true, report });
-    } catch (err: any) {
-      console.error('Benchmark evaluation error:', err);
-      res.status(500).json({ error: 'Erreur lors de l’évaluation du benchmark', details: err.message });
+  } catch (err) {
+    if (err instanceof AnalysisFailure) {
+      return res.status(err.status).json({ error: err.message, code: err.code });
     }
-  });
+    console.error('Live vision benchmark test error:', err);
+    res.status(500).json({ error: 'Erreur lors du test de vision en direct', code: 'SERVER_ERROR' });
+  }
+});
 
-  // Benchmark Live Vision Inference with Gemini 2.5 Flash (Étape 2)
-  app.post('/api/benchmark/live-vision', rateLimiter(30, 60 * 1000, 'Trop de tests de vision.'), async (req, res) => {
-    const startTime = Date.now();
-    try {
-      const { mealId, imageBase64 } = req.body || {};
-      const targetMeal = [...TUNISIAN_DATASET, ...TUNISIAN_DATASET_100].find((m) => m.id === mealId) || TUNISIAN_DATASET[0];
-      const ai = getGeminiClient();
+// Réponse d'erreur d'analyse : on ne renvoie JAMAIS de glucides inventés (risque de surdosage d'insuline).
+// Le client affiche le message et propose une nouvelle tentative ou une saisie manuelle.
+function sendAnalysisError(res: express.Response, status: number, code: string, error: string) {
+  return res.status(status).json({ error, code });
+}
 
-      let detectedComponents: any[] = [];
-      let visualNotes = '';
-      let predictedCarbs = targetMeal.carbs_g;
+// Analyse d'un repas (photo, texte, voix, code-barres, étiquette)
+app.post('/api/analyze-meal', rateLimiter(30, 60 * 1000, 'Trop de requêtes d’analyse. Veuillez patienter une minute.'), async (req, res) => {
+  try {
+    const { mode, image, text, audioTranscript, barcode } = req.body || {};
+    const ai = getGeminiClient();
+
+    // Photo du repas
+    if (mode === 'photo' && image) {
+      if (!ai) {
+        return sendAnalysisError(
+          res,
+          503,
+          'AI_UNAVAILABLE',
+          'Analyse photo indisponible (service d’IA non configuré). Décrivez votre repas par texte ou saisissez-le manuellement.'
+        );
+      }
+      return res.json(await analyzeMealPhoto(ai, image));
+    }
+
+    // Texte ou transcription vocale
+    if (mode === 'text' || mode === 'voice') {
+      const inputText = String(text || audioTranscript || '').trim();
+      if (!inputText) {
+        return sendAnalysisError(res, 400, 'TEXT_MISSING', 'Aucun texte ou transcript audio fourni.');
+      }
+      if (inputText.length > MAX_MEAL_TEXT_LENGTH) {
+        return sendAnalysisError(res, 400, 'TEXT_TOO_LONG', `Description trop longue (${MAX_MEAL_TEXT_LENGTH} caractères maximum).`);
+      }
+      const voiceLang = String(req.body.voiceLang || 'fr-FR');
+      const isArabicInput = voiceLang === 'ar-TN' || /[؀-ۿ]/.test(inputText);
 
       if (ai) {
         try {
-          // Multimodal or culinary expert prompt for the benchmark meal
-          const prompt = `Tu es l'évaluateur clinique de vision artificielle de GlucoMeal AI pour diabétiques de type 1.
-Analyse ce repas tunisien du protocole d'évaluation métrologique :
-Nom : "${targetMeal.name_fr}"
-Catégorie : "${targetMeal.category}"
-Ingrédients clés attendus : ${targetMeal.ingredients.join(', ')}
-Angle photographique utilisé : "${targetMeal.photo_type}" (${targetMeal.photo_type === 'top' ? 'Vue zénithale 90°' : targetMeal.photo_type === 'side' ? 'Vue latérale 45° relief' : 'Macro'})
-Poids total servi estimé : environ ${targetMeal.weight_g} g
-
-Consignes métrologiques :
-1. Décompose ce plat tunisien en composants précis (ex: pour Couscous : semoule cuite, pois chiches, carottes/courgettes, agneau ; pour Lablabi : bouillon & pois chiches, pain trempé au fond du bol, œuf poché, thon).
-2. ATTENTION AUX COMPOSANTS MASQUÉS : Si c'est un Lablabi ou un plat en sauce, identifie explicitement la présence de pain immergé susceptible de fausser le bolus d'insuline.
-3. Estime le poids réaliste de chaque composant en grammes.
-4. Explique brièvement le défi optique (angle, ombres, sauce masquante).
-Réponds UNIQUEMENT en JSON strict.`;
-
-          const contents: any = {
-            parts: [{ text: prompt }],
-          };
-
-          // If imageBase64 was provided, attach it as inlineData
-          if (imageBase64 && imageBase64.startsWith('data:')) {
-            const matches = imageBase64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
-            if (matches && matches.length === 3) {
-              contents.parts.unshift({
-                inlineData: {
-                  mimeType: matches[1],
-                  data: matches[2],
-                },
-              });
-            }
-          }
-
-          const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents,
-            config: {
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  detected_meal_name: { type: Type.STRING },
-                  visual_reasoning: { type: Type.STRING },
-                  optical_challenge_evaluation: { type: Type.STRING },
-                  hidden_components_detected: { type: Type.ARRAY, items: { type: Type.STRING } },
-                  components: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        name: { type: Type.STRING },
-                        weight_g: { type: Type.NUMBER },
-                        carbs_per_100g: { type: Type.NUMBER },
-                        is_hidden: { type: Type.BOOLEAN },
-                      },
-                      required: ['name', 'weight_g'],
-                    },
-                  },
-                },
-                required: ['detected_meal_name', 'visual_reasoning', 'components'],
-              },
-            },
-          });
-
-          const rawJson = response.text?.trim();
-          if (rawJson) {
-            const parsed = JSON.parse(rawJson);
-            visualNotes = parsed.visual_reasoning || parsed.optical_challenge_evaluation || '';
-
-            detectedComponents = (parsed.components || []).map((c: any) => {
-              const matched = findFoodInDatabase(c.name);
-              const carbsPer100 = c.carbs_per_100g || (matched ? matched.carbs_per_100g : estimateCarbsFallback(c.name));
-              const weight = Math.max(5, Math.round(c.weight_g || 50));
-              const carbs = calculateCarbsDeterministically(weight, carbsPer100);
-              return {
-                name: matched ? matched.name_fr : c.name,
-                weight_g: weight,
-                carbs_per_100g: carbsPer100,
-                calculated_carbs_g: carbs,
-                is_hidden: !!c.is_hidden,
-              };
-            });
-
-            const totalCarbsCalc = detectedComponents.reduce((sum, item) => sum + item.calculated_carbs_g, 0);
-            if (totalCarbsCalc > 0) {
-              predictedCarbs = totalCarbsCalc;
-            }
-          }
-        } catch (apiErr: any) {
-          console.warn('Gemini live vision error, applying deterministic culinary fallback:', apiErr.message);
+          return res.json(await analyzeMealText(ai, inputText, isArabicInput));
+        } catch (err) {
+          // Description sans aliment : inutile d'essayer l'analyse locale
+          if (err instanceof AnalysisFailure && err.code === 'NO_FOOD_RECOGNIZED') throw err;
+          console.error('Analyse texte IA en échec, analyse locale :', (err as Error).message);
         }
       }
 
-      // If no AI client or fallback
-      if (detectedComponents.length === 0) {
-        // Fallback déterministe basé sur les composants étalons
-        detectedComponents = targetMeal.ingredients.map((ing) => {
-          const matched = findFoodInDatabase(ing);
-          const weight = Math.round(targetMeal.weight_g / targetMeal.ingredients.length);
-          const carbsPer100 = matched ? matched.carbs_per_100g : estimateCarbsFallback(ing);
-          const carbs = calculateCarbsDeterministically(weight, carbsPer100);
-          return {
-            name: matched ? matched.name_fr : ing,
-            weight_g: weight,
-            carbs_per_100g: carbsPer100,
-            calculated_carbs_g: carbs,
-            is_hidden: ing.toLowerCase().includes('pain') && targetMeal.name_fr.toLowerCase().includes('lablabi'),
-          };
-        });
-
-        // Variance optique réaliste
-        const varianceFactor = targetMeal.difficulty === 'hard' ? -0.08 : targetMeal.difficulty === 'medium' ? 0.05 : 0.03;
-        predictedCarbs = Math.round(targetMeal.carbs_g * (1 + varianceFactor));
-        visualNotes = `Évaluation basée sur les proportions typiques en restauration tunisienne pour ${targetMeal.name_fr} sous angle ${targetMeal.photo_type}.`;
+      const localAnalysis = parseTextLocally(inputText);
+      if (!localAnalysis) {
+        return sendAnalysisError(
+          res,
+          422,
+          'NO_FOOD_RECOGNIZED',
+          'Aucun aliment reconnu dans votre description. Précisez les aliments ou ajoutez-les manuellement depuis la base.'
+        );
       }
-
-      const latencyMs = Date.now() - startTime;
-      const deltaCarbs = Math.abs(predictedCarbs - targetMeal.carbs_g);
-      const relativeErrorPct = Number(((deltaCarbs / targetMeal.carbs_g) * 100).toFixed(1));
-      const passed = relativeErrorPct <= 15.0;
-      const insulinImpactUnits = Number((deltaCarbs / 10).toFixed(1));
-
-      res.json({
-        success: true,
-        meal_id: targetMeal.id,
-        meal_name: targetMeal.name_fr,
-        reference_carbs_g: targetMeal.carbs_g,
-        predicted_carbs_g: predictedCarbs,
-        delta_carbs_g: deltaCarbs,
-        relative_error_pct: relativeErrorPct,
-        passed_clinical_threshold: passed,
-        insulin_impact_units: insulinImpactUnits,
-        latency_ms: latencyMs,
-        model: 'gemini-2.5-flash',
-        detected_components: detectedComponents,
-        visual_notes: visualNotes,
-        timestamp: new Date().toISOString(),
-      });
-    } catch (err: any) {
-      console.error('Live vision benchmark test error:', err);
-      res.status(500).json({ error: 'Erreur lors du test de vision en direct' });
+      return res.json(localAnalysis);
     }
-  });
 
-  // Réponse d'erreur d'analyse : on ne renvoie JAMAIS de glucides inventés (risque de surdosage d'insuline).
-  // Le client affiche le message et propose une nouvelle tentative ou une saisie manuelle.
-  function sendAnalysisError(res: express.Response, status: number, code: string, error: string) {
-    return res.status(status).json({ error, code });
-  }
+    // Code-barres
+    if (mode === 'barcode') {
+      const code = String(barcode || '').replace(/[^0-9]/g, '');
+      if (!code) {
+        return sendAnalysisError(res, 400, 'BARCODE_MISSING', 'Aucun code-barres fourni.');
+      }
+      const lookup = await lookupBarcodeProduct(code);
+      if ('error' in lookup) {
+        return sendAnalysisError(res, lookup.status, lookup.code, lookup.error);
+      }
+      return res.json(lookup);
+    }
 
-  // Main Meal Analysis Endpoint (Photo, Text, Voice, Barcode) - Protégé par Rate Limiter
-  app.post('/api/analyze-meal', rateLimiter(30, 60 * 1000, 'Trop de requêtes d’analyse. Veuillez patienter une minute.'), async (req, res) => {
-    try {
-      const { mode, image, text, audioTranscript, barcode } = req.body;
-      const ai = getGeminiClient();
-
-      // Mode 1: Photo Analysis
-      if (mode === 'photo' && image) {
-        if (!ai) {
-          return sendAnalysisError(
-            res,
-            503,
-            'AI_UNAVAILABLE',
-            'Analyse photo indisponible (service d’IA non configuré). Décrivez votre repas par texte ou saisissez-le manuellement.'
-          );
-        }
-        try {
-          // Extract base64 clean data
-          let mimeType = 'image/jpeg';
-          let base64Data = image;
-          if (image.startsWith('data:')) {
-            const matches = image.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
-            if (matches && matches.length === 3) {
-              mimeType = matches[1];
-              base64Data = matches[2];
-            }
-          }
-
-          const prompt = `Tu es le moteur de reconnaissance culinaire et nutritionnelle pour l'application GlucoMeal AI, spécialement calibré pour les diabétiques de type 1 et la gastronomie tunisienne / maghrébine / méditerranéenne.
-Analyse précisément cette photo de repas.
-Consignes cruciales :
-1. Identifie le plat global (ex: "Couscous agneau et légumes", "Lablabi", "Ojja merguez", "Makrouna bel salsa", "Brik à l'œuf", etc.).
-2. Décompose le repas en composants distincts identifiables (ex: semoule de couscous, pois chiches, légumes carottes/courgettes, morceau de viande d'agneau ou de bœuf cuit dans la sauce, pain tabouna).
-   - Isole spécifiquement les morceaux ou pièces de protéines (agneau, bœuf, veau, poulet, merguez, kefta, poisson) avec leur mode de cuisson (ex: morceau d'agneau cuit dans le couscous, morceau de bœuf cuit dans la mloukhiya, cuisse de poulet mijotée). Rappel : la viande pure cuite contient 0 g de glucides.
-3. Pour chaque composant, estime son poids visuel en grammes (portion réaliste servie).
-4. Indique pour chaque composant le niveau de confiance ('high', 'medium', 'low') et le nom en français et arabe/dialecte tunisien.
-RÈGLE IMPORTANTE : Ne cherche pas à calculer les glucides toi-même, donne uniquement les composants et l'estimation de portion en grammes. La formule déterministe de GlucoMeal fera le calcul exact avec la base certifiée.
-Réponds UNIQUEMENT sous forme de JSON strict conforme au schéma.`;
-
-          const geminiResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: mimeType,
-                    data: base64Data,
-                  },
-                },
-                { text: prompt },
-              ],
-            },
-            config: {
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  meal_name: { type: Type.STRING, description: 'Nom global du plat en français' },
-                  meal_name_ar: { type: Type.STRING, description: 'Nom du plat en arabe ou tunisien' },
-                  visual_notes: { type: Type.STRING, description: 'Explication visuelle de l’estimation' },
-                  confidence_tier: { type: Type.STRING, description: 'high, medium, ou low' },
-                  components: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        name_fr: { type: Type.STRING },
-                        name_ar: { type: Type.STRING },
-                        estimated_weight_g: { type: Type.NUMBER },
-                        confidence: { type: Type.STRING },
-                      },
-                      required: ['name_fr', 'estimated_weight_g', 'confidence'],
-                    },
-                  },
-                },
-                required: ['meal_name', 'components', 'confidence_tier'],
-              },
-            },
-          });
-
-          const rawText = geminiResponse.text?.trim();
-          if (rawText) {
-            const parsed = JSON.parse(rawText);
-            // Now apply deterministic calculation engine against GlucoMeal Tunisian Database
-            const items = (parsed.components || []).map((comp: any, idx: number) => {
-              const match = findFoodMatch(comp.name_fr);
-              const matchedFood = match?.item;
-              // Aliment absent de la base ou rapproché approximativement : valeur à vérifier par l'utilisateur
-              const isApproximate = !match || match.quality === 'prefix';
-              const weight = Math.max(10, Math.round(comp.estimated_weight_g || 100));
-              const carbsPer100g = matchedFood ? matchedFood.carbs_per_100g : estimateCarbsFallback(comp.name_fr);
-              const calculatedCarbs = calculateCarbsDeterministically(weight, carbsPer100g);
-
-              return {
-                id: `item-${idx + 1}`,
-                food_id: matchedFood?.id,
-                name_fr: matchedFood?.name_fr || comp.name_fr,
-                name_ar: comp.name_ar || matchedFood?.name_ar || '',
-                category: matchedFood?.category || 'plats',
-                estimated_weight_g: weight,
-                confirmed_weight_g: weight,
-                carbs_per_100g: carbsPer100g,
-                calculated_carbs: calculatedCarbs,
-                confidence: isApproximate ? 'low' : (comp.confidence as 'high' | 'medium' | 'low') || 'medium',
-                original_ai_weight_g: weight,
-                is_corrected: false,
-              };
-            });
-
-            if (items.length === 0) {
-              return sendAnalysisError(
-                res,
-                422,
-                'NO_FOOD_RECOGNIZED',
-                'Aucun aliment reconnu sur cette photo. Reprenez la photo ou saisissez votre repas manuellement.'
-              );
-            }
-
-            const totalCarbs = items.reduce((sum: number, it: any) => sum + it.calculated_carbs, 0);
-            const hasUnmatched = items.some((it: any) => it.confidence === 'low');
-            const overallConfidence = hasUnmatched ? 'low' : parsed.confidence_tier || (totalCarbs > 70 ? 'medium' : 'high');
-
-            return res.json({
-              meal_name: parsed.meal_name || 'Repas analysé',
-              meal_name_ar: parsed.meal_name_ar || '',
-              notes: parsed.visual_notes || 'Identification réussie par vision artificielle.',
-              items,
-              total_carbs: totalCarbs,
-              overall_confidence: overallConfidence,
-              confidence_score: overallConfidence === 'high' ? 90 : overallConfidence === 'medium' ? 68 : 42,
-            });
-          }
-        } catch (geminiError: any) {
-          console.error('Gemini vision analysis error:', geminiError.message);
-        }
-
+    // Photo d'étiquette nutritionnelle
+    if ((mode === 'label_photo' || mode === 'label') && image) {
+      if (!ai) {
         return sendAnalysisError(
           res,
           503,
-          'AI_ERROR',
-          'L’analyse de la photo a échoué. Réessayez ou saisissez votre repas manuellement.'
+          'AI_UNAVAILABLE',
+          'Lecture d’étiquette indisponible (service d’IA non configuré). Saisissez les glucides indiqués sur l’emballage.'
         );
       }
-
-      // Mode 2 & 3: Text / Voice Natural Language Entry
-      const inputText = (text || audioTranscript || '').trim();
-      const voiceLang: string = req.body.voiceLang || 'fr-FR';
-      const isArabicInput = voiceLang === 'ar-TN' || /[\u0600-\u06FF]/.test(inputText);
-
-      if (mode === 'text' || mode === 'voice' || inputText) {
-        // Guard: refuse empty input before hitting the local fallback
-        if (!inputText) {
-          return res.status(400).json({ error: 'Aucun texte ou transcript audio fourni.' });
-        }
-
-        if (ai && inputText) {
-          try {
-            const langInstruction = isArabicInput
-              ? `L'utilisateur a parlé en dialecte tunisien (Derja) ou arabe. Réponds avec meal_name en arabe tunisien et name_ar en arabe. Le name_fr peut être une traduction courte en français.`
-              : `L'utilisateur a parlé en français. Réponds avec meal_name en français et name_ar en arabe tunisien.`;
-            const nlpPrompt = `Tu es l'analyseur nutritionnel d'élite de GlucoMeal AI, spécialement calibré pour le diabète de type 1 et la gastronomie tunisienne / maghrébine (français et Derja tunisienne).
-${langInstruction}
-L'utilisateur diabétique a décrit son repas : "${inputText}"
-
-RÈGLES CRUCIALES POUR LA DÉCOMPOSITION :
-1. "ڤازوزة" / "قازوزة" / "غازوزة" / "gazouza" / "gazouz" / "soda" / "coca" / "boga" : C'est une boisson gazeuse sucrée (soda).
-   - Si "صغيرة" ou "canette" ou "ص" -> portion 250 g (250 ml = 26 g glucides rapides, pic précoce).
-   - Si "كبيرة" -> portion 500 g (500 ml = 53 g glucides rapides).
-   - Si non spécifié -> portion 250 g (250 ml = 26 g glucides).
-   - Si "لايت" ou "زيرو" ou "light" ou "zero" -> boisson gazeuse sans sucre (250 g, 0 g glucides).
-2. "لحم دجاجة" / "دجاج" / "poulet" : Morceau de poulet mijoté (120 g, 0 g glucides, protéines).
-3. "خضرة" / "légumes" : Légumes mijotés de couscous (100 g, 4.5 g glucides).
-4. "كسكسي" / "couscous" : Semoule de couscous cuite vapeur (220 g, 62 g glucides).
-5. "صحن كسكسي بالخضرة و لحم دجاجة و ڤازوزة صغيرة" -> doit OBLIGATOIREMENT être décomposé en 4 composants :
-   - Couscous (semoule cuite vapeur) (220g)
-   - Légumes de couscous (100g)
-   - Poulet mijoté (120g)
-   - Boisson gazeuse sucrée (ڤازوزة صغيرة) (250g)
-
-Extrais TOUS les aliments et boissons décrits, avec leur portion estimée en grammes. Réponds en JSON strict conforme au schéma.`;
-
-            let nlpResponse: any;
-            try {
-              nlpResponse = await ai.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: nlpPrompt,
-                config: {
-                  responseMimeType: 'application/json',
-                  responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                      meal_name: { type: Type.STRING },
-                      components: {
-                        type: Type.ARRAY,
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            name_fr: { type: Type.STRING },
-                            name_ar: { type: Type.STRING },
-                            estimated_weight_g: { type: Type.NUMBER },
-                            confidence: { type: Type.STRING },
-                          },
-                          required: ['name_fr', 'estimated_weight_g', 'confidence'],
-                        },
-                      },
-                    },
-                    required: ['meal_name', 'components'],
-                  },
-                },
-              });
-            } catch (flashErr: any) {
-              console.warn('Gemini 2.5 Flash busy, attempting 2.0 Flash fallback:', flashErr.message);
-              nlpResponse = await ai.models.generateContent({
-                model: 'gemini-2.0-flash',
-                contents: nlpPrompt,
-                config: {
-                  responseMimeType: 'application/json',
-                  responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                      meal_name: { type: Type.STRING },
-                      components: {
-                        type: Type.ARRAY,
-                        items: {
-                          type: Type.OBJECT,
-                          properties: {
-                            name_fr: { type: Type.STRING },
-                            name_ar: { type: Type.STRING },
-                            estimated_weight_g: { type: Type.NUMBER },
-                            confidence: { type: Type.STRING },
-                          },
-                          required: ['name_fr', 'estimated_weight_g', 'confidence'],
-                        },
-                      },
-                    },
-                    required: ['meal_name', 'components'],
-                  },
-                },
-              });
-            }
-
-            const parsed = JSON.parse(nlpResponse?.text?.trim() || '{}');
-            if (parsed.components?.length > 0) {
-              const items = parsed.components.map((comp: any, idx: number) => {
-                const match =
-                  findFoodMatch(comp.name_fr) || (comp.name_ar ? findFoodMatch(comp.name_ar) : undefined);
-                const matchedFood = match?.item;
-                // Aliment absent de la base ou rapproché approximativement : valeur à vérifier par l'utilisateur
-                const isApproximate = !match || match.quality === 'prefix';
-
-                const weight = Math.max(10, Math.round(comp.estimated_weight_g || 100));
-                const carbsPer100g = matchedFood ? matchedFood.carbs_per_100g : estimateCarbsFallback(comp.name_fr);
-                const calculatedCarbs = calculateCarbsDeterministically(weight, carbsPer100g);
-
-                return {
-                  id: `item-${idx + 1}`,
-                  food_id: matchedFood?.id,
-                  name_fr: matchedFood?.name_fr || comp.name_fr,
-                  name_ar: comp.name_ar || matchedFood?.name_ar || '',
-                  category: matchedFood?.category || 'plats',
-                  estimated_weight_g: weight,
-                  confirmed_weight_g: weight,
-                  carbs_per_100g: carbsPer100g,
-                  calculated_carbs: calculatedCarbs,
-                  confidence: isApproximate ? 'low' : comp.confidence || 'high',
-                  original_ai_weight_g: weight,
-                  is_corrected: false,
-                };
-              });
-
-              const totalCarbs = items.reduce((sum: number, it: any) => sum + it.calculated_carbs, 0);
-              const hasUnmatched = items.some((it: any) => it.confidence === 'low');
-
-              return res.json({
-                meal_name: parsed.meal_name || 'Repas décrit',
-                items,
-                total_carbs: totalCarbs,
-                overall_confidence: hasUnmatched ? 'low' : 'high',
-                confidence_score: hasUnmatched ? 55 : 94,
-                notes: hasUnmatched
-                  ? `Analyse depuis : "${inputText}". Certains aliments sont absents de la base : vérifiez leurs glucides.`
-                  : `Analyse depuis : "${inputText}". Vérifiez chaque portion avant de valider.`,
-              });
-            }
-          } catch (e: any) {
-            console.error('NLP parse error, falling back to local deterministic dictionary:', e.message);
-          }
-        }
-
-        // Local Deterministic Regex / Lexical parser for French and Tunisian phrases
-        const localAnalysis = parseTextLocally(inputText);
-        if (!localAnalysis) {
-          return sendAnalysisError(
-            res,
-            422,
-            'NO_FOOD_RECOGNIZED',
-            'Aucun aliment reconnu dans votre description. Précisez les aliments ou ajoutez-les manuellement depuis la base.'
-          );
-        }
-        return res.json(localAnalysis);
-      }
-
-      // Mode 4: Barcode / Industrial product
-      if (mode === 'barcode') {
-        const code = String(barcode || '').replace(/[^0-9]/g, '');
-        if (!code) {
-          return sendAnalysisError(res, 400, 'BARCODE_MISSING', 'Aucun code-barres fourni.');
-        }
-        const lookup = await lookupBarcodeProduct(code);
-        if ('error' in lookup) {
-          return sendAnalysisError(res, lookup.status, lookup.code, lookup.error);
-        }
-        return res.json(lookup);
-      }
-
-      // Mode 5: Nutrition Label Photo OCR
-      if ((mode === 'label_photo' || mode === 'label') && image) {
-        if (!ai) {
-          return sendAnalysisError(
-            res,
-            503,
-            'AI_UNAVAILABLE',
-            'Lecture d’étiquette indisponible (service d’IA non configuré). Saisissez les glucides indiqués sur l’emballage.'
-          );
-        }
-        try {
-          let mimeType = 'image/jpeg';
-          let base64Data = image;
-          if (image.startsWith('data:')) {
-            const matches = image.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.+)$/);
-            if (matches && matches.length === 3) {
-              mimeType = matches[1];
-              base64Data = matches[2];
-            }
-          }
-
-          const labelPrompt = `Tu es un expert médical et nutritionnel en diabétologie de type 1 pour GlucoMeal AI.
-Analyse précisément cette photo d'étiquette ou de tableau de valeurs nutritionnelles d'un produit alimentaire.
-Extrais :
-1. Nom du produit et marque si visible.
-2. Glucides pour 100g (carbohydrates / glucides totaux).
-3. Dont sucres pour 100g.
-4. Taille recommandée d'une portion standard en grammes ou ml (ex: 30g, 1 verre 200ml, 1 canette 250ml). Si non précisé, indique 100g.
-5. Fibres alimentaires pour 100g si mentionnées (0 sinon).
-6. Protéines et lipides si mentionnés.
-Calcule les glucides de la portion : (portion_g * glucides_100g) / 100.
-Réponds en JSON strict conforme au schéma.`;
-
-          const labelResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: mimeType,
-                    data: base64Data,
-                  },
-                },
-                { text: labelPrompt },
-              ],
-            },
-            config: {
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  product_name: { type: Type.STRING },
-                  portion_g: { type: Type.NUMBER },
-                  carbs_per_100g: { type: Type.NUMBER },
-                  sugars_per_100g: { type: Type.NUMBER },
-                  fiber_per_100g: { type: Type.NUMBER },
-                  calculated_carbs: { type: Type.NUMBER },
-                  notes: { type: Type.STRING },
-                },
-                required: ['product_name', 'portion_g', 'carbs_per_100g', 'calculated_carbs'],
-              },
-            },
-          });
-
-          const parsedLabel = JSON.parse(labelResponse.text?.trim() || '{}');
-          if (typeof parsedLabel.carbs_per_100g !== 'number' || !Number.isFinite(parsedLabel.carbs_per_100g) || parsedLabel.carbs_per_100g < 0) {
-            return sendAnalysisError(
-              res,
-              422,
-              'CARBS_UNREADABLE',
-              'Valeur de glucides illisible sur l’étiquette. Reprenez la photo ou saisissez la valeur manuellement.'
-            );
-          }
-          const portion = Math.max(5, Math.round(parsedLabel.portion_g || 100));
-          const carbs100g = Math.round(parsedLabel.carbs_per_100g * 10) / 10;
-          const totalCarbs = Math.round((portion * carbs100g) / 100);
-
-          return res.json({
-            meal_name: parsedLabel.product_name || 'Étiquette nutritionnelle scannée',
-            meal_name_ar: 'قراءة الجدول الغذائي',
-            items: [
-              {
-                id: 'item-1',
-                name_fr: parsedLabel.product_name || 'Produit industriel (Étiquette)',
-                name_ar: 'منتج معلب',
-                estimated_weight_g: portion,
-                confirmed_weight_g: portion,
-                carbs_per_100g: carbs100g,
-                calculated_carbs: totalCarbs,
-                confidence: 'high' as const,
-                original_ai_weight_g: portion,
-                is_corrected: false,
-                glycemic_index: (parsedLabel.sugars_per_100g || 0) > 15 ? 70 : 50,
-              },
-            ],
-            total_carbs: totalCarbs,
-            overall_confidence: 'high' as const,
-            confidence_score: 96,
-            notes: parsedLabel.notes || `Lecture OCR de l’étiquette : ${carbs100g}g glucides / 100g. Portion standard : ${portion}g. Vérifiez avec l’emballage.`,
-          });
-        } catch (err: any) {
-          console.error('Label OCR error with Gemini:', err.message);
-        }
-        return sendAnalysisError(
-          res,
-          503,
-          'AI_ERROR',
-          'La lecture de l’étiquette a échoué. Réessayez ou saisissez les glucides manuellement.'
-        );
-      }
-
-      return sendAnalysisError(res, 400, 'INVALID_REQUEST', 'Mode d’analyse inconnu ou données manquantes.');
-    } catch (err: any) {
-      console.error('Server meal analysis error:', err);
-      res.status(500).json({ error: 'Erreur lors de l’analyse du repas', code: 'SERVER_ERROR' });
-    }
-  });
-
-  function parseTextLocally(input: string) {
-    const lower = input.toLowerCase();
-    const norm = normalizeCulinaryTerm(input);
-    const items: any[] = [];
-
-    // 1. Check for Boisson gazeuse / Soda / Gazouza (Boga, Coca, Fanta, etc.)
-    const isGazouza =
-      norm.includes('قازوز') || // matches ڤازوزة, قازوزة, غازوزة, ڤازوز, قازوز, غازوز
-      lower.includes('gazouz') ||
-      lower.includes('gazouza') ||
-      lower.includes('soda') ||
-      lower.includes('coca') ||
-      lower.includes('boga') ||
-      lower.includes('canette') ||
-      lower.includes('boisson gazeuse') ||
-      lower.includes('fanta') ||
-      lower.includes('viva') ||
-      lower.includes('apla');
-
-    if (isGazouza) {
-      const isLight =
-        norm.includes('لايت') ||
-        norm.includes('زيرو') ||
-        norm.includes('بدون سكر') ||
-        norm.includes('بلا سكر') ||
-        lower.includes('light') ||
-        lower.includes('zero') ||
-        lower.includes('zéro') ||
-        lower.includes('sans sucre');
-
-      const isSmall =
-        norm.includes('صغير') ||
-        lower.includes('ص') ||
-        lower.includes('petite') ||
-        lower.includes('petit') ||
-        lower.includes('canette') ||
-        lower.includes('250') ||
-        lower.includes('mini');
-
-      const isBig =
-        norm.includes('كبير') ||
-        lower.includes('grande') ||
-        lower.includes('grand') ||
-        lower.includes('500') ||
-        lower.includes('1l');
-
-      const isGlass = norm.includes('كاس') || lower.includes('verre') || lower.includes('200');
-
-      const weight = isBig ? 500 : isGlass ? 200 : 250;
-      const carbsPer100g = isLight ? 0.1 : 10.5;
-      const calculatedCarbs = isLight ? 0 : Math.round((weight * carbsPer100g) / 100);
-
-      items.push({
-        id: `item-${items.length + 1}`,
-        food_id: isLight ? 'div-08' : 'div-07',
-        name_fr: isLight
-          ? 'Boisson gazeuse sans sucre (Gazouza Light / Zéro)'
-          : isSmall
-          ? 'Boisson gazeuse sucrée (Gazouza petite / Canette 250ml)'
-          : 'Boisson gazeuse sucrée (Gazouza / Soda)',
-        name_ar: isLight
-          ? 'ڤازوزة لايت / بدون سكر'
-          : isSmall
-          ? 'ڤازوزة صغيرة'
-          : 'ڤازوزة / قازوزة',
-        category: 'boissons',
-        estimated_weight_g: weight,
-        confirmed_weight_g: weight,
-        carbs_per_100g: carbsPer100g,
-        calculated_carbs: calculatedCarbs,
-        confidence: 'high',
-        original_ai_weight_g: weight,
-        is_corrected: false,
-        glycemic_index: isLight ? 0 : 75,
-      });
+      return res.json(await analyzeNutritionLabel(ai, image));
     }
 
-    // 2. Check for couscous (semoule)
-    if (lower.includes('couscous') || norm.includes('كسكسي') || lower.includes('kousksi')) {
-      items.push({
-        id: `item-${items.length + 1}`,
-        food_id: 'fec-05',
-        name_fr: 'Couscous (semoule cuite vapeur)',
-        name_ar: 'كسكسي (سميد مطبوخ)',
-        category: 'feculents',
-        estimated_weight_g: 220,
-        confirmed_weight_g: 220,
-        carbs_per_100g: 28,
-        calculated_carbs: 62,
-        confidence: 'high',
-        original_ai_weight_g: 220,
-        is_corrected: false,
-        glycemic_index: 65,
-      });
+    return sendAnalysisError(res, 400, 'INVALID_REQUEST', 'Mode d’analyse inconnu ou données manquantes.');
+  } catch (err) {
+    if (err instanceof AnalysisFailure) {
+      return sendAnalysisError(res, err.status, err.code, err.message);
     }
-
-    // 3. Check for poulet / viande blanche
-    if (
-      lower.includes('poulet') ||
-      norm.includes('دجاج') ||
-      lower.includes('djej') ||
-      lower.includes('cuisse')
-    ) {
-      items.push({
-        id: `item-${items.length + 1}`,
-        food_id: 'div-16',
-        name_fr: 'Poulet mijoté (viande de poulet / cuisse)',
-        name_ar: 'لحم دجاجة',
-        category: 'plats',
-        estimated_weight_g: 120,
-        confirmed_weight_g: 120,
-        carbs_per_100g: 0,
-        calculated_carbs: 0,
-        confidence: 'high',
-        original_ai_weight_g: 120,
-        is_corrected: false,
-        glycemic_index: 0,
-      });
-    }
-
-    // 4. Check for légumes (carottes, navets, courgettes dans le couscous ou sauce)
-    if (
-      norm.includes('خضر') ||
-      lower.includes('legume') ||
-      lower.includes('légume') ||
-      lower.includes('khodhra')
-    ) {
-      items.push({
-        id: `item-${items.length + 1}`,
-        food_id: 'div-17',
-        name_fr: 'Légumes de couscous (carottes, navets, courgettes)',
-        name_ar: 'خضرة الكسكسي',
-        category: 'plats',
-        estimated_weight_g: 100,
-        confirmed_weight_g: 100,
-        carbs_per_100g: 4.5,
-        calculated_carbs: 4,
-        confidence: 'high',
-        original_ai_weight_g: 100,
-        is_corrected: false,
-        glycemic_index: 40,
-      });
-    }
-
-    // 5. Check for viande rouge / agneau
-    if (
-      (lower.includes('agneau') ||
-        norm.includes('علوش') ||
-        (norm.includes('لحم') && !norm.includes('دجاج'))) &&
-      !items.some((it) => it.name_fr.includes('Poulet'))
-    ) {
-      items.push({
-        id: `item-${items.length + 1}`,
-        name_fr: 'Morceau de viande d’agneau mijotée',
-        name_ar: 'لحم علوش',
-        category: 'plats',
-        estimated_weight_g: 120,
-        confirmed_weight_g: 120,
-        carbs_per_100g: 0,
-        calculated_carbs: 0,
-        confidence: 'high',
-        original_ai_weight_g: 120,
-        is_corrected: false,
-        glycemic_index: 0,
-      });
-    }
-
-    // 6. Check for pain / baguette / tabouna
-    if (
-      lower.includes('pain') ||
-      norm.includes('خبز') ||
-      lower.includes('baguette') ||
-      lower.includes('tabouna') ||
-      norm.includes('طابون')
-    ) {
-      const matchNum = lower.match(/(\d+)\s*(tranche|morceau|bout|خبز)/);
-      const count = matchNum ? parseInt(matchNum[1], 10) : 2;
-      const isTabouna = lower.includes('tabouna') || norm.includes('طابون');
-      const weight = count * 35;
-      items.push({
-        id: `item-${items.length + 1}`,
-        food_id: isTabouna ? 'fec-04' : 'fec-01',
-        name_fr: isTabouna ? 'Pain Tabouna traditionnel' : 'Pain blanc (baguette)',
-        name_ar: isTabouna ? 'خبز طابونة' : 'خبز',
-        category: 'feculents',
-        estimated_weight_g: weight,
-        confirmed_weight_g: weight,
-        carbs_per_100g: isTabouna ? 48 : 50,
-        calculated_carbs: Math.round((weight * (isTabouna ? 48 : 50)) / 100),
-        confidence: 'high',
-        original_ai_weight_g: weight,
-        is_corrected: false,
-        glycemic_index: isTabouna ? 65 : 75,
-      });
-    }
-
-    // 7. Check for lablabi
-    if (lower.includes('lablabi') || norm.includes('لبلابي')) {
-      items.push({
-        id: `item-${items.length + 1}`,
-        food_id: 'plat-03',
-        name_fr: 'Lablabi complet au thon et œuf',
-        name_ar: 'لبلابي تونسي',
-        category: 'legumineuses',
-        estimated_weight_g: 350,
-        confirmed_weight_g: 350,
-        carbs_per_100g: 18,
-        calculated_carbs: 63,
-        confidence: 'high',
-        original_ai_weight_g: 350,
-        is_corrected: false,
-        glycemic_index: 45,
-      });
-    }
-
-    // 8. Check for ojja
-    if (lower.includes('ojja') || norm.includes('عجة')) {
-      items.push({
-        id: `item-${items.length + 1}`,
-        food_id: 'plat-04',
-        name_fr: 'Ojja merguez aux œufs',
-        name_ar: 'عجة بالمرقاز',
-        category: 'plats',
-        estimated_weight_g: 220,
-        confirmed_weight_g: 220,
-        carbs_per_100g: 4,
-        calculated_carbs: 9,
-        confidence: 'high',
-        original_ai_weight_g: 220,
-        is_corrected: false,
-        glycemic_index: 35,
-      });
-    }
-
-    // 9. Check for makrouna / pâtes
-    if (
-      lower.includes('makrouna') ||
-      lower.includes('pâtes') ||
-      lower.includes('pates') ||
-      norm.includes('مقرون')
-    ) {
-      items.push({
-        id: `item-${items.length + 1}`,
-        food_id: 'plat-02',
-        name_fr: 'Makrouna bel salsa (Pâtes tunisiennes)',
-        name_ar: 'مقرونة بالصلصة',
-        category: 'plats',
-        estimated_weight_g: 270,
-        confirmed_weight_g: 270,
-        carbs_per_100g: 22,
-        calculated_carbs: 59,
-        confidence: 'high',
-        original_ai_weight_g: 270,
-        is_corrected: false,
-        glycemic_index: 60,
-      });
-    }
-
-    // 10. Check for brik
-    if (lower.includes('brik') || norm.includes('بريك')) {
-      items.push({
-        id: `item-${items.length + 1}`,
-        food_id: 'plat-07',
-        name_fr: 'Brik à l’œuf et au thon',
-        name_ar: 'بريكة بالعظمة والتن',
-        category: 'plats',
-        estimated_weight_g: 80,
-        confirmed_weight_g: 80,
-        carbs_per_100g: 21,
-        calculated_carbs: 17,
-        confidence: 'high',
-        original_ai_weight_g: 80,
-        is_corrected: false,
-        glycemic_index: 55,
-      });
-    }
-
-    // 11. Check for fruits (orange, pomme, dattes)
-    if (lower.includes('orange') || norm.includes('برتقال')) {
-      items.push({
-        id: `item-${items.length + 1}`,
-        food_id: 'fru-01',
-        name_fr: 'Orange maltaise',
-        name_ar: 'برتقال مالطي',
-        category: 'fruits_legumes',
-        estimated_weight_g: 150,
-        confirmed_weight_g: 150,
-        carbs_per_100g: 9.5,
-        calculated_carbs: 14,
-        confidence: 'high',
-        original_ai_weight_g: 150,
-        is_corrected: false,
-        glycemic_index: 45,
-      });
-    } else if (lower.includes('pomme') || norm.includes('تفاح')) {
-      items.push({
-        id: `item-${items.length + 1}`,
-        food_id: 'fru-02',
-        name_fr: 'Pomme',
-        name_ar: 'تفاح',
-        category: 'fruits_legumes',
-        estimated_weight_g: 140,
-        confirmed_weight_g: 140,
-        carbs_per_100g: 12,
-        calculated_carbs: 17,
-        confidence: 'high',
-        original_ai_weight_g: 140,
-        is_corrected: false,
-        glycemic_index: 38,
-      });
-    } else if (norm.includes('تمر') || lower.includes('datte')) {
-      items.push({
-        id: `item-${items.length + 1}`,
-        food_id: 'fru-03',
-        name_fr: 'Dattes Deglet Nour (3 dattes)',
-        name_ar: 'دقلة النور (3 تمرات)',
-        category: 'fruits_legumes',
-        estimated_weight_g: 35,
-        confirmed_weight_g: 35,
-        carbs_per_100g: 74,
-        calculated_carbs: 26,
-        confidence: 'high',
-        original_ai_weight_g: 35,
-        is_corrected: false,
-        glycemic_index: 70,
-      });
-    }
-
-    // Aucun aliment reconnu : pas d'estimation par défaut (le client affiche une erreur)
-    if (items.length === 0) {
-      return null;
-    }
-
-    const total = items.reduce((acc, it) => acc + it.calculated_carbs, 0);
-    return {
-      meal_name: input.slice(0, 60),
-      items,
-      total_carbs: total,
-      overall_confidence: 'medium' as const,
-      confidence_score: 70,
-      notes: `Décomposition locale par mots-clés (sans IA) : ${items.length} aliment(s) détecté(s) avec des portions standard. Vérifiez chaque portion.`,
-    };
+    console.error('Server meal analysis error:', err);
+    res.status(500).json({ error: 'Erreur lors de l’analyse du repas', code: 'SERVER_ERROR' });
   }
-
-  type BarcodeLookupError = { error: string; status: number; code: string };
-
-  async function lookupBarcodeProduct(barcode: string) {
-    const cleanCode = barcode.replace(/[^0-9]/g, '');
-
-    // 1. Petit catalogue local d'exemples de démonstration (codes proposés dans l'écran code-barres)
-    const localTunisianCatalog: Record<string, any> = {
-      '6191234567890': {
-        name_fr: 'Boga Cidre (Canette 250 ml)',
-        name_ar: 'بوغة سيدر',
-        portion_g: 250,
-        carbs_per_100g: 10.5,
-        calculated_carbs: 26,
-        source: 'SFBT Tunisie',
-        glycemic_index: 75,
-      },
-      '6191234567891': {
-        name_fr: 'Boga Lim (Canette 250 ml)',
-        name_ar: 'بوغة ليم',
-        portion_g: 250,
-        carbs_per_100g: 10.0,
-        calculated_carbs: 25,
-        source: 'SFBT Tunisie',
-        glycemic_index: 75,
-      },
-      '6191234567892': {
-        name_fr: 'Boga Light / Sans Sucre (Canette 250 ml)',
-        name_ar: 'بوغة لايت',
-        portion_g: 250,
-        carbs_per_100g: 0,
-        calculated_carbs: 0,
-        source: 'SFBT Tunisie',
-        glycemic_index: 0,
-      },
-      '6194000123456': {
-        name_fr: 'Biscuits Saïda Carré (Paquet 4 biscuits)',
-        name_ar: 'بسكويت سيدة مربع',
-        portion_g: 30,
-        carbs_per_100g: 74,
-        calculated_carbs: 22,
-        source: 'Saïda Group Tunisie',
-        glycemic_index: 70,
-      },
-      '6194000654321': {
-        name_fr: 'Biscuits Saïda Major Chocolat (3 biscuits)',
-        name_ar: 'بسكويت ماجور شوكولا',
-        portion_g: 35,
-        carbs_per_100g: 68,
-        calculated_carbs: 24,
-        source: 'Saïda Group Tunisie',
-        glycemic_index: 68,
-      },
-      '6192000543210': {
-        name_fr: 'Yaourt Délice Danone à boire fraise',
-        name_ar: 'ياغورت ديليس فراولة',
-        portion_g: 180,
-        carbs_per_100g: 12.0,
-        calculated_carbs: 22,
-        source: 'Danone Délice Tunisie',
-        glycemic_index: 45,
-      },
-      '6192000111222': {
-        name_fr: 'Yaourt Délice Nature sans sucre',
-        name_ar: 'ياغورت ديليس طبيعي',
-        portion_g: 110,
-        carbs_per_100g: 4.2,
-        calculated_carbs: 5,
-        source: 'Danone Délice Tunisie',
-        glycemic_index: 35,
-      },
-      '6191000888999': {
-        name_fr: 'Double concentré de tomates Sicam (1 cuillère à soupe)',
-        name_ar: 'طماطم معجونة سيكام',
-        portion_g: 30,
-        carbs_per_100g: 14.5,
-        calculated_carbs: 4,
-        source: 'Sicam Agro-Alimentaire Tunisie',
-        glycemic_index: 38,
-      },
-      '6195550001112': {
-        name_fr: 'Couscous Moyen Safir (Portion crue 80g)',
-        name_ar: 'كسكسي سفير متوسط',
-        portion_g: 80,
-        carbs_per_100g: 72,
-        calculated_carbs: 58,
-        source: 'Safir Semoulerie Tunisie',
-        glycemic_index: 65,
-      },
-      '6193330004445': {
-        name_fr: 'Eau minérale naturelle Sabrine (Bouteille 500 ml)',
-        name_ar: 'ماء معدني صبرين',
-        portion_g: 500,
-        carbs_per_100g: 0,
-        calculated_carbs: 0,
-        source: 'Sabrine Tunisie',
-        glycemic_index: 0,
-      },
-    };
-
-    if (localTunisianCatalog[cleanCode]) {
-      const prod = localTunisianCatalog[cleanCode];
-      return {
-        meal_name: prod.name_fr,
-        meal_name_ar: prod.name_ar || '',
-        items: [
-          {
-            id: 'item-1',
-            name_fr: prod.name_fr,
-            name_ar: prod.name_ar,
-            estimated_weight_g: prod.portion_g,
-            confirmed_weight_g: prod.portion_g,
-            carbs_per_100g: prod.carbs_per_100g,
-            calculated_carbs: prod.calculated_carbs,
-            confidence: 'high' as const,
-            original_ai_weight_g: prod.portion_g,
-            is_corrected: false,
-            glycemic_index: prod.glycemic_index || 60,
-          },
-        ],
-        total_carbs: prod.calculated_carbs,
-        overall_confidence: 'high' as const,
-        confidence_score: 90,
-        notes: `Exemple de démonstration (${prod.source}) : vérifiez les glucides et la portion indiqués sur l’emballage.`,
-      };
-    }
-
-    // 2. Query OpenFoodFacts API for international & Tunisian registered products
-    if (cleanCode.length >= 8) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 3500);
-
-        const offRes = await fetch(`https://world.openfoodfacts.org/api/v2/product/${cleanCode}.json`, {
-          signal: controller.signal,
-          headers: {
-            'User-Agent': 'GlucoMealAI-T1D/1.0 (contact@glucomal.app)',
-          },
-        });
-        clearTimeout(timeoutId);
-
-        if (offRes.ok) {
-          const offData = await offRes.json();
-          if (offData.status === 1 && offData.product) {
-            const p = offData.product;
-            const name = p.product_name_fr || p.product_name || p.generic_name || `Produit EAN ${cleanCode}`;
-            const brand = p.brands ? ` (${p.brands})` : '';
-            const fullName = `${name}${brand}`.trim();
-
-            const nutriments = p.nutriments || {};
-            const carbs100g =
-              typeof nutriments.carbohydrates_100g === 'number'
-                ? nutriments.carbohydrates_100g
-                : typeof nutriments['carbohydrates_value'] === 'number'
-                ? nutriments['carbohydrates_value']
-                : null;
-
-            // Pas de valeur glucidique publiée : on ne devine pas
-            if (carbs100g === null || !Number.isFinite(carbs100g) || carbs100g < 0) {
-              const missing: BarcodeLookupError = {
-                status: 422,
-                code: 'CARBS_UNAVAILABLE',
-                error: `Produit trouvé (${fullName}) mais sans valeur de glucides publiée. Saisissez la valeur indiquée sur l’emballage.`,
-              };
-              return missing;
-            }
-
-            // Determine portion
-            let portionG = 100;
-            if (typeof nutriments.serving_quantity === 'number' && nutriments.serving_quantity > 0) {
-              portionG = Math.round(nutriments.serving_quantity);
-            } else if (typeof p.serving_quantity === 'number' && p.serving_quantity > 0) {
-              portionG = Math.round(p.serving_quantity);
-            } else if (p.serving_size) {
-              const match = p.serving_size.match(/(\d+[\.,]?\d*)\s*(g|ml)/i);
-              if (match) {
-                portionG = Math.round(parseFloat(match[1].replace(',', '.')));
-              }
-            }
-
-            const calculatedCarbs = Math.round((portionG * carbs100g) / 100);
-            const sugars = nutriments.sugars_100g || 0;
-
-            return {
-              meal_name: fullName,
-              meal_name_ar: p.product_name_ar || '',
-              items: [
-                {
-                  id: 'item-1',
-                  name_fr: fullName,
-                  name_ar: p.product_name_ar || '',
-                  estimated_weight_g: portionG,
-                  confirmed_weight_g: portionG,
-                  carbs_per_100g: Math.round(carbs100g * 10) / 10,
-                  calculated_carbs: calculatedCarbs,
-                  confidence: 'high' as const,
-                  original_ai_weight_g: portionG,
-                  is_corrected: false,
-                  glycemic_index: sugars > 15 ? 75 : 55,
-                },
-              ],
-              total_carbs: calculatedCarbs,
-              overall_confidence: 'high' as const,
-              confidence_score: 90,
-              notes: `Données OpenFoodFacts (base collaborative) : ${carbs100g}g glucides pour 100g. Portion : ${portionG}g. Vérifiez avec l’emballage.`,
-            };
-          }
-        }
-      } catch (offErr: any) {
-        console.warn('OpenFoodFacts fetch failed or timed out:', offErr.message);
-      }
-    }
-
-    // 3. Code inconnu : aucune valeur générique (elle pourrait fausser la dose d'insuline)
-    const notFound: BarcodeLookupError = {
-      status: 404,
-      code: 'BARCODE_NOT_FOUND',
-      error: `Produit EAN ${cleanCode} introuvable. Scannez l’étiquette nutritionnelle ou saisissez les glucides manuellement.`,
-    };
-    return notFound;
-  }
-
-  // Estimation par mots-clés pour un aliment absent de la base. Les aliments concernés sont toujours
-  // marqués en confiance 'low' pour que l'utilisateur vérifie la valeur avant de valider.
-  function estimateCarbsFallback(name: string): number {
-    const q = name.toLowerCase();
-    if (/sans sucre|light|z[ée]ro/.test(q)) return 5;
-    if (/^(sucre|sugar|سكر)/.test(q)) return 100;
-    if (/^(miel|عسل)/.test(q)) return 82;
-    if (/(^|[\s'’])(huile|beurre|eau|caf[ée]|th[ée]|thon|poisson|oeuf|œuf|fromage)(?=$|[\s,.'’])/.test(q)) return 1;
-    if (q.includes('pain') || q.includes('baguette') || q.includes('tabouna') || q.includes('mlawi')) return 48;
-    if (q.includes('riz') || q.includes('rouz') || q.includes('semoule') || q.includes('couscous')) return 28;
-    if (q.includes('pâte') || q.includes('pate') || q.includes('makrouna') || q.includes('nwasser')) return 24;
-    if (q.includes('pomme de terre') || q.includes('frite') || q.includes('batata')) return 22;
-    if (q.includes('pois chiche') || q.includes('lentille') || q.includes('fève') || q.includes('loubia')) return 18;
-    if (q.includes('viande') || q.includes('poulet') || q.includes('poisson') || q.includes('agneau') || q.includes('œuf')) return 1;
-    if (q.includes('sauce') || q.includes('tomate') || q.includes('légume') || q.includes('ojja')) return 5;
-    if (q.includes('sucre') || q.includes('gateau') || q.includes('makroudh') || q.includes('baklawa')) return 60;
-    return 15;
-  }
+});
 
 async function startServer() {
   const PORT = Number(process.env.PORT) || 3000;

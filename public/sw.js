@@ -1,4 +1,5 @@
-const CACHE_NAME = 'glucomeal-cache-v1';
+// Cache versionné par build (paramètre « v » de l'URL d'enregistrement) : un déploiement vide l'ancien cache
+const CACHE_NAME = `glucomeal-cache-${new URL(self.location.href).searchParams.get('v') || 'dev'}`;
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -61,7 +62,8 @@ self.addEventListener('fetch', (event) => {
       if (cachedResponse) {
         // Fetch in background to update cache
         fetch(request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
+          // Seules les réponses de la même origine sont mises en cache
+          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
             caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse));
           }
         }).catch(() => {});

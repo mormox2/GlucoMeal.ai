@@ -46,6 +46,13 @@ export const AutoTitrationModal: React.FC<AutoTitrationModalProps> = ({
   const report = analyzePatientTitration(meals, userProfile, language);
 
   const handleApply = (slot: MealSlot, newRatio: number) => {
+    // Un changement de ratio d'insuline doit être validé par le soignant
+    const confirmed = window.confirm(
+      language === 'ar'
+        ? `هل صادق طبيبك على المعامل الجديد (1 وحدة / ${newRatio} غ) ؟`
+        : `Avez-vous validé ce nouveau ratio (1 UI / ${newRatio} g) avec votre diabétologue ?`
+    );
+    if (!confirmed) return;
     if (onApplyNewRatio) {
       onApplyNewRatio(slot, newRatio);
     }

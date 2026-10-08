@@ -7,7 +7,12 @@ import {
   CGMReading,
   ProfileValidationIssue,
 } from '../types';
-import { syncMealToFirestore, syncProfileToFirestore, deleteMealFromFirestore } from '../services/firebase';
+import {
+  syncMealToFirestore,
+  syncProfileToFirestore,
+  deleteMealFromFirestore,
+  deleteAllMealsFromFirestore,
+} from '../services/firebase';
 
 const STORAGE_KEYS = {
   MEALS: 'glucomal_meals_history_v1',
@@ -124,7 +129,24 @@ export function deleteMealFromHistory(mealId: string): AnalyzedMeal[] {
  */
 export function clearAllMeals(): AnalyzedMeal[] {
   saveMeals([]);
+  // Les repas sont aussi supprimés du cloud (sinon la synchronisation les ferait réapparaître)
+  deleteAllMealsFromFirestore().catch((err) => console.warn('Suppression cloud des repas:', err));
   return [];
+}
+
+/**
+ * Efface toutes les données de l'application sur cet appareil (repas, profil, réglages, consentement).
+ */
+export function deleteAllLocalData(): void {
+  memoryMealsStore = [];
+  if (typeof window === 'undefined') return;
+  try {
+    Object.keys(localStorage)
+      .filter((key) => key.startsWith('glucomal_'))
+      .forEach((key) => localStorage.removeItem(key));
+  } catch (err) {
+    console.error('Effacement des données locales:', err);
+  }
 }
 
 /**
@@ -223,7 +245,13 @@ export function saveUserProfile(profile: UserProfileDT1): ProfileValidationIssue
  * Détermine le créneau horaire courant (matin, midi, soir, collation ou Ramadan: iftar, sahriya, shor)
  */
 export function getCurrentMealSlot(ramadanMode: boolean = false): MealSlot {
-  const hour = new Date().getHours();
+  return getMealSlotForHour(new Date().getHours(), ramadanMode);
+}
+
+/**
+ * Créneau repas d'une heure donnée (plages partagées par le calcul de bolus et l'auto-titration)
+ */
+export function getMealSlotForHour(hour: number, ramadanMode: boolean = false): MealSlot {
   if (ramadanMode) {
     if (hour >= 17 && hour < 21) return 'iftar';
     if (hour >= 21 || hour < 2) return 'sahriya';

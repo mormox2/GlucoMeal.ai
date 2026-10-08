@@ -14,7 +14,7 @@ import {
   Info,
 } from 'lucide-react';
 import { BenchmarkMeal } from '../types/benchmark';
-import { SAMPLE_MEAL_PRESETS } from '../data/sampleMeals';
+import { resizeImageFile } from '../utils/imageResize';
 
 interface LiveVisionTesterProps {
   benchmarkMeals: BenchmarkMeal[];
@@ -55,18 +55,21 @@ export const LiveVisionTester: React.FC<LiveVisionTesterProps> = ({
 
   const selectedMeal = benchmarkMeals.find((m) => m.id === selectedMealId) || benchmarkMeals[0];
 
-  // Match sample preset image if available
-  const samplePreset = SAMPLE_MEAL_PRESETS.find((p) =>
-    selectedMeal.name_fr.toLowerCase().includes('couscous')
-      ? p.id.includes('couscous')
-      : selectedMeal.name_fr.toLowerCase().includes('lablabi')
-      ? p.id.includes('lablabi')
-      : selectedMeal.name_fr.toLowerCase().includes('ojja')
-      ? p.id.includes('ojja')
-      : false
-  );
+  // Photo réelle du repas de référence, choisie par l'évaluateur (aucune image d'illustration n'est testée)
+  const [photo, setPhoto] = useState<string | null>(null);
 
-  const imageUrl = samplePreset?.sample_image_url || 'https://images.unsplash.com/photo-1541518763669-27fef04b14ea?w=800&auto=format&fit=crop&q=80';
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setPhoto(await resizeImageFile(file));
+      setInferenceResult(null);
+      setAppliedToBenchmark(false);
+      setError(null);
+    } catch {
+      setError('Photo illisible.');
+    }
+  };
 
   const handleRunInference = async () => {
     setIsLoading(true);
@@ -79,11 +82,13 @@ export const LiveVisionTester: React.FC<LiveVisionTesterProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           mealId: selectedMeal.id,
+          imageBase64: photo,
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Erreur serveur (${response.status})`);
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || `Erreur serveur (${response.status})`);
       }
 
       const data: InferenceResult = await response.json();
@@ -121,7 +126,7 @@ export const LiveVisionTester: React.FC<LiveVisionTesterProps> = ({
               </span>
             </div>
             <p className="text-xs text-slate-300 mt-0.5">
-              Confrontation directe entre la vision artificielle multimodale et la pesée métrologique certifiée
+              Analyse d'une photo réelle par le pipeline de l'application, comparée à la valeur de référence déclarée
             </p>
           </div>
         </div>
@@ -129,7 +134,7 @@ export const LiveVisionTester: React.FC<LiveVisionTesterProps> = ({
         {/* Action button */}
         <button
           onClick={handleRunInference}
-          disabled={isLoading}
+          disabled={isLoading || !photo}
           className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-black flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-500/25 cursor-pointer disabled:opacity-50 shrink-0"
         >
           {isLoading ? (
@@ -140,7 +145,7 @@ export const LiveVisionTester: React.FC<LiveVisionTesterProps> = ({
           ) : (
             <>
               <Play className="w-4 h-4 fill-slate-950" />
-              <span>Tester ce plat avec Gemini Vision</span>
+              <span>{photo ? 'Analyser la photo' : 'Ajoutez d’abord une photo'}</span>
             </>
           )}
         </button>
@@ -162,6 +167,7 @@ export const LiveVisionTester: React.FC<LiveVisionTesterProps> = ({
                     key={m.id}
                     onClick={() => {
                       setSelectedMealId(m.id);
+                      setPhoto(null);
                       setInferenceResult(null);
                       setAppliedToBenchmark(false);
                     }}
@@ -184,17 +190,20 @@ export const LiveVisionTester: React.FC<LiveVisionTesterProps> = ({
           {/* Selected meal preview card */}
           <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 space-y-3">
             <div className="flex items-center gap-3">
-              <div className="w-16 h-16 rounded-xl overflow-hidden bg-slate-900 shrink-0 border border-slate-700">
-                <img
-                  src={imageUrl}
-                  alt={selectedMeal.name_fr}
-                  referrerPolicy="no-referrer"
-                  className="w-full h-full object-cover"
-                />
-              </div>
+              <label className="w-16 h-16 rounded-xl overflow-hidden bg-slate-900 shrink-0 border border-dashed border-slate-500 flex items-center justify-center cursor-pointer text-center">
+                {photo ? (
+                  <img src={photo} alt={selectedMeal.name_fr} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-[9px] text-slate-400 leading-tight px-1">
+                    <Camera className="w-4 h-4 mx-auto mb-0.5" />
+                    Photo
+                  </span>
+                )}
+                <input type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
+              </label>
               <div className="flex-1 min-w-0">
                 <h4 className="text-sm font-black text-white truncate">{selectedMeal.name_fr}</h4>
-                <p className="text-[11px] text-slate-400">{selectedMeal.portion_desc || 'Portion étalon pesée'}</p>
+                <p className="text-[11px] text-slate-400">{selectedMeal.portion_desc || 'Portion de référence'}</p>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="px-2 py-0.5 rounded bg-slate-700 text-slate-300 text-[10px] font-mono">
                     Poids : {selectedMeal.weight_g} g
@@ -208,7 +217,7 @@ export const LiveVisionTester: React.FC<LiveVisionTesterProps> = ({
 
             <div className="pt-2 border-t border-slate-700/80">
               <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold block mb-1">
-                Ingrédients certifiés :
+                Ingrédients de référence :
               </span>
               <p className="text-[11px] text-slate-300 leading-relaxed">
                 {selectedMeal.ingredients.join(', ')}

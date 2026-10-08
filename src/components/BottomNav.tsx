@@ -125,7 +125,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({
                   <span>{t('nav_database')}</span>
                 </div>
                 <span className={`text-[11px] ${currentTab === 'database' ? 'text-emerald-100' : 'text-slate-500'}`}>
-                  {language === 'ar' ? 'أكثر من 200 طبق' : '200+ plats certifiés'}
+                  {language === 'ar' ? 'القاعدة التونسية' : 'Base tunisienne'}
                 </span>
               </button>
 

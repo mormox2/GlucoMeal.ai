@@ -16,13 +16,17 @@ describe('Moteur d’Auto-Titration Clinique DT1 (SFD / ADA)', () => {
     },
   };
 
+  const NOW = Date.parse('2026-10-08T12:00:00Z');
   const createDummyMeal = (
     id: string,
     slot: 'lunch' | 'morning' | 'dinner',
     evaluation: 'target' | 'hyper' | 'hypo',
-    glucose: number
+    glucose: number,
+    daysAgo = 1,
+    icRatio: number = profile.icRatios[slot]
   ): AnalyzedMeal => ({
     id,
+    created_at: new Date(NOW - daysAgo * 86400000).toISOString(),
     meal_name: 'Repas test',
     input_type: 'photo',
     total_carbs: 60,
@@ -33,7 +37,7 @@ describe('Moteur d’Auto-Titration Clinique DT1 (SFD / ADA)', () => {
     items: [],
     bolus_calculated: {
       slot,
-      icRatio: profile.icRatios[slot],
+      icRatio,
       mealBolus: 6,
       correctionBolus: 0,
       totalBolus: 6,
@@ -48,7 +52,7 @@ describe('Moteur d’Auto-Titration Clinique DT1 (SFD / ADA)', () => {
       createDummyMeal('m3', 'lunch', 'target', 1.15),
     ];
 
-    const report = analyzePatientTitration(meals, profile);
+    const report = analyzePatientTitration(meals, profile, 'fr', NOW);
     const lunchAnalysis = report.slots.lunch;
 
     expect(lunchAnalysis.status).toBe('decrease_insulin');
@@ -58,22 +62,24 @@ describe('Moteur d’Auto-Titration Clinique DT1 (SFD / ADA)', () => {
     expect(report.priorityAlert).not.toBeNull();
   });
 
-  it('recommande de renforcer le bolus en cas d’hyperglycémie fréquente (>50%)', () => {
-    // 4 repas au dîner dont 3 en hyperglycémie
+  it('propose un renforcement plafonné à +10 % d’insuline en cas d’hyperglycémie fréquente (≥ 5 contrôles)', () => {
+    // 5 repas récents au dîner dont 4 en hyperglycémie
     const meals = [
       createDummyMeal('d1', 'dinner', 'hyper', 2.1),
       createDummyMeal('d2', 'dinner', 'hyper', 1.95),
       createDummyMeal('d3', 'dinner', 'hyper', 2.2),
-      createDummyMeal('d4', 'dinner', 'target', 1.3),
+      createDummyMeal('d4', 'dinner', 'hyper', 1.9),
+      createDummyMeal('d5', 'dinner', 'target', 1.3),
     ];
 
-    const report = analyzePatientTitration(meals, profile);
+    const report = analyzePatientTitration(meals, profile, 'fr', NOW);
     const dinnerAnalysis = report.slots.dinner;
 
     expect(dinnerAnalysis.status).toBe('increase_insulin');
-    // Ratio dîner = 12 -> renforcement = Math.round(12 * 0.86 * 10) / 10 = 10.3
-    expect(dinnerAnalysis.suggestedRatio).toBeLessThan(12);
+    // Ratio dîner = 12 -> renforcement plafonné : 12 / 1.10 = 10.9
+    expect(dinnerAnalysis.suggestedRatio).toBe(10.9);
     expect(dinnerAnalysis.recommendationTitle).toContain('hyperglycémie');
+    expect(dinnerAnalysis.clinicalRationale).toContain('valider avec votre diabétologue');
   });
 
   it('indique un statut optimal lorsque les glycémies sont dans la cible', () => {
@@ -81,20 +87,44 @@ describe('Moteur d’Auto-Titration Clinique DT1 (SFD / ADA)', () => {
       createDummyMeal('l1', 'lunch', 'target', 1.1),
       createDummyMeal('l2', 'lunch', 'target', 1.25),
       createDummyMeal('l3', 'lunch', 'target', 1.05),
+      createDummyMeal('l4', 'lunch', 'target', 1.2),
+      createDummyMeal('l5', 'lunch', 'target', 1.15),
     ];
 
-    const report = analyzePatientTitration(meals, profile);
+    const report = analyzePatientTitration(meals, profile, 'fr', NOW);
     const lunchAnalysis = report.slots.lunch;
 
     expect(lunchAnalysis.status).toBe('optimal');
     expect(lunchAnalysis.suggestedRatio).toBe(10);
-    expect(lunchAnalysis.recommendationTitle).toContain('optimal');
+    expect(lunchAnalysis.recommendationTitle).toContain('adapté');
   });
 
-  it('indique des données insuffisantes si moins de 2 contrôles post-prandiaux', () => {
-    const meals = [createDummyMeal('l1', 'lunch', 'target', 1.1)];
-    const report = analyzePatientTitration(meals, profile);
+  it('indique des données insuffisantes avec moins de 5 contrôles (aucun renforcement sur 4 hyperglycémies)', () => {
+    const meals = [1, 2, 3, 4].map((i) => createDummyMeal(`l${i}`, 'lunch', 'hyper', 2.2));
+    const report = analyzePatientTitration(meals, profile, 'fr', NOW);
     expect(report.slots.lunch.status).toBe('insufficient_data');
+  });
+
+  it('ignore les contrôles de plus de 14 jours et ceux dosés avec un ancien ratio', () => {
+    const meals = [
+      ...[1, 2, 3].map((i) => createDummyMeal(`old${i}`, 'dinner', 'hyper', 2.2, 20)),
+      ...[1, 2, 3].map((i) => createDummyMeal(`prev${i}`, 'dinner', 'hyper', 2.2, 2, 14)),
+      createDummyMeal('cur1', 'dinner', 'hyper', 2.2),
+    ];
+    const report = analyzePatientTitration(meals, profile, 'fr', NOW);
+    expect(report.slots.dinner.totalRecordedPostPrandial).toBe(1);
+    expect(report.slots.dinner.status).toBe('insufficient_data');
+  });
+
+  it('ne propose jamais de renforcement si une hypoglycémie figure parmi les contrôles', () => {
+    const meals = [
+      // 6 hyperglycémies et 1 hypoglycémie (14 %) : ni renforcement, ni allègement automatique
+      ...[1, 2, 3, 4, 5, 6].map((i) => createDummyMeal(`d${i}`, 'dinner', 'hyper', 2.2)),
+      createDummyMeal('d7', 'dinner', 'hypo', 0.6),
+    ];
+    const report = analyzePatientTitration(meals, profile, 'fr', NOW);
+    expect(report.slots.dinner.status).not.toBe('increase_insulin');
+    expect(report.slots.dinner.recommendationTitle).toContain('contradictoires');
   });
 
   it('génère un audit de sécurité lune de miel avec alerte hypo renforcée', () => {
@@ -107,7 +137,7 @@ describe('Moteur d’Auto-Titration Clinique DT1 (SFD / ADA)', () => {
       createDummyMeal('m2', 'lunch', 'hypo', 0.58),
       createDummyMeal('m3', 'lunch', 'target', 1.15),
     ];
-    const report = analyzePatientTitration(meals, honeymoonProfile);
+    const report = analyzePatientTitration(meals, honeymoonProfile, 'fr', NOW);
 
     expect(report.honeymoonInsight).toBeDefined();
     expect(report.honeymoonInsight?.status).toBe('hypo_risk');
@@ -123,9 +153,10 @@ describe('Moteur d’Auto-Titration Clinique DT1 (SFD / ADA)', () => {
       createDummyMeal('d1', 'dinner', 'hyper', 2.1),
       createDummyMeal('d2', 'dinner', 'hyper', 1.95),
       createDummyMeal('d3', 'dinner', 'hyper', 2.2),
-      createDummyMeal('d4', 'dinner', 'target', 1.3),
+      createDummyMeal('d4', 'dinner', 'hyper', 1.9),
+      createDummyMeal('d5', 'dinner', 'target', 1.3),
     ];
-    const report = analyzePatientTitration(meals, honeymoonProfile);
+    const report = analyzePatientTitration(meals, honeymoonProfile, 'fr', NOW);
 
     expect(report.honeymoonInsight).toBeDefined();
     expect(report.honeymoonInsight?.status).toBe('waning_phase');

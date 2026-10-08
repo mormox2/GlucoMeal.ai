@@ -216,7 +216,7 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
             <div>
               <p className="text-xs text-slate-600 mb-3">
                 {isAr
-                  ? 'اختر وجبة تونسية شائعة لتجربة التحليل البصري والحساب المعتمد فوراً:'
+                  ? 'اختر وجبة تونسية شائعة لتجربة الحساب بمكونات مرجعية (مثال توضيحي):'
                   : 'Sélectionnez un repas tunisien typique pour tester immédiatement l’analyse d’image et le calcul déterministe :'}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3">

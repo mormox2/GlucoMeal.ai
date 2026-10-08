@@ -82,3 +82,45 @@ describe('API de synchronisation retirée', () => {
     expect(res.status).toBe(410);
   });
 });
+
+describe('Durcissement HTTP', () => {
+  it('refuse une description trop longue', async () => {
+    const { status, data } = await analyze({ mode: 'text', text: 'couscous '.repeat(80) });
+    expect(status).toBe(400);
+    expect(data.code).toBe('TEXT_TOO_LONG');
+  });
+
+  it('exige une photo pour le test de vision du benchmark', async () => {
+    const res = await fetch(`${baseUrl}/api/benchmark/live-vision`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mealId: 1 }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('n’autorise pas un site tiers en CORS', async () => {
+    const res = await fetch(`${baseUrl}/api/analyze-meal`, {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://site-malveillant.example', 'Access-Control-Request-Method': 'POST' },
+    });
+    expect(res.status).toBe(403);
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('autorise l’origine de production', async () => {
+    const res = await fetch(`${baseUrl}/api/analyze-meal`, {
+      method: 'OPTIONS',
+      headers: { Origin: 'https://glucomeal-ai.vercel.app', 'Access-Control-Request-Method': 'POST' },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe('https://glucomeal-ai.vercel.app');
+  });
+
+  it('envoie des en-têtes de sécurité sur l’API', async () => {
+    const res = await fetch(`${baseUrl}/api/health`);
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(res.headers.get('content-security-policy')).toContain("default-src 'none'");
+    expect(res.headers.get('cache-control')).toBe('no-store');
+  });
+});

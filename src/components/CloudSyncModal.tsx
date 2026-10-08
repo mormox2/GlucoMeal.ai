@@ -30,6 +30,7 @@ import {
 import { loadSavedMeals, loadUserProfile } from '../utils/storage';
 import { MealSlot, ProfileValidationIssue, UserProfileDT1 } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
+import { isCloudSyncAllowed } from '../utils/consent';
 
 interface CloudSyncModalProps {
   isOpen: boolean;
@@ -77,6 +78,15 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
   if (!isOpen) return null;
 
   const handlePush = async () => {
+    if (!isCloudSyncAllowed()) {
+      setStatusMessage({
+        text: isAr
+          ? 'الحفظ السحابي غير مفعل : فعّله من الملف الشخصي > الخصوصية.'
+          : 'Sauvegarde cloud désactivée : activez-la dans Profil > Confidentialité.',
+        type: 'error',
+      });
+      return;
+    }
     setIsPushing(true);
     setStatusMessage(null);
     try {

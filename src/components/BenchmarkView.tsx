@@ -35,13 +35,12 @@ import {
   MealEvaluationDetail,
 } from '../utils/benchmarkEvaluator';
 import { BENCHMARK_100_MEALS } from '../data/benchmarkDataset';
-import { BenchmarkMeal as LegacyBenchmarkMeal } from '../types';
 import { exportBenchmarkToCSV, exportBenchmarkToJSON } from '../utils/benchmarkExporter';
 import { MetrologicalAuditModal } from './MetrologicalAuditModal';
 import { LiveVisionTester } from './LiveVisionTester';
 
 export const BenchmarkView: React.FC = () => {
-  // Mode selection: 'step2' (TUNISIAN_DATASET & simulation étendue) or 'all100' (base étendue 100 repas)
+  // Mode selection: 'step2' (TUNISIAN_DATASET & jeu synthétique) or 'all100' (base étendue 100 repas)
   const [activeBenchmarkMode, setActiveBenchmarkMode] = useState<'step2' | 'all100'>('step2');
 
   // Step 2 / Core Tunisian Dataset State
@@ -61,12 +60,10 @@ export const BenchmarkView: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedDifficulty, setSelectedDifficulty] = useState<string>('all');
   const [expandedLegacyMealId, setExpandedLegacyMealId] = useState<number | null>(1);
-  const [tested100MealResults, setTested100MealResults] = useState<
-    Record<number, { estimated: number; deltaPercent: number; passed: boolean }>
-  >({});
-  const [is100BatchRunning, setIs100BatchRunning] = useState(false);
+  // Aucun résultat simulé : ce jeu n'a pas de photos, il n'est donc pas évalué ici
+  const tested100MealResults: Record<number, { estimated: number; deltaPercent: number; passed: boolean }> = {};
 
-  // Déclencher generateExpandedDataset pour générer et afficher les 100 repas de simulation
+  // Générer le jeu synthétique de 100 variantes (portions modifiées des 5 repas de référence)
   const handleTriggerExpandedDataset = () => {
     const expanded100 = generateExpandedDataset(TUNISIAN_DATASET, 100);
     setDisplayedDataset(expanded100);
@@ -86,67 +83,23 @@ export const BenchmarkView: React.FC = () => {
     setStep2ExpandedMealId(1);
   };
 
-  // Exécuter l'évaluation automatisée
-  const handleRunStep2Evaluation = async () => {
+  // Prédictions réelles collectées (tests de vision sur photo), indexées par repas
+  const currentPredictions = () =>
+    step2Report.results.reduce(
+      (acc, r) => ({ ...acc, [r.meal.id]: r.predicted_carbs_g }),
+      {} as Record<string | number, number>
+    );
+
+  // Recalculer le rapport à partir des seules prédictions réelles (aucune simulation)
+  const handleRunStep2Evaluation = () => {
     setIsStep2Running(true);
-    try {
-      // Tentative d'appel API serveur
-      const res = await fetch('/api/benchmark/evaluate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ count: isExpandedActive ? 100 : 5 }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.report) {
-          setStep2Report(data.report);
-          setIsStep2Running(false);
-          return;
-        }
-      }
-    } catch {
-      // Fallback local via le moteur de benchmark déterministe
-    }
-
-    // Calcul local avec temporisation d'animation
-    setTimeout(() => {
-      const report = runAutomatedBenchmark(displayedDataset);
-      setStep2Report(report);
-      setIsStep2Running(false);
-    }, 500);
-  };
-
-  // Réévaluer un seul repas de l'Étape 2 avec simulation ou variation
-  const handleReevaluateSingleMeal = (mealId: string | number) => {
-    const meal = displayedDataset.find((m) => m.id === mealId);
-    if (!meal) return;
-
-    // Simulation d'une nouvelle prise de vue avec variance contrôlée (3% à 8%)
-    const randomVariance = (Math.random() * 0.1 - 0.05);
-    const simulatedCarbs = Math.round(meal.carbs_g * (1 + randomVariance));
-
-    const updatedOverrides = {
-      ...step2Report.results.reduce(
-        (acc, r) => ({ ...acc, [r.meal.id]: r.predicted_carbs_g }),
-        {} as Record<string | number, number>
-      ),
-      [mealId]: simulatedCarbs,
-    };
-
-    const newReport = runAutomatedBenchmark(displayedDataset, updatedOverrides);
-    setStep2Report(newReport);
+    setStep2Report(runAutomatedBenchmark(displayedDataset, currentPredictions()));
+    setIsStep2Running(false);
   };
 
   // Injecter le résultat d'une inférence réelle Gemini Vision dans le rapport
   const handleApplyLiveVisionPrediction = (mealId: string | number, predictedCarbs: number) => {
-    const updatedOverrides = {
-      ...step2Report.results.reduce(
-        (acc, r) => ({ ...acc, [r.meal.id]: r.predicted_carbs_g }),
-        {} as Record<string | number, number>
-      ),
-      [mealId]: predictedCarbs,
-    };
+    const updatedOverrides = { ...currentPredictions(), [mealId]: predictedCarbs };
     const newReport = runAutomatedBenchmark(displayedDataset, updatedOverrides);
     setStep2Report(newReport);
   };
@@ -176,7 +129,7 @@ Détail par repas:
 ${step2Report.results
   .map(
     (r) =>
-      `- ${r.meal.name_fr} (${r.photo_angle_label}): Réel ${r.meal.carbs_g}g | Estimé ${r.predicted_carbs_g}g | Écart: ${r.delta_carbs_g}g (${r.relative_error_pct}%) [${r.passed_clinical_threshold ? 'CONFORME' : 'HORS ZONE'}]`
+      `- ${r.meal.name_fr} (${r.photo_angle_label}): Réel ${r.meal.carbs_g}g | Estimé ${r.predicted_carbs_g}g | Écart: ${r.delta_carbs_g}g (${r.relative_error_pct}%) [${r.passed_clinical_threshold ? '≤ 15 %' : '> 15 %'}]`
   )
   .join('\n')}
 
@@ -196,7 +149,7 @@ Synthèse clinique: ${step2Report.clinical_summary}`;
     return map;
   }, [step2Report]);
 
-  // Filtrage du tableau de données (TUNISIAN_DATASET ou simulation étendue)
+  // Filtrage du tableau de données (TUNISIAN_DATASET ou jeu synthétique)
   const filteredTableMeals = useMemo(() => {
     return displayedDataset.filter((meal) => {
       const matchesCategory =
@@ -240,42 +193,12 @@ Synthèse clinique: ${step2Report.clinical_summary}`;
     return matchesDiff && matchesSearch;
   });
 
-  const run100TestOnSingleMeal = (meal: LegacyBenchmarkMeal) => {
-    const variance = Math.sin(meal.id * 17) * 0.07;
-    const estimated = Math.round(meal.reference_carbs_g * (1 + variance));
-    const deltaPercent = Math.abs(
-      Math.round(((estimated - meal.reference_carbs_g) / meal.reference_carbs_g) * 100)
-    );
-    const passed = deltaPercent <= 15;
-
-    setTested100MealResults((prev) => ({
-      ...prev,
-      [meal.id]: { estimated, deltaPercent, passed },
-    }));
-  };
-
-  const runBatchTest100 = () => {
-    setIs100BatchRunning(true);
-    setTimeout(() => {
-      const results: Record<number, { estimated: number; deltaPercent: number; passed: boolean }> = {};
-      BENCHMARK_100_MEALS.forEach((meal) => {
-        const variance = Math.sin(meal.id * 17) * 0.07;
-        const estimated = Math.round(meal.reference_carbs_g * (1 + variance));
-        const deltaPercent = Math.abs(
-          Math.round(((estimated - meal.reference_carbs_g) / meal.reference_carbs_g) * 100)
-        );
-        results[meal.id] = { estimated, deltaPercent, passed: deltaPercent <= 15 };
-      });
-      setTested100MealResults(results);
-      setIs100BatchRunning(false);
-    }, 600);
-  };
-
   const tested100Count = Object.keys(tested100MealResults).length;
   const passed100Count = (
     Object.values(tested100MealResults) as { estimated: number; deltaPercent: number; passed: boolean }[]
   ).filter((r) => r.passed).length;
-  const successRate100 = tested100Count > 0 ? Math.round((passed100Count / tested100Count) * 100) : 96;
+  // Aucun taux affiché sans test réel
+  const successRate100: number | null = tested100Count > 0 ? Math.round((passed100Count / tested100Count) * 100) : null;
 
   return (
     <div className="max-w-6xl 2xl:max-w-7xl mx-auto py-8 sm:py-10 px-4 sm:px-6 lg:px-8">
@@ -302,10 +225,10 @@ Synthèse clinique: ${step2Report.clinical_summary}`;
               <button
                 onClick={() => setIsAuditModalOpen(true)}
                 className="px-3 py-2.5 rounded-2xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-800 text-xs font-bold shadow-xs flex items-center justify-center gap-1.5 cursor-pointer transition-all"
-                title="Consulter et imprimer le certificat d'audit métrologique"
+                title="Consulter et imprimer le rapport d'évaluation interne"
               >
                 <Printer className="w-3.5 h-3.5 text-slate-600" />
-                <span>Certificat d'Audit</span>
+                <span>Rapport d'évaluation</span>
               </button>
 
               <button
@@ -339,29 +262,15 @@ Synthèse clinique: ${step2Report.clinical_summary}`;
                 ) : (
                   <>
                     <Play className="w-4 h-4 fill-white" />
-                    <span>Exécuter (5 repas)</span>
+                    <span>Recalculer le rapport</span>
                   </>
                 )}
               </button>
             </>
           ) : (
-            <button
-              onClick={runBatchTest100}
-              disabled={is100BatchRunning}
-              className="px-4 py-2.5 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-md shadow-amber-600/20 flex items-center justify-center gap-2 cursor-pointer transition-all"
-            >
-              {is100BatchRunning ? (
-                <>
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>Calcul sur 100 repas…</span>
-                </>
-              ) : (
-                <>
-                  <Play className="w-4 h-4" />
-                  <span>Lancer le benchmark (100 repas)</span>
-                </>
-              )}
-            </button>
+            <span className="px-4 py-2.5 rounded-2xl bg-slate-100 text-slate-600 text-xs font-semibold">
+              Évaluation uniquement sur photo réelle (testeur de vision)
+            </span>
           )}
         </div>
       </div>
@@ -625,7 +534,7 @@ Synthèse clinique: ${step2Report.clinical_summary}`;
               <div>
                 <div className="flex items-center gap-2.5 flex-wrap mb-1">
                   <h3 className="text-sm sm:text-base font-black text-slate-900 tracking-tight">
-                    Tableau de Données Métrologiques — {isExpandedActive ? 'Simulation Étendue (100 Repas)' : 'TUNISIAN_DATASET'}
+                    Tableau de Données — {isExpandedActive ? 'Jeu synthétique (100 variantes générées)' : 'TUNISIAN_DATASET'}
                   </h3>
                   {isExpandedActive ? (
                     <span className="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-indigo-100 text-indigo-800 border border-indigo-200 flex items-center gap-1">
@@ -641,8 +550,8 @@ Synthèse clinique: ${step2Report.clinical_summary}`;
                 </div>
                 <p className="text-xs text-slate-500 max-w-2xl">
                   {isExpandedActive
-                    ? 'Simulation étendue complète de 100 repas générée avec variations réalistes de portions (±15%) et cohérence clinique pour validation DT1.'
-                    : 'Les 5 repas représentatifs de base certifiés par double pesée et étiquetage nutritionnel de référence.'}
+                    ? 'Jeu SYNTHÉTIQUE : 100 variantes générées automatiquement à partir des 5 repas de référence (portions ±15 %). Ce ne sont pas des repas pesés.'
+                    : 'Les 5 repas de référence, avec des valeurs de glucides déclarées (méthode indiquée, non vérifiée de façon indépendante).'}
                 </p>
               </div>
 
@@ -655,7 +564,7 @@ Synthèse clinique: ${step2Report.clinical_summary}`;
                     className="px-4 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black shadow-md shadow-indigo-600/20 flex items-center gap-2 cursor-pointer transition-all hover:scale-[1.02] active:scale-[0.98]"
                   >
                     <Sparkles className="w-4 h-4 text-indigo-200" />
-                    <span>Générer la simulation étendue (100 repas)</span>
+                    <span>Générer le jeu synthétique (100 variantes)</span>
                   </button>
                 ) : (
                   <button
@@ -952,14 +861,14 @@ Synthèse clinique: ${step2Report.clinical_summary}`;
                                         <strong className="text-slate-800">Méthode étalon : </strong>
                                         {meal.reference_method === 'scale'
                                           ? 'Double pesée sur balance de précision (±0.1 g)'
-                                          : 'Étiquetage nutritionnel certifié'}
+                                          : 'Étiquetage nutritionnel'}
                                       </p>
                                       <p className="text-slate-600">
                                         <strong className="text-slate-800">Poids portion totale : </strong>
                                         {meal.weight_g} g
                                       </p>
                                       <p className="text-slate-600">
-                                        <strong className="text-slate-800">Glucides réels certifiés : </strong>
+                                        <strong className="text-slate-800">Glucides de référence : </strong>
                                         <span className="text-amber-800 font-extrabold">{meal.carbs_g} g</span>
                                       </p>
                                       <p className="text-slate-600">
@@ -1019,19 +928,7 @@ Synthèse clinique: ${step2Report.clinical_summary}`;
                                     </div>
                                   </div>
 
-                                  {/* Single meal action */}
-                                  <div className="flex justify-end gap-2">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleReevaluateSingleMeal(meal.id);
-                                      }}
-                                      className="px-3 py-1.5 rounded-xl bg-slate-200/80 hover:bg-slate-300 text-slate-800 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors"
-                                    >
-                                      <RefreshCw className="w-3 h-3" />
-                                      <span>Simuler une nouvelle prise de vue</span>
-                                    </button>
-                                  </div>
+
                                 </div>
                               </td>
                             </tr>
@@ -1065,7 +962,7 @@ Synthèse clinique: ${step2Report.clinical_summary}`;
             <div className="p-4 rounded-3xl bg-white border border-slate-200 shadow-xs">
               <span className="text-xs font-bold text-slate-500 uppercase">Taux de conformité</span>
               <div className="text-2xl font-black text-emerald-700 mt-1">
-                {successRate100} %
+                {successRate100 === null ? '—' : `${successRate100} %`}
               </div>
               <span className="text-[11px] text-slate-400">Écart ≤ 15% (seuil clinique diabète)</span>
             </div>
@@ -1195,15 +1092,9 @@ Synthèse clinique: ${step2Report.clinical_summary}`;
                             </span>
                           </div>
                         ) : (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              run100TestOnSingleMeal(meal);
-                            }}
-                            className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 text-xs font-semibold cursor-pointer transition-colors"
-                          >
-                            Tester IA
-                          </button>
+                          <span className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-500 text-xs font-semibold">
+                            Non évalué
+                          </span>
                         )}
 
                         {isExpanded ? (
@@ -1267,7 +1158,7 @@ Synthèse clinique: ${step2Report.clinical_summary}`;
         </div>
       )}
 
-      {/* Modal Certificat d'Audit Métrologique */}
+      {/* Rapport d'évaluation interne */}
       <MetrologicalAuditModal
         isOpen={isAuditModalOpen}
         onClose={() => setIsAuditModalOpen(false)}

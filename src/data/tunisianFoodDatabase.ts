@@ -1207,7 +1207,7 @@ export const TUNISIAN_FOOD_DATABASE: FoodItem[] = [
   // SPÉCIALITÉS RÉGIONALES TUNISIENNES
   // ==========================================
   {
-    id: 'reg-01',
+    id: 'reg-15',
     name_fr: 'Bazine aux fèves et huile d\'olive (Gafsa / Sud)',
     name_ar: 'بازين بالفول وزيت الزيتون',
     name_tn: 'Bazine bil foul',
@@ -1224,7 +1224,7 @@ export const TUNISIAN_FOOD_DATABASE: FoodItem[] = [
     glycemic_load: 30,
   },
   {
-    id: 'reg-02',
+    id: 'reg-16',
     name_fr: 'Couscous au mérou / poisson (Djerba & Kerkennah)',
     name_ar: 'كسكسي بالمناني / حوت جربة',
     name_tn: 'Kosksi bil hout',
@@ -1241,7 +1241,7 @@ export const TUNISIAN_FOOD_DATABASE: FoodItem[] = [
     glycemic_load: 40,
   },
   {
-    id: 'reg-03',
+    id: 'reg-17',
     name_fr: 'Mrouzia tunisienne (agneau, amandes et raisins secs)',
     name_ar: 'مروزية تونسية باللوز والزبيب',
     name_tn: 'Mrouzia',
@@ -1258,7 +1258,7 @@ export const TUNISIAN_FOOD_DATABASE: FoodItem[] = [
     glycemic_load: 20,
   },
   {
-    id: 'reg-04',
+    id: 'reg-18',
     name_fr: 'Masfouf aux dattes Deglet Nour de Tozeur',
     name_ar: 'مسفوف بدقلة النور وتمر توزر',
     name_tn: 'Masfouf bil degla',
@@ -1275,7 +1275,7 @@ export const TUNISIAN_FOOD_DATABASE: FoodItem[] = [
     glycemic_load: 47,
   },
   {
-    id: 'reg-05',
+    id: 'reg-19',
     name_fr: 'Bsaissa de blé dur et pois chiches (Sfax)',
     name_ar: 'بسيسة قمح وحمص بالفاكية',
     name_tn: 'Bsissa Sfaxia',
@@ -1292,7 +1292,7 @@ export const TUNISIAN_FOOD_DATABASE: FoodItem[] = [
     glycemic_load: 16,
   },
   {
-    id: 'reg-06',
+    id: 'reg-20',
     name_fr: 'Madfouna tunisienne aux bettes (Tunis)',
     name_ar: 'مدفونة تونسية بالسلق والهرقمة',
     name_tn: 'Madfouna',
@@ -1309,7 +1309,7 @@ export const TUNISIAN_FOOD_DATABASE: FoodItem[] = [
     glycemic_load: 5,
   },
   {
-    id: 'reg-07',
+    id: 'reg-21',
     name_fr: 'Chakhchoukha tunisienne au poulet (Nefta / Tozeur)',
     name_ar: 'شخشوخة تونسية بالدجاج وحمص الجريد',
     name_tn: 'Chakhchoukha Jeridia',
@@ -1326,7 +1326,7 @@ export const TUNISIAN_FOOD_DATABASE: FoodItem[] = [
     glycemic_load: 46,
   },
   {
-    id: 'reg-08',
+    id: 'reg-22',
     name_fr: 'Chorba Lssan Asfour (Langue d\'oiseau)',
     name_ar: 'شوربة لسان عصفور تونسية',
     name_tn: 'Chorba lsen asfour',

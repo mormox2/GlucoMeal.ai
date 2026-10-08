@@ -770,8 +770,8 @@ interface SyncStatusFeedback {
                 </div>
                 <p className="text-[10px] text-slate-500">
                   {isAr
-                    ? '* دعم أصلي لمستشعرات LinX CGM و Syai Tag عبر بلوتوث الطاقة المنخفضة (BLE) أو المحاكاة المعتمدة.'
-                    : '* Prise en charge native des capteurs chinois LinX CGM et Syai Tag via Web Bluetooth Low Energy direct ou émulation certifiée.'}
+                    ? '* دعم مستشعرات LinX CGM و Syai Tag عبر بلوتوث الطاقة المنخفضة (BLE) أو عبر Nightscout.'
+                    : '* Prise en charge des capteurs LinX CGM et Syai Tag via Web Bluetooth (BLE) ou via une passerelle Nightscout.'}
                 </p>
               </div>
 

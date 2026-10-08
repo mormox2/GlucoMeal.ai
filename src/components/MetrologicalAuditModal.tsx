@@ -47,7 +47,7 @@ export const MetrologicalAuditModal: React.FC<MetrologicalAuditModalProps> = ({
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-black text-slate-900">
-                Certificat & Rapport d’Audit Métrologique
+                Rapport d’évaluation interne (non certifié)
               </h2>
               <p className="text-xs text-slate-500">
                 Protocole d'évaluation clinique diabétologique (DT1) • Cuisine Tunisienne
@@ -90,25 +90,27 @@ export const MetrologicalAuditModal: React.FC<MetrologicalAuditModalProps> = ({
 
         {/* Audit Report Printable Document Body */}
         <div className="p-6 sm:p-8 overflow-y-auto flex-1 space-y-6 text-slate-800 font-sans print:p-0 print:space-y-4">
-          {/* Certificate Header Stamp */}
+          {/* En-tête du rapport (document interne : aucune certification ni conformité réglementaire) */}
           <div className="border-b-2 border-emerald-600 pb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-bold mb-2">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                CONFORMITÉ CLINIQUEMENT VALIDÉE
+              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-amber-50 text-amber-900 border border-amber-200 text-[11px] font-bold mb-2">
+                <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                BANC DE TEST INTERNE • NON CERTIFIÉ
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
                 Rapport d'Évaluation Métrologique Nutritionnelle
               </h1>
               <p className="text-xs text-slate-500 mt-0.5">
-                Système GlucoMeal AI • Base de Référence Tunisienne (Standard Diabète Type 1)
+                Système GlucoMeal AI • Résultats indicatifs, sans valeur de validation clinique ni réglementaire
               </p>
             </div>
 
             <div className="text-left sm:text-right text-xs text-slate-500 font-mono">
-              <p>Réf Audit : <span className="font-bold text-slate-800">TUN-DT1-METR-2026</span></p>
               <p>Date : {new Date(report.timestamp).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
-              <p>Repas analysés : <span className="font-bold text-slate-800">{report.total_meals}</span></p>
+              <p>
+                Repas évalués : <span className="font-bold text-slate-800">{report.total_meals}</span>
+                {report.dataset_size !== undefined && ` / ${report.dataset_size}`}
+              </p>
             </div>
           </div>
 
@@ -240,7 +242,7 @@ export const MetrologicalAuditModal: React.FC<MetrologicalAuditModalProps> = ({
                               : 'bg-rose-100 text-rose-800'
                           }`}
                         >
-                          {r.passed_clinical_threshold ? 'CONFORME' : 'HORS_SEUIL'}
+                          {r.passed_clinical_threshold ? '≤ 15 %' : '> 15 %'}
                         </span>
                       </td>
                     </tr>
@@ -265,22 +267,15 @@ export const MetrologicalAuditModal: React.FC<MetrologicalAuditModalProps> = ({
               {report.clinical_summary}
             </p>
             <div className="border-t border-slate-200/80 pt-2 text-[11px] text-slate-500">
-              <span className="font-semibold text-slate-700">Règle de sécurité DT1 :</span> Toute erreur résiduelle reste compensable par la sensibilité individuelle à l’insuline (ISF). Pour les plats complexes (ex: Lablabi avec pain immergé), le système préconise le contrôle tactile ou la saisie vocale pour confirmer la portion de féculent.
+              <span className="font-semibold text-slate-700">Limites :</span> une erreur d’estimation des glucides se traduit directement par une erreur de dose d’insuline. Les plats complexes (ex : lablabi avec pain immergé) doivent être vérifiés et corrigés portion par portion avant toute validation.
             </div>
           </div>
 
-          {/* Signatures & Certification Stamp */}
-          <div className="pt-6 border-t border-slate-200 flex items-center justify-between text-xs text-slate-500">
-            <div>
-              <p className="font-bold text-slate-800">Unité Métrologie & Algorithmes Cliniques</p>
-              <p className="text-[11px]">GlucoMeal AI • Validation Tunisienne 2026</p>
-            </div>
-            <div className="text-right">
-              <div className="inline-block px-3 py-1 rounded-lg border-2 border-dashed border-emerald-600 text-emerald-700 font-mono font-bold text-[10px]">
-                VALIDÉ ISO-COMPLIANT
-              </div>
-            </div>
-          </div>
+          <p className="pt-6 border-t border-slate-200 text-[11px] text-slate-500">
+            Rapport généré automatiquement par le banc de test interne de GlucoMeal AI. Il ne constitue ni une
+            certification, ni une évaluation de conformité (ISO 15197 concerne les lecteurs de glycémie, pas
+            l’estimation des glucides), ni une validation clinique.
+          </p>
         </div>
       </div>
     </div>

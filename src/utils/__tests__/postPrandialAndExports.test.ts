@@ -40,7 +40,7 @@ describe('Glycémies post-prandiales normalisées', () => {
       meal('a', { post_prandial_glucose: 65, post_prandial_evaluation: 'hyper' }),
       meal('b', { post_prandial_glucose: 62, post_prandial_evaluation: 'hyper' }),
     ];
-    const report = analyzePatientTitration(meals, glProfile);
+    const report = analyzePatientTitration(meals, glProfile, 'fr', Date.parse('2026-10-09T12:00:00Z'));
     expect(report.slots.lunch.status).toBe('decrease_insulin');
     expect(report.slots.lunch.averagePostPrandial).toBe(0.64);
   });
