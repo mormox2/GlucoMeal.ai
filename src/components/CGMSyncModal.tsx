@@ -33,6 +33,7 @@ import {
   saveCGMConfig,
   checkHardwareSupport,
   connectBluetoothGlucoseMeter,
+  isNightscoutAccessToken,
   connectLinxCGM,
   connectSyaiTagCGM,
   scanNFCGlucoseSensor,
@@ -77,12 +78,12 @@ export const CGMSyncModal: React.FC<CGMSyncModalProps> = ({
   const [dexcomRegion, setDexcomRegion] = useState<'eu' | 'us'>(config.dexcomRegion || 'eu');
 
   // Chinese CGMs state (LinX, Syai Tag, Sibionics)
-  const [linxSerialNumber, setLinxSerialNumber] = useState(config.linxSerialNumber || 'LX-883920');
+  const [linxSerialNumber, setLinxSerialNumber] = useState(config.linxSerialNumber || '');
   const [linxBridgeMode, setLinxBridgeMode] = useState<CGMConfig['linxBridgeMode']>(config.linxBridgeMode || 'ble_direct');
   const [linxCloudEmail, setLinxCloudEmail] = useState(config.linxCloudEmail || '');
   const [linxCloudPassword, setLinxCloudPassword] = useState(config.linxCloudPassword || '');
 
-  const [syaiSerialNumber, setSyaiSerialNumber] = useState(config.syaiSerialNumber || 'ST-409182');
+  const [syaiSerialNumber, setSyaiSerialNumber] = useState(config.syaiSerialNumber || '');
   const [syaiBridgeMode, setSyaiBridgeMode] = useState<CGMConfig['syaiBridgeMode']>(config.syaiBridgeMode || 'ble_smart');
   const [syaiEmail, setSyaiEmail] = useState(config.syaiEmail || '');
   const [syaiPassword, setSyaiPassword] = useState(config.syaiPassword || '');
@@ -186,13 +187,9 @@ interface SyncStatusFeedback {
         brand: 'linx',
         modelName: 'LinX CGMS (MicroTech)',
         deviceName: 'LinX CGM Sensor',
-        serialNumber: 'LX-883920',
         unit: currentUnit,
-        trend: 'flat',
         timestamp: new Date().toISOString(),
         sensorExpiryDays: 15,
-        mardScore: '8.9%',
-        batteryLevel: 94,
         samplingInterval: '1 minute',
         specsHighlight: 'Étanche IP68 • 15 Jours',
         source: 'bluetooth_real',
@@ -237,15 +234,11 @@ interface SyncStatusFeedback {
         brand: 'syai',
         modelName: 'Syai Tag CGMS (Syai Health)',
         deviceName: 'Syai Tag Sensor',
-        serialNumber: 'ST-409182',
         unit: currentUnit,
-        trend: 'flat',
         timestamp: new Date().toISOString(),
         sensorExpiryDays: 14,
-        mardScore: '8.1%',
-        batteryLevel: 95,
         samplingInterval: '1-3 min',
-        specsHighlight: 'Ultra-léger 1.2g • MARD 8.1%',
+        specsHighlight: 'Bluetooth Smart • 14 jours',
         source: 'bluetooth_real',
         message: msg,
       });
@@ -611,11 +604,6 @@ interface SyncStatusFeedback {
                           <span>{currentReading.errorMessage}</span>
                         </div>
                       )}
-                      {currentReading.mardScore && (
-                        <span className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 text-[10px] font-bold border border-emerald-500/30">
-                          MARD : {currentReading.mardScore}
-                        </span>
-                      )}
                       {selectedDevice === 'linx' && (
                         <span className="inline-block px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-200 text-[10px] font-semibold border border-blue-400/30">
                           {isAr ? 'مقاوم للماء IP68 • تدفق كل دقيقة' : 'Étanche IP68 • Flux 1-min'}
@@ -666,13 +654,19 @@ interface SyncStatusFeedback {
                     <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-300">
                       <span className="flex items-center gap-1">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        {isAr
-                          ? `المستشعر : باقي ${currentReading.sensorExpiryDays || (selectedDevice === 'linx' ? 15 : 14)} يوم`
-                          : `Capteur : ${currentReading.sensorExpiryDays || (selectedDevice === 'linx' ? 15 : 14)} jours restants`}
+                        {currentReading.sensorExpiryDays
+                          ? isAr
+                            ? `مدة الاستعمال الاسمية : ${currentReading.sensorExpiryDays} يوم`
+                            : `Durée de vie nominale : ${currentReading.sensorExpiryDays} jours`
+                          : isAr
+                            ? 'مدة المستشعر غير معروفة'
+                            : 'Durée du capteur non communiquée'}
                       </span>
-                      <span className="text-slate-400 text-[10px]">
-                        {isAr ? 'الرقم التسلسلي :' : 'N° Série :'} {currentReading.sensorSerialNumber || (selectedDevice === 'linx' ? linxSerialNumber : selectedDevice === 'syai' ? syaiSerialNumber : 'SN-7842')}
-                      </span>
+                      {currentReading.sensorSerialNumber && (
+                        <span className="text-slate-400 text-[10px]">
+                          {isAr ? 'الرقم التسلسلي :' : 'N° Série :'} {currentReading.sensorSerialNumber}
+                        </span>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -769,8 +763,8 @@ interface SyncStatusFeedback {
                 </div>
                 <p className="text-[10px] text-slate-500">
                   {isAr
-                    ? '* دعم أصلي لمستشعرات LinX CGM و Syai Tag عبر بلوتوث الطاقة المنخفضة (BLE) أو المحاكاة المعتمدة.'
-                    : '* Prise en charge native des capteurs chinois LinX CGM et Syai Tag via Web Bluetooth Low Energy direct ou émulation certifiée.'}
+                    ? '* دعم مستشعرات LinX CGM و Syai Tag عبر بلوتوث الطاقة المنخفضة (BLE) أو عبر Nightscout.'
+                    : '* Prise en charge des capteurs LinX CGM et Syai Tag via Web Bluetooth (BLE) ou via une passerelle Nightscout.'}
                 </p>
               </div>
 
@@ -818,7 +812,7 @@ interface SyncStatusFeedback {
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="text-amber-300 font-bold flex items-center gap-1">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        {syaiResult.deviceName} ({syaiResult.serialNumber})
+                        {syaiResult.deviceName}{syaiResult.serialNumber ? ` (${syaiResult.serialNumber})` : ''}
                       </span>
                       <span className="text-slate-400 text-[10px]">
                         {new Date(syaiResult.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -829,7 +823,6 @@ interface SyncStatusFeedback {
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-2xl font-black text-white">{syaiResult.glucoseValue}</span>
                         <span className="text-xs text-amber-200 font-semibold">{syaiResult.unit}</span>
-                        <span className="text-[10px] text-emerald-300 ml-1 font-bold">MARD {syaiResult.mardScore}</span>
                       </div>
 
                       {onApplyReading && (
@@ -848,7 +841,7 @@ interface SyncStatusFeedback {
                     </div>
 
                     <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-300">
-                      <span>{isAr ? `البطارية : ${syaiResult.batteryLevel}% • باقي 14 يوم` : `Batterie : ${syaiResult.batteryLevel}% • 14j restants`}</span>
+                      <span>{isAr ? 'مدة الاستعمال الاسمية : 14 يوم' : 'Durée de vie nominale : 14 j'}</span>
                       <span className="text-amber-300 font-medium">{syaiResult.specsHighlight}</span>
                     </div>
                   </div>
@@ -922,7 +915,7 @@ interface SyncStatusFeedback {
                     <div className="flex items-center justify-between text-[11px]">
                       <span className="text-cyan-300 font-bold flex items-center gap-1">
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                        {linxResult.deviceName} ({linxResult.serialNumber})
+                        {linxResult.deviceName}{linxResult.serialNumber ? ` (${linxResult.serialNumber})` : ''}
                       </span>
                       <span className="text-slate-400 text-[10px]">
                         {new Date(linxResult.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -933,7 +926,6 @@ interface SyncStatusFeedback {
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-2xl font-black text-white">{linxResult.glucoseValue}</span>
                         <span className="text-xs text-cyan-200 font-semibold">{linxResult.unit}</span>
-                        <span className="text-[10px] text-emerald-300 ml-1 font-bold">MARD {linxResult.mardScore}</span>
                       </div>
 
                       {onApplyReading && (
@@ -952,7 +944,7 @@ interface SyncStatusFeedback {
                     </div>
 
                     <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-300">
-                      <span>{isAr ? `البطارية : ${linxResult.batteryLevel}% • 15 يوم استقلالية` : `Batterie : ${linxResult.batteryLevel}% • 15j d'autonomie`}</span>
+                      <span>{isAr ? 'مدة الاستعمال الاسمية : 15 يوم' : 'Durée de vie nominale : 15 j'}</span>
                       <span className="text-cyan-300 font-medium">{linxResult.specsHighlight}</span>
                     </div>
                   </div>
@@ -1289,7 +1281,7 @@ interface SyncStatusFeedback {
                     </label>
                     <input
                       type="text"
-                      placeholder="ST-409182"
+                      placeholder="ST-XXXXXX"
                       value={syaiSerialNumber}
                       onChange={(e) => setSyaiSerialNumber(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-amber-500 bg-white"
@@ -1374,7 +1366,7 @@ interface SyncStatusFeedback {
                     </label>
                     <input
                       type="text"
-                      placeholder="LX-883920"
+                      placeholder="LX-XXXXXX"
                       value={linxSerialNumber}
                       onChange={(e) => setLinxSerialNumber(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-cyan-500 bg-white"
@@ -1555,15 +1547,27 @@ interface SyncStatusFeedback {
                   </div>
                   <div>
                     <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                      Clé d'API (API Secret Token) :
+                      {isAr ? 'رمز الوصول للقراءة فقط (موصى به) :' : 'Jeton d’accès en lecture seule (recommandé) :'}
                     </label>
                     <input
                       type="password"
-                      placeholder="••••••••••••"
+                      placeholder="lecture-1a2b3c4d5e6f7a8b"
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs outline-none focus:border-blue-500 bg-white"
                     />
+                    <p className="text-[10px] text-slate-500 mt-1 leading-relaxed">
+                      {isAr
+                        ? 'أنشئ في Nightscout (Admin Tools) رمزاً بدور "readable". يُقبل API_SECRET أيضاً (يُرسل مشفراً SHA-1) لكنه يمنح صلاحيات كاملة: تجنبه.'
+                        : 'Créez dans Nightscout (Admin Tools) un jeton avec le rôle « readable ». L’API_SECRET est aussi accepté (envoyé haché en SHA-1), mais il donne un accès administrateur complet : à éviter.'}
+                    </p>
+                    {apiKey && !isNightscoutAccessToken(apiKey) && apiKey !== '********' && (
+                      <p className="text-[10px] text-amber-700 font-semibold mt-1">
+                        {isAr
+                          ? '⚠️ هذه القيمة ليست رمز قراءة : يبدو أنها API_SECRET (صلاحيات كاملة).'
+                          : '⚠️ Cette valeur n’est pas un jeton de lecture : il s’agit probablement de l’API_SECRET (accès complet).'}
+                      </p>
+                    )}
                   </div>
 
                   <button

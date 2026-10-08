@@ -334,7 +334,7 @@ export const TUNISIAN_BENCHMARK_DATASET: TunisianMealBenchmarkDataset = {
   name: TUNISIAN_BENCHMARK_DATASET_CONFIG.name,
   version: TUNISIAN_BENCHMARK_DATASET_CONFIG.version,
   description:
-    'Jeu de données certifié métrologiquement pour le diabète de type 1 en Tunisie. Combine la décomposition des ingrédients, les pesées réelles au gramme et les valeurs glucidiques de référence.',
+    'Jeu de données de référence interne pour le diabète de type 1 en Tunisie : décomposition des ingrédients et valeurs glucidiques déclarées (non vérifiées de façon indépendante).',
   target_meals_count: 100,
   clinical_error_threshold_pct: 15,
   meals: INITIAL_5_REPRESENTATIVE_MEALS,

@@ -10,11 +10,12 @@ import {
   setDoc,
   collection,
   onSnapshot,
-  query,
-  orderBy,
   deleteDoc,
   getDoc,
   getDocs,
+  Timestamp,
+  terminate,
+  clearIndexedDbPersistence,
 } from 'firebase/firestore';
 import {
   getAuth,
@@ -24,6 +25,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
+  deleteUser,
   User,
 } from 'firebase/auth';
 import {
@@ -31,11 +33,15 @@ import {
   ref,
   uploadString,
   getDownloadURL,
+  listAll,
+  deleteObject,
   FirebaseStorage,
 } from 'firebase/storage';
 import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
+import { generateSyncCode, isValidSyncCode, normalizeSyncCode } from '../utils/syncCode';
+import { isCloudSyncAllowed } from '../utils/consent';
 
 let app: FirebaseApp;
 if (!getApps().length) {
@@ -51,11 +57,19 @@ if (!getApps().length) {
   app = getApp();
 }
 
-// Initialisation sécurisée App Check si recaptchaSiteKey est configuré
-if (typeof window !== 'undefined' && firebaseConfig.recaptchaSiteKey) {
+// App Check : seules les instances authentiques de l'application peuvent appeler Firestore et Storage
+// (limite la création massive de comptes anonymes et les écritures abusives). La clé de site reCAPTCHA v3
+// vient de VITE_RECAPTCHA_SITE_KEY ou de firebase-applet-config.json ; l'application obligatoire
+// (« enforcement ») s'active ensuite dans la console Firebase > App Check.
+const recaptchaSiteKey = import.meta.env?.VITE_RECAPTCHA_SITE_KEY || firebaseConfig.recaptchaSiteKey;
+if (typeof window !== 'undefined' && recaptchaSiteKey) {
   try {
+    // En développement, un jeton de débogage enregistré dans la console remplace reCAPTCHA
+    if (import.meta.env?.DEV && import.meta.env?.VITE_APPCHECK_DEBUG_TOKEN) {
+      (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = import.meta.env.VITE_APPCHECK_DEBUG_TOKEN;
+    }
     initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(firebaseConfig.recaptchaSiteKey),
+      provider: new ReCaptchaV3Provider(recaptchaSiteKey),
       isTokenAutoRefreshEnabled: true,
     });
   } catch (err) {
@@ -76,6 +90,8 @@ try {
           localCache: persistentLocalCache({
             tabManager: persistentMultipleTabManager(),
           }),
+          // Les objets de l'application contiennent des champs optionnels à undefined (refusés sinon par Firestore)
+          ignoreUndefinedProperties: true,
         },
         dbId
       )
@@ -83,6 +99,7 @@ try {
         localCache: persistentLocalCache({
           tabManager: persistentMultipleTabManager(),
         }),
+        ignoreUndefinedProperties: true,
       });
 } catch (err) {
   try {
@@ -92,11 +109,13 @@ try {
           app,
           {
             localCache: memoryLocalCache(),
+            ignoreUndefinedProperties: true,
           },
           dbId
         )
       : initializeFirestore(app, {
           localCache: memoryLocalCache(),
+          ignoreUndefinedProperties: true,
         });
   } catch {
     // Fallback si déjà initialisé
@@ -163,6 +182,8 @@ export async function ensureAuthenticatedUser(): Promise<User> {
  * Synchroniser le profil patient vers Firestore
  */
 export async function syncProfileToFirestore(profile: UserProfileDT1): Promise<void> {
+  // Aucune donnée de santé n'est envoyée dans le cloud sans l'accord de l'utilisateur
+  if (!isCloudSyncAllowed()) return;
   try {
     const user = await ensureAuthenticatedUser();
     const userDocRef = doc(db, 'users', user.uid);
@@ -177,6 +198,8 @@ export async function syncProfileToFirestore(profile: UserProfileDT1): Promise<v
         icRatios: profile.icRatios,
         roundingStep: profile.roundingStep,
         ramadanMode: !!profile.ramadanMode,
+        maxBolusUnits: profile.maxBolusUnits,
+        insulinActionHours: profile.insulinActionHours,
         accountType: profile.accountType || 'patient',
         childProfile: profile.childProfile || null,
         parentEmail: profile.parentEmail || user.email || null,
@@ -193,6 +216,7 @@ export async function syncProfileToFirestore(profile: UserProfileDT1): Promise<v
  * Sauvegarder ou mettre à jour un repas dans Firestore
  */
 export async function syncMealToFirestore(meal: AnalyzedMeal): Promise<void> {
+  if (!isCloudSyncAllowed()) return;
   try {
     const user = await ensureAuthenticatedUser();
     const mealDocRef = doc(db, 'users', user.uid, 'meals', meal.id);
@@ -214,8 +238,10 @@ export async function syncMealToFirestore(meal: AnalyzedMeal): Promise<void> {
  * Supprimer un repas de Firestore
  */
 export async function deleteMealFromFirestore(mealId: string): Promise<void> {
+  // La suppression a lieu même si la synchronisation a été désactivée depuis (sans créer de compte)
+  const user = auth.currentUser;
+  if (!user) return;
   try {
-    const user = await ensureAuthenticatedUser();
     const mealDocRef = doc(db, 'users', user.uid, 'meals', mealId);
     await deleteDoc(mealDocRef);
   } catch (err) {
@@ -231,21 +257,81 @@ export function subscribeToMeals(
   onUpdate: (meals: AnalyzedMeal[]) => void
 ): () => void {
   const mealsColRef = collection(db, 'users', userId, 'meals');
-  const q = query(mealsColRef, orderBy('created_at', 'desc'));
 
+  // Pas de orderBy('created_at') : Firestore exclurait les repas qui n'ont que « timestamp »
   return onSnapshot(
-    q,
+    mealsColRef,
     (snapshot) => {
       const meals: AnalyzedMeal[] = [];
       snapshot.forEach((docSnap) => {
         meals.push(docSnap.data() as AnalyzedMeal);
       });
-      onUpdate(meals);
+      onUpdate(sortMealsByDateDesc(meals));
     },
     (err) => {
       console.warn('Écouteur Firestore repas:', err);
     }
   );
+}
+
+function sortMealsByDateDesc(meals: AnalyzedMeal[]): AnalyzedMeal[] {
+  const time = (m: AnalyzedMeal) => Date.parse(m.created_at || m.timestamp || '') || 0;
+  return [...meals].sort((a, b) => time(b) - time(a));
+}
+
+/**
+ * Supprime tous les repas du compte dans Firestore (sans créer de compte s'il n'y en a pas).
+ */
+export async function deleteAllMealsFromFirestore(): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) return;
+  const snap = await getDocs(collection(db, 'users', user.uid, 'meals'));
+  await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+}
+
+/**
+ * Droit à l'effacement : supprime toutes les données cloud du compte (repas, profil, CGM, délégations,
+ * photos, code de partage créé) puis le compte Firebase lui-même.
+ * Un compte e-mail peut exiger une reconnexion récente (erreur auth/requires-recent-login).
+ */
+export async function deleteAllCloudData(ownedSyncCode?: string | null): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) return;
+  const uid = user.uid;
+
+  for (const sub of ['meals', 'cgm', 'delegates']) {
+    const snap = await getDocs(collection(db, 'users', uid, sub));
+    await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)));
+  }
+  await deleteDoc(doc(db, 'users', uid));
+
+  if (ownedSyncCode && isValidSyncCode(ownedSyncCode)) {
+    // Refusé par les règles si le code appartient à un autre compte : on ignore ce cas
+    await deleteDoc(doc(db, 'syncCodes', ownedSyncCode)).catch(() => {});
+  }
+
+  try {
+    const photos = await listAll(ref(storage, `users/${uid}/meals`));
+    await Promise.all(photos.items.map((item) => deleteObject(item)));
+  } catch (err) {
+    console.warn('Suppression des photos Storage:', err);
+  }
+
+  await deleteUser(user);
+}
+
+/**
+ * Efface le cache local de Firestore (IndexedDB), qui contient une copie des données synchronisées.
+ * À appeler juste avant de recharger la page : Firestore n'est plus utilisable ensuite.
+ */
+export async function clearLocalFirestoreCache(): Promise<void> {
+  try {
+    await signOut(auth);
+    await terminate(db);
+    await clearIndexedDbPersistence(db);
+  } catch (err) {
+    console.warn('Effacement du cache Firestore:', err);
+  }
 }
 
 /**
@@ -282,15 +368,13 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<Remote
       profile = userSnap.data() as UserProfileDT1;
     }
 
-    const mealsColRef = collection(db, 'users', userId, 'meals');
-    const q = query(mealsColRef, orderBy('created_at', 'desc'));
-    const mealsSnap = await getDocs(q);
+    const mealsSnap = await getDocs(collection(db, 'users', userId, 'meals'));
     const meals: AnalyzedMeal[] = [];
     mealsSnap.forEach((docSnap) => {
       meals.push(docSnap.data() as AnalyzedMeal);
     });
 
-    return { profile, meals };
+    return { profile, meals: sortMealsByDateDesc(meals) };
   } catch (err) {
     console.warn('Erreur récupération données Firestore:', err);
     return { profile: null, meals: [] };
@@ -301,7 +385,7 @@ export async function fetchUserDataFromFirestore(userId: string): Promise<Remote
  * Synchronise une liste de repas (ex: locaux) vers Firestore pour l'utilisateur connecté
  */
 export async function syncBatchMealsToFirestore(meals: AnalyzedMeal[]): Promise<void> {
-  if (!meals || meals.length === 0) return;
+  if (!meals || meals.length === 0 || !isCloudSyncAllowed()) return;
   try {
     const user = await ensureAuthenticatedUser();
     for (const meal of meals) {
@@ -351,70 +435,86 @@ export interface CloudSyncPayload {
   learnedPortions?: any[];
 }
 
+const SYNC_CODE_VALIDITY_MS = 7 * 24 * 3600 * 1000; // 7 jours
+
 /**
- * Sauvegarde le dossier complet sous un code de synchronisation haute entropie directement dans Firestore
+ * Le partage par code ne transporte jamais de secrets d'appareil (ex. clé API Nightscout).
  */
-export async function pushSyncCodeToFirestore(
-  customCode?: string,
-  payload?: CloudSyncPayload
-): Promise<{ success: boolean; syncCode: string; lastUpdated: string; totalMeals: number }> {
-  try {
-    let creatorUid = 'anonymous';
-    try {
-      const user = await ensureAuthenticatedUser();
-      creatorUid = user.uid;
-    } catch {
-      // Authentification non initialisée ou anonyme désactivée
-    }
-
-    let syncCode = customCode?.trim().toUpperCase();
-    if (!syncCode) {
-      const p1 = Math.random().toString(36).substring(2, 6).toUpperCase();
-      const p2 = Math.random().toString(36).substring(2, 6).toUpperCase();
-      syncCode = `GLUCO-${p1}-${p2}`;
-    }
-
-    const docRef = doc(db, 'syncCodes', syncCode);
-    const now = new Date().toISOString();
-    const expiresAt = new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString(); // 7 jours de validité
-
-    await setDoc(docRef, {
-      syncCode,
-      creatorUid,
-      userProfile: payload?.userProfile || {},
-      meals: payload?.meals || [],
-      learnedPortions: payload?.learnedPortions || [],
-      lastUpdated: now,
-      expiresAt,
-    });
-
-    return {
-      success: true,
-      syncCode,
-      lastUpdated: now,
-      totalMeals: payload?.meals?.length || 0,
-    };
-  } catch (err) {
-    console.error('Erreur pushSyncCodeToFirestore:', err);
-    throw err;
-  }
+export function stripSecretsFromProfile(profile: UserProfileDT1): Omit<UserProfileDT1, 'cgmConfig'> {
+  const { cgmConfig: _secret, ...shareable } = profile;
+  return shareable;
 }
 
 /**
- * Récupère le dossier complet depuis un code de synchronisation Firestore
+ * Sauvegarde le dossier sous un code de synchronisation dans Firestore.
+ * Seul le compte qui a créé un code peut le mettre à jour (règles Firestore) : si le code existant
+ * appartient à un autre compte (ex. code importé depuis un autre appareil), un nouveau code est créé.
+ */
+export async function pushSyncCodeToFirestore(
+  existingCode?: string,
+  payload?: CloudSyncPayload
+): Promise<{ success: boolean; syncCode: string; lastUpdated: string; totalMeals: number }> {
+  if (!isCloudSyncAllowed()) {
+    throw new Error('Sauvegarde cloud désactivée : activez-la dans Profil > Confidentialité pour partager vos données.');
+  }
+  const user = await ensureAuthenticatedUser();
+  const now = new Date();
+
+  const writeRecord = async (syncCode: string) => {
+    await setDoc(doc(db, 'syncCodes', syncCode), {
+      syncCode,
+      creatorUid: user.uid,
+      userProfile: payload?.userProfile ? stripSecretsFromProfile(payload.userProfile) : {},
+      meals: payload?.meals || [],
+      learnedPortions: payload?.learnedPortions || [],
+      lastUpdated: now.toISOString(),
+      expiresAt: Timestamp.fromMillis(now.getTime() + SYNC_CODE_VALIDITY_MS),
+    });
+  };
+
+  const candidate = existingCode ? normalizeSyncCode(existingCode) : '';
+  let syncCode = isValidSyncCode(candidate) ? candidate : generateSyncCode();
+  try {
+    await writeRecord(syncCode);
+  } catch (err: any) {
+    if (err?.code !== 'permission-denied' || syncCode !== candidate) {
+      console.error('Erreur pushSyncCodeToFirestore:', err);
+      throw err;
+    }
+    syncCode = generateSyncCode();
+    await writeRecord(syncCode);
+  }
+
+  return {
+    success: true,
+    syncCode,
+    lastUpdated: now.toISOString(),
+    totalMeals: payload?.meals?.length || 0,
+  };
+}
+
+/**
+ * Récupère le dossier complet depuis un code de synchronisation Firestore (lecture seule, code non expiré).
  */
 export async function pullSyncCodeFromFirestore(
   syncCode: string
 ): Promise<{ success: boolean; message: string; record?: any }> {
+  if (!isCloudSyncAllowed()) {
+    return {
+      success: false,
+      message: 'Sauvegarde cloud désactivée : activez-la dans Profil > Confidentialité pour importer un dossier.',
+    };
+  }
+  const cleanCode = normalizeSyncCode(syncCode);
+  if (!isValidSyncCode(cleanCode)) {
+    return {
+      success: false,
+      message: 'Format de code invalide (attendu : GLUCO-XXXX-XXXX-XXXX-XXXX).',
+    };
+  }
   try {
-    try {
-      await ensureAuthenticatedUser();
-    } catch {
-      // Continue en lecture directe si autorisé
-    }
-    const cleanCode = syncCode.trim().toUpperCase();
-    const docRef = doc(db, 'syncCodes', cleanCode);
-    const snap = await getDoc(docRef);
+    await ensureAuthenticatedUser();
+    const snap = await getDoc(doc(db, 'syncCodes', cleanCode));
 
     if (!snap.exists()) {
       return {
@@ -430,6 +530,10 @@ export async function pullSyncCodeFromFirestore(
       record: data,
     };
   } catch (err: any) {
+    // Les règles refusent la lecture d'un code inexistant ou expiré
+    if (err?.code === 'permission-denied') {
+      return { success: false, message: 'Code de synchronisation introuvable ou expiré.' };
+    }
     console.error('Erreur pullSyncCodeFromFirestore:', err);
     return {
       success: false,
@@ -437,4 +541,3 @@ export async function pullSyncCodeFromFirestore(
     };
   }
 }
-

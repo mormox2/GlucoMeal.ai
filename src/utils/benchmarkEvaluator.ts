@@ -39,7 +39,9 @@ export interface DifficultyBreakdown {
 export interface EvaluationReport {
   dataset_name: string;
   timestamp: string;
-  total_meals: number;
+  total_meals: number; // Repas évalués (ayant une prédiction réelle)
+  dataset_size: number; // Taille du jeu de données
+  not_evaluated_count: number; // Repas sans prédiction réelle (non comptés dans les métriques)
   passed_count: number;
   clinical_pass_rate_pct: number; // Target >= 85% with error <= 15%
   mae_g: number; // Mean Absolute Error en grammes
@@ -97,35 +99,14 @@ const CLINICAL_PROFILES: Record<
 };
 
 /**
- * Moteur d'évaluation métrologique pour le dataset tunisien de benchmark
+ * Évalue une prédiction RÉELLE (issue du pipeline d'analyse) face à la référence d'un repas.
+ * Aucune prédiction n'est jamais simulée à partir de la valeur de référence.
  */
-export function evaluateBenchmarkMeal(
-  meal: BenchmarkMeal,
-  customPredictedCarbs?: number
-): MealEvaluationDetail {
-  let predicted: number;
-
-  if (typeof customPredictedCarbs === 'number') {
-    predicted = Math.round(customPredictedCarbs);
-  } else {
-    // Modélisation optique réaliste basée sur l'angle de photo et la difficulté clinique
-    // - easy / side : variance faible (~3-6%)
-    // - medium : variance modérée (~6-9%)
-    // - hard (ex: pain immergé lablabi) : variance optique plus sensible (~10-14%)
-    const pseudoSeed = (typeof meal.id === 'number' ? meal.id : meal.id.charCodeAt(0)) * 23;
-    let varianceFactor = 0.04;
-
-    if (meal.difficulty === 'hard') {
-      // Pour le lablabi : tendance à sous-estimer légèrement à cause du pain masqué
-      varianceFactor = -0.09;
-    } else if (meal.difficulty === 'medium') {
-      varianceFactor = 0.06;
-    } else {
-      varianceFactor = Math.sin(pseudoSeed) * 0.04;
-    }
-
-    predicted = Math.round(meal.carbs_g * (1 + varianceFactor));
+export function evaluateBenchmarkMeal(meal: BenchmarkMeal, predictedCarbs: number): MealEvaluationDetail {
+  if (typeof predictedCarbs !== 'number' || !Number.isFinite(predictedCarbs) || predictedCarbs < 0) {
+    throw new Error(`Prédiction invalide pour le repas ${meal.id}.`);
   }
+  const predicted = Math.round(predictedCarbs);
 
   const signedDelta = predicted - meal.carbs_g;
   const absDelta = Math.abs(signedDelta);
@@ -178,12 +159,12 @@ export function evaluateBenchmarkMeal(
  */
 export function runAutomatedBenchmark(
   dataset: BenchmarkMeal[] = TUNISIAN_DATASET,
-  predictionsOverride?: Record<string | number, number>
+  predictions: Record<string | number, number> = {}
 ): EvaluationReport {
-  const results = dataset.map((meal) => {
-    const customPred = predictionsOverride ? predictionsOverride[meal.id] : undefined;
-    return evaluateBenchmarkMeal(meal, customPred);
-  });
+  // Seuls les repas ayant une prédiction réelle sont évalués
+  const results = dataset
+    .filter((meal) => typeof predictions[meal.id] === 'number' && Number.isFinite(predictions[meal.id]))
+    .map((meal) => evaluateBenchmarkMeal(meal, predictions[meal.id]));
 
   const total = results.length;
   const passed = results.filter((r) => r.passed_clinical_threshold).length;
@@ -236,7 +217,7 @@ export function runAutomatedBenchmark(
         count: 0,
         mae_g: 0,
         mre_pct: 0,
-        pass_rate_pct: 100,
+        pass_rate_pct: 0,
       };
     }
     const angleMae = Number((list.reduce((acc, it) => acc + it.delta_carbs_g, 0) / cnt).toFixed(2));
@@ -277,7 +258,7 @@ export function runAutomatedBenchmark(
           count: 0,
           mae_g: 0,
           mre_pct: 0,
-          pass_rate_pct: 100,
+          pass_rate_pct: 0,
         };
       }
       const diffMae = Number((list.reduce((acc, it) => acc + it.delta_carbs_g, 0) / cnt).toFixed(2));
@@ -297,14 +278,18 @@ export function runAutomatedBenchmark(
   );
 
   const clinicalSummary =
-    passRate >= 80
-      ? `Excellente concordance clinique (${passRate}% de repas dans la marge de tolérance de ±15%). L'erreur absolue moyenne (MAE = ${mae} g) correspond à une variation d'insuline rapide de seulement ${avgInsulin} UI, ce qui prévient efficacement les risques d'hypoglycémie et de cétose.`
-      : `Performance à optimiser : ${passRate}% des repas respectent le seuil clinique de 15%. Portez une attention particulière aux plats masqués (Lablabi) nécessitant une invite vocale ou un angle complémentaire.`;
+    total === 0
+      ? `Aucune prédiction réelle : lancez des tests de vision sur des photos des repas de référence pour obtenir des métriques.`
+      : `${total} repas évalué(s) sur ${dataset.length} : ${passRate}% dans la marge de ±15%, erreur absolue moyenne ${mae} g (≈ ${avgInsulin} UI au ratio 1 UI / 10 g). Résultats indicatifs d'un banc de test interne, sans valeur de validation clinique.${
+          total < 30 ? ' Échantillon trop petit pour conclure.' : ''
+        }`;
 
   return {
     dataset_name: 'Dataset Tunisien de Référence (Étape 2)',
     timestamp: new Date().toISOString(),
     total_meals: total,
+    dataset_size: dataset.length,
+    not_evaluated_count: dataset.length - total,
     passed_count: passed,
     clinical_pass_rate_pct: passRate,
     mae_g: mae,

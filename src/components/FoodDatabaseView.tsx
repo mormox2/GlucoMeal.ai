@@ -14,7 +14,7 @@ export const FoodDatabaseView: React.FC = () => {
   const [inspectedFood, setInspectedFood] = useState<FoodItem | null>(null);
 
   const categories: { id: string; label: string; count: number }[] = [
-    { id: 'all', label: isAr ? 'جميع الأطعمة (+200)' : 'Tous les aliments (200+)', count: TUNISIAN_FOOD_DATABASE.length },
+    { id: 'all', label: isAr ? `جميع الأطعمة (${TUNISIAN_FOOD_DATABASE.length})` : `Tous les aliments (${TUNISIAN_FOOD_DATABASE.length})`, count: TUNISIAN_FOOD_DATABASE.length },
     { id: 'plats', label: isAr ? '1. أطباق وأكلات رئيسية' : '1. Plats & Spécialités', count: TUNISIAN_FOOD_DATABASE.filter((f) => f.category === 'plats').length },
     { id: 'feculents', label: isAr ? '2. نشويات وخبز' : '2. Féculents & Pains', count: TUNISIAN_FOOD_DATABASE.filter((f) => f.category === 'feculents').length },
     { id: 'legumineuses', label: isAr ? '3. بقوليات' : '3. Légumineuses', count: TUNISIAN_FOOD_DATABASE.filter((f) => f.category === 'legumineuses').length },
@@ -94,15 +94,15 @@ export const FoodDatabaseView: React.FC = () => {
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-semibold mb-2">
             <Database className="w-3.5 h-3.5 text-emerald-600" />
-            <span>{isAr ? 'مرجع معتمد • المعهد الوطني للتغذية بتونس & CIQUAL' : 'Référentiel certifié • INNT Tunis & CIQUAL'}</span>
+            <span>{isAr ? 'مرجع : جداول التركيب الغذائي وتقديرات' : 'Référentiel : tables de composition et estimations'}</span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
             {isAr ? 'قاعدة البيانات الغذائية التونسية والمغاربية' : 'Base Alimentaire Tunisienne & Maghrébine'}
           </h1>
           <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
             {isAr
-              ? 'أكثر من 200 صنف غذائي معتمد بنسب الكربوهيدرات لكل 100 غ، مؤشر السكر (IG) والحمل السكري (CG). محرك دقيق خالٍ من التخمين.'
-              : '200+ aliments avec teneur certifiée en glucides pour 100 g, Index Glycémique (IG) et Charge Glycémique (CG). C’est cette base déterministe qui élimine tout risque d’hallucination par l’IA.'}
+              ? 'أصناف غذائية بنسب الكربوهيدرات لكل 100 غ، مؤشر السكر (IG) والحمل السكري (CG). قيم مرجعية تقريبية : تحقق من الملصق عند وجوده.'
+              : 'Aliments avec teneur en glucides pour 100 g, Index Glycémique (IG) et Charge Glycémique (CG). Les glucides sont calculés à partir de cette base et non par l’IA ; ce sont des valeurs de référence moyennes, à vérifier sur l’étiquette quand elle existe.'}
           </p>
         </div>
       </div>
@@ -233,7 +233,7 @@ export const FoodDatabaseView: React.FC = () => {
       {/* Results Table / Grid */}
       <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden">
         <div className="p-4 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between text-xs font-semibold text-slate-600">
-          <span>{isAr ? `عرض ${filteredFoods.length} صنف معتمد` : `Affichage de ${filteredFoods.length} aliment(s) certifié(s)`}</span>
+          <span>{isAr ? `عرض ${filteredFoods.length} صنف` : `Affichage de ${filteredFoods.length} aliment(s)`}</span>
           <span className="text-slate-400">{isAr ? 'كربوهيدرات • مؤشر السكر (IG) • الحمل السكري (CG)' : 'Glucides • IG • Charge Glycémique (CG)'}</span>
         </div>
 
@@ -346,8 +346,8 @@ export const FoodDatabaseView: React.FC = () => {
                 </h4>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto">
                   {isAr
-                    ? 'تحتوي قاعدة الأطعمة التونسية على أكثر من 200 طبق معتمد. انقر على أحد الاقتراحات السريعة لبدء البحث:'
-                    : 'La base tunisienne compte plus de 200 plats certifiés. Cliquez sur une suggestion populaire pour lancer la recherche :'}
+                    ? 'انقر على أحد الاقتراحات السريعة لبدء البحث في قاعدة الأطعمة التونسية:'
+                    : 'Cliquez sur une suggestion populaire pour lancer la recherche dans la base tunisienne :'}
                 </p>
               </div>
 
@@ -501,7 +501,7 @@ export const FoodDatabaseView: React.FC = () => {
 
               <div className="text-[11px] text-slate-500 flex items-center justify-between pt-1">
                 <span>{isAr ? `المصدر: ${inspectedFood.source}` : `Source officielle : ${inspectedFood.source}`}</span>
-                <span>{isAr ? (inspectedFood.confidence_base === 'high' ? 'معتمد 100%' : 'قياسي') : (inspectedFood.confidence_base === 'high' ? 'Certifié 100%' : 'Standard')}</span>
+                <span>{isAr ? (inspectedFood.confidence_base === 'high' ? 'موثوقية عالية' : 'قياسي') : (inspectedFood.confidence_base === 'high' ? 'Fiabilité élevée' : 'Standard')}</span>
               </div>
             </div>
 

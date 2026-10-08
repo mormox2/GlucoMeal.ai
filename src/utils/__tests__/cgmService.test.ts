@@ -193,3 +193,55 @@ describe('Service CGM & Évaluation Post-Prandiale', () => {
     });
   });
 });
+
+describe('Nightscout : fraîcheur des mesures et authentification', () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  const now = Date.parse('2026-10-08T12:00:00Z');
+  const mockEntries = (minutesAgo: number) => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => [{ sgv: 150, direction: 'Flat', date: now - minutesAgo * 60000 }],
+    });
+    global.fetch = fetchMock;
+    return fetchMock;
+  };
+  const config = (apiKey: string): CGMConfig => ({
+    deviceType: 'nightscout',
+    isConnected: true,
+    nightscoutUrl: 'https://ns.example.com',
+    apiKey,
+  });
+
+  it('refuse une mesure de plus de 15 minutes', async () => {
+    mockEntries(40);
+    await expect(fetchNightscoutReading(config(''), 'g/L', now)).rejects.toThrow(/40 min/);
+  });
+
+  it('accepte une mesure récente et indique son âge, sans métadonnées inventées', async () => {
+    mockEntries(4);
+    const reading = await fetchNightscoutReading(config(''), 'g/L', now);
+    expect(reading.ageMinutes).toBe(4);
+    expect(reading.mardScore).toBeUndefined();
+    expect(reading.batteryLevel).toBeUndefined();
+  });
+
+  it('envoie un jeton de lecture en paramètre « token »', async () => {
+    const fetchMock = mockEntries(1);
+    await fetchNightscoutReading(config('lecture-1a2b3c4d5e6f7a8b'), 'g/L', now);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain('token=lecture-1a2b3c4d5e6f7a8b');
+    expect(init.headers['api-secret']).toBeUndefined();
+  });
+
+  it('n’envoie jamais l’API_SECRET en clair (empreinte SHA-1 attendue par Nightscout)', async () => {
+    const fetchMock = mockEntries(1);
+    await fetchNightscoutReading(config('secret123'), 'g/L', now);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).not.toContain('secret123');
+    expect(init.headers['api-secret']).toBe('f2b14f68eb995facb3a1c35287b778d5bd785511');
+  });
+});

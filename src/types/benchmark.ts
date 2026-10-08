@@ -9,6 +9,8 @@ export interface BenchmarkMeal {
   photo_type: 'top' | 'side' | 'macro';
   category?: 'feculents' | 'plats' | 'patisseries';
   portion_desc?: string;
+  // Variante générée automatiquement (portion modifiée d'un repas de référence) : aucun repas réel, aucune pesée
+  is_synthetic?: boolean;
 }
 
 export const TUNISIAN_DATASET: BenchmarkMeal[] = [
@@ -503,7 +505,7 @@ export interface DatasetGenerationOptions {
 /**
  * Étend le dataset de benchmark à N entrées (100 par défaut) avec des variations
  * nutritionnelles réalistes et scientifiquement cohérentes pour le diabète de type 1 :
- * - Calcul déterministe certifié des glucides : round(poids_g * teneur_glucides_100g / 100)
+ * - Calcul déterministe des glucides : round(poids_g * teneur_glucides_100g / 100)
  * - Variations de portions (petite, moyenne, grande, festive)
  * - Variations des ingrédients d'accompagnement (légumes, sauces, garnitures)
  * - Distribution équilibrée sur les 3 catégories (féculents, plats tunisiens, pâtisseries)
@@ -610,7 +612,7 @@ export function generateTunisianBenchmarkDataset(
     const weightJitter = 0.95 + pseudoRandom() * 0.1;
     const finalWeightG = Math.round(template.base_weight_g * portionMod.factor * weightJitter);
 
-    // Calcul déterministe des glucides certifié au gramme près
+    // Calcul déterministe des glucides (arrondi au gramme)
     // Formule clinique : round(Poids (g) * Teneur (g/100g) / 100)
     const finalCarbsG = Math.round((finalWeightG * template.carbs_per_100g) / 100);
 
@@ -620,7 +622,7 @@ export function generateTunisianBenchmarkDataset(
       diff = 'medium';
     }
 
-    // Méthode de référence (90% pesée sur balance de précision, 10% étiquetage certifié)
+    // Méthode de référence déclarée des variantes SYNTHÉTIQUES (aucune pesée réelle)
     const refMethod: 'scale' | 'label' =
       template.reference_method === 'label' || pseudoRandom() < 0.1 ? 'label' : 'scale';
 
@@ -657,6 +659,7 @@ export function generateTunisianBenchmarkDataset(
       photo_type: photoType,
       category: selectedCategory,
       portion_desc: `${template.unit_desc} • ${portionMod.label} (${finalWeightG} g)`,
+      is_synthetic: true,
     });
 
     currentId++;
@@ -666,8 +669,8 @@ export function generateTunisianBenchmarkDataset(
 }
 
 /**
- * Utility function that takes the 5 core meals and generates a simulated array
- * of 100 benchmark entries by applying realistic variations in weights and carb counts
+ * Utility function that takes the 5 core meals and generates a SYNTHETIC array
+ * of 100 benchmark entries by applying variations in weights and carb counts
  * per category (e.g., +/- 15% for portions), ensuring the final structure maintains
  * the 'BenchmarkMeal' interface compliance.
  */
@@ -790,7 +793,8 @@ export function generateExpandedDataset(
       reference_method: baseMeal.reference_method,
       photo_type,
       category,
-      portion_desc: `${baseMeal.name_fr} • Variation portion ${variation.label} (${weight_g} g)`,
+      portion_desc: `${baseMeal.name_fr} • Variante synthétique ${variation.label} (${weight_g} g)`,
+      is_synthetic: true,
     });
 
     counter++;
@@ -801,7 +805,8 @@ export function generateExpandedDataset(
 }
 
 /**
- * Dataset étendu complet pré-généré à 100 entrées réelles pour le benchmark
+ * Jeu étendu SYNTHÉTIQUE de 100 variantes générées à partir des 5 repas de référence
+ * (portions modifiées) : ce ne sont pas des repas réels pesés.
  */
 export const TUNISIAN_DATASET_100: BenchmarkMeal[] = generateExpandedDataset(TUNISIAN_DATASET, 100);
 

@@ -20,6 +20,7 @@ import {
   getLastSyncTime,
   pushDataToCloud,
   pullDataFromCloud,
+  applyIncomingProfile,
 } from '../utils/cloudSync';
 import {
   ensureAuthenticatedUser,
@@ -27,19 +28,26 @@ import {
   syncBatchMealsToFirestore,
 } from '../services/firebase';
 import { loadSavedMeals, loadUserProfile } from '../utils/storage';
-import { AnalyzedMeal, UserProfileDT1 } from '../types';
+import { MealSlot, ProfileValidationIssue, UserProfileDT1 } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
+import { isCloudSyncAllowed } from '../utils/consent';
 
 interface CloudSyncModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSyncComplete?: () => void;
+  currentProfile: UserProfileDT1;
+  onProfileApplied: (profile: UserProfileDT1) => void;
 }
+
+const COMPARED_SLOTS: MealSlot[] = ['morning', 'lunch', 'dinner', 'snack'];
 
 export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
   isOpen,
   onClose,
   onSyncComplete,
+  currentProfile,
+  onProfileApplied,
 }) => {
   const { language, isRtl } = useLanguage();
   const isAr = language === 'ar';
@@ -51,6 +59,11 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
   const [isPulling, setIsPulling] = useState(false);
   const [copied, setCopied] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  // Profil d'insuline reçu : en attente de confirmation explicite, jamais appliqué automatiquement
+  const [pendingProfile, setPendingProfile] = useState<{
+    profile: UserProfileDT1;
+    issues: ProfileValidationIssue[];
+  } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -58,12 +71,22 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
       if (code) setCurrentCode(code);
       setLastSync(getLastSyncTime());
       setStatusMessage(null);
+      setPendingProfile(null);
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handlePush = async () => {
+    if (!isCloudSyncAllowed()) {
+      setStatusMessage({
+        text: isAr
+          ? 'الحفظ السحابي غير مفعل : فعّله من الملف الشخصي > الخصوصية.'
+          : 'Sauvegarde cloud désactivée : activez-la dans Profil > Confidentialité.',
+        type: 'error',
+      });
+      return;
+    }
     setIsPushing(true);
     setStatusMessage(null);
     try {
@@ -111,12 +134,30 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
       setCurrentCode(inputCode.trim().toUpperCase());
       setLastSync(new Date().toISOString());
       setStatusMessage({ text: res.message, type: 'success' });
+      if (res.incomingProfile) {
+        setPendingProfile({ profile: res.incomingProfile, issues: res.incomingProfileIssues || [] });
+      }
       if (onSyncComplete) onSyncComplete();
     } else {
       setStatusMessage({
         text: res.message || (isAr ? 'رمز غير صالح أو لم يتم العثور على بيانات.' : 'Erreur.'),
         type: 'error',
       });
+    }
+  };
+
+  const handleApplyPendingProfile = () => {
+    if (!pendingProfile) return;
+    const result = applyIncomingProfile(pendingProfile.profile, currentProfile);
+    if (result.applied) {
+      onProfileApplied(result.profile);
+      setPendingProfile(null);
+      setStatusMessage({
+        text: isAr ? 'تم تطبيق المعاملات العلاجية المستوردة.' : 'Paramètres d’insuline importés appliqués.',
+        type: 'success',
+      });
+    } else {
+      setPendingProfile({ ...pendingProfile, issues: result.issues });
     }
   };
 
@@ -177,6 +218,69 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
                 <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               )}
               <span>{statusMessage.text}</span>
+            </div>
+          )}
+
+          {pendingProfile && (
+            <div role="alert" className="p-4 rounded-2xl border-2 border-amber-400 bg-amber-50 text-amber-950 text-xs space-y-2.5">
+              <p className="font-extrabold flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                {isAr
+                  ? 'الملف المستورد يحتوي على معاملات إنسولين. تحقق منها قبل تطبيقها :'
+                  : 'Le dossier importé contient des paramètres d’insuline. Vérifiez-les avant de les appliquer :'}
+              </p>
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="text-amber-800">
+                    <th className="text-start font-bold py-0.5">{isAr ? 'المعامل' : 'Paramètre'}</th>
+                    <th className="text-start font-bold py-0.5">{isAr ? 'الحالي' : 'Actuel'}</th>
+                    <th className="text-start font-bold py-0.5">{isAr ? 'المستورد' : 'Importé'}</th>
+                  </tr>
+                </thead>
+                <tbody className="font-mono">
+                  <tr>
+                    <td className="font-sans">{isAr ? 'الهدف' : 'Cible'}</td>
+                    <td>{currentProfile.targetGlucose} {currentProfile.glucoseUnit}</td>
+                    <td>{pendingProfile.profile.targetGlucose} {pendingProfile.profile.glucoseUnit}</td>
+                  </tr>
+                  <tr>
+                    <td className="font-sans">ISF</td>
+                    <td>{currentProfile.isf} {currentProfile.glucoseUnit}/UI</td>
+                    <td>{pendingProfile.profile.isf} {pendingProfile.profile.glucoseUnit}/UI</td>
+                  </tr>
+                  {COMPARED_SLOTS.map((slot) => (
+                    <tr key={slot}>
+                      <td className="font-sans">{isAr ? 'معامل' : 'Ratio'} {slot}</td>
+                      <td>1 UI / {currentProfile.icRatios[slot]} g</td>
+                      <td>1 UI / {pendingProfile.profile.icRatios[slot]} g</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {pendingProfile.issues.length > 0 && (
+                <ul className="list-disc ps-4 text-rose-800 font-semibold">
+                  {pendingProfile.issues.map((issue) => (
+                    <li key={`${issue.field}-${issue.slot || ''}`}>{isAr ? issue.ar : issue.fr}</li>
+                  ))}
+                </ul>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingProfile(null)}
+                  className="flex-1 py-2 rounded-xl bg-white border border-amber-300 text-amber-900 font-bold cursor-pointer"
+                >
+                  {isAr ? 'الاحتفاظ بمعاملاتي' : 'Garder mes paramètres'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleApplyPendingProfile}
+                  disabled={pendingProfile.issues.length > 0}
+                  className="flex-1 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold cursor-pointer"
+                >
+                  {isAr ? 'تطبيق المعاملات المستوردة' : 'Appliquer les paramètres importés'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -260,14 +364,14 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             </span>
             <p className="text-[11px] text-slate-500 leading-relaxed">
               {isAr
-                ? 'أدخل الرمز الظاهر على جهازك الآخر لاسترجاع كافة وجباتك وملفك العلاجي فوراً:'
-                : 'Saisissez le code affiché sur votre autre appareil pour restaurer instantanément tous vos repas et votre profil DT1 :'}
+                ? 'أدخل الرمز الظاهر على جهازك الآخر (صالح 7 أيام) لاسترجاع وجباتك. ستُعرض معاملات الإنسولين للتأكيد قبل تطبيقها:'
+                : 'Saisissez le code affiché sur votre autre appareil (valable 7 jours) pour restaurer vos repas. Les paramètres d’insuline vous seront présentés pour confirmation avant toute application :'}
             </p>
 
             <form onSubmit={handlePull} className="flex gap-2">
               <input
                 type="text"
-                placeholder={isAr ? 'مثال: TN-8924' : 'Ex : TN-8924'}
+                placeholder="GLUCO-XXXX-XXXX-XXXX-XXXX"
                 value={inputCode}
                 onChange={(e) => setInputCode(e.target.value.toUpperCase())}
                 className="flex-1 px-3.5 py-2 rounded-xl border border-slate-300 font-mono text-xs uppercase font-bold focus:outline-none focus:border-sky-500 bg-white text-center"
@@ -306,8 +410,8 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             </div>
             <p className="text-[11px] text-amber-900/80 leading-relaxed">
               {isAr
-                ? 'تستفيد وجباتك ومعاملات الإنسولين من التخزين المحلي الدائم (IndexedDB) والمزامنة السحابية الآمنة مع جوجل فايربيس (قواعد Zero-Trust).'
-                : "Vos repas et paramètres d'insuline bénéficient du cache hors-ligne persistant (IndexedDB) et de la synchronisation sécurisée Google Firebase (Zero-Trust Rules)."}
+                ? 'تستفيد وجباتك ومعاملات الإنسولين من التخزين المحلي الدائم (IndexedDB) والمزامنة السحابية مع جوجل فايربيس إذا وافقت عليها (البيانات متاحة لحسابك فقط).'
+                : "Vos repas et paramètres d'insuline bénéficient du cache hors-ligne persistant (IndexedDB) et, si vous l'avez acceptée, de la sauvegarde Google Firebase (accessible à votre seul compte)."}
             </p>
           </div>
 

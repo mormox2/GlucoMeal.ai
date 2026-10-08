@@ -36,6 +36,7 @@ import {
   MealSlot,
   CalculatedBolusSummary,
   PhysicalActivityLevel,
+  CGMReading,
 } from '../types';
 import {
   TUNISIAN_FOOD_DATABASE,
@@ -44,8 +45,13 @@ import {
   evaluateDualWaveBolus,
   normalizeCulinaryTerm,
 } from '../data/tunisianFoodDatabase';
-import { getCurrentMealSlot, calculatePersonalizedBolus } from '../utils/storage';
-import { recordPatientPortionCorrection, getLearnedPortionForFood } from '../utils/activeLearning';
+import {
+  getCurrentMealSlot,
+  calculatePersonalizedBolus,
+  computeInsulinOnBoard,
+  sanitizeUserProfile,
+} from '../utils/storage';
+import { recordPatientPortionCorrection } from '../utils/activeLearning';
 import { fetchCurrentCGMReading, loadCGMConfig } from '../utils/cgmService';
 import { scheduleH2Reminder } from '../utils/h2Reminder';
 import { HealthySubstitutionsCard } from './HealthySubstitutionsCard';
@@ -58,6 +64,7 @@ interface PortionAdjustmentViewProps {
   onConfirmMeal: (finalMeal: AnalyzedMeal) => void;
   onCancel: () => void;
   onOpenProfileModal: () => void;
+  recentMeals?: AnalyzedMeal[]; // Historique utilisé pour estimer l'insuline encore active
 }
 
 export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
@@ -67,6 +74,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
   onConfirmMeal,
   onCancel,
   onOpenProfileModal,
+  recentMeals = [],
 }) => {
   const { t, language, isRtl } = useLanguage();
   const ArrowIcon = isRtl ? ArrowRight : ArrowLeft;
@@ -92,19 +100,18 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
   // Glycémie pré-prandiale optionnelle saisie par le patient
   const [currentGlucoseInput, setCurrentGlucoseInput] = useState<string>('');
 
+  // Tendance de la dernière lecture CGM : effacée dès que la glycémie est modifiée à la main
+  const [cgmTrend, setCgmTrend] = useState<CGMReading['trend'] | undefined>(undefined);
+
   const currentGlucoseNum = currentGlucoseInput ? parseFloat(currentGlucoseInput) : undefined;
 
-  // Détection clinique d'hypoglycémie et prudence basse (<0.70 g/L ou <70 mg/dL)
-  const isHypoglycemia =
-    currentGlucoseNum !== undefined &&
-    ((userProfile.glucoseUnit === 'g/L' && currentGlucoseNum < 0.7) ||
-      (userProfile.glucoseUnit === 'mg/dL' && currentGlucoseNum < 70));
-
-  const isCautionLow =
-    currentGlucoseNum !== undefined &&
-    !isHypoglycemia &&
-    ((userProfile.glucoseUnit === 'g/L' && currentGlucoseNum < 0.8) ||
-      (userProfile.glucoseUnit === 'mg/dL' && currentGlucoseNum < 80));
+  // Insuline encore active des bolus précédents (le repas en cours de modification est exclu)
+  const insulinOnBoard = computeInsulinOnBoard(
+    recentMeals,
+    sanitizeUserProfile(userProfile).insulinActionHours,
+    Date.now(),
+    meal.id
+  );
 
   // Calcul du bolus selon le profil personnalisé avec modulation activité physique
   const bolusCalculation = calculatePersonalizedBolus(
@@ -112,11 +119,23 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
     userProfile,
     selectedSlot,
     currentGlucoseNum,
-    activityLevel
+    activityLevel,
+    { insulinOnBoard, glucoseTrend: cgmTrend }
   );
+
+  // Détection clinique d'hypoglycémie et prudence basse (<0.70 g/L ou <70 mg/dL), toujours
+  // évaluée sur la glycémie normalisée (ex. "65" saisi dans un profil g/L = 0.65 g/L).
+  const displayedGlucose = bolusCalculation.currentGlucose;
+  const isHypoglycemia = Boolean(bolusCalculation.isHypoglycemia);
+  const isCautionLow = Boolean(bolusCalculation.isCautionLow);
+  // Une dose bloquée pour une autre raison que l'hypoglycémie (profil, glucides ou glycémie invalides)
+  // empêche toute validation du repas.
+  const isValidationBlocked = Boolean(bolusCalculation.isBlocked) && !isHypoglycemia;
+  const bolusDisplay = bolusCalculation.isBlocked ? '—' : bolusCalculation.totalBolus;
 
   // Validation commune utilisée par le bouton pleine page et le bandeau sticky mobile
   const handleConfirmAction = () => {
+    if (isValidationBlocked) return;
     // Apprentissage actif : mémoriser les ajustements du patient
     meal.items.forEach((item) => {
       if (item.confirmed_weight_g && item.original_ai_weight_g) {
@@ -143,7 +162,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         rawMealBolus: bolusCalculation.rawMealBolus,
         activityReductionPct: bolusCalculation.activityReductionPct,
         activityReductionUnits: bolusCalculation.activityReductionUnits,
-        currentGlucose: currentGlucoseNum,
+        currentGlucose: bolusCalculation.currentGlucose,
         targetGlucose: userProfile.targetGlucose,
         isf: userProfile.isf,
         correctionBolus: bolusCalculation.correctionBolus,
@@ -151,6 +170,15 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         isHoneymoonActive: bolusCalculation.isHoneymoonActive,
         honeymoonNotice: bolusCalculation.honeymoonNotice,
         safetyWarning: bolusCalculation.safetyWarning,
+        rawCorrectionBolus: bolusCalculation.rawCorrectionBolus,
+        insulinOnBoard: bolusCalculation.insulinOnBoard,
+        insulinOnBoardDeducted: bolusCalculation.insulinOnBoardDeducted,
+        glucoseTrend: bolusCalculation.glucoseTrend,
+        maxBolusUnits: bolusCalculation.maxBolusUnits,
+        isCapped: bolusCalculation.isCapped,
+        isHypoglycemia: bolusCalculation.isHypoglycemia,
+        isBlocked: bolusCalculation.isBlocked,
+        blockReason: bolusCalculation.blockReason,
       },
     };
 
@@ -178,11 +206,12 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
       );
       if (reading && typeof reading.glucose === 'number' && !reading.isSimulation) {
         setCurrentGlucoseInput(String(reading.glucose));
+        setCgmTrend(reading.trend);
         setCgmFeedback({
           type: 'success',
           message: language === 'ar'
-            ? `تمت مزامنة قراءة السكر الحقيقية (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${userProfile.glucoseUnit}.`
-            : `Glycémie réelle synchronisée (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${userProfile.glucoseUnit}.`,
+            ? `تمت مزامنة قراءة السكر الحقيقية (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${userProfile.glucoseUnit}${reading.ageMinutes !== undefined ? ` (منذ ${reading.ageMinutes} د)` : ''}.`
+            : `Glycémie réelle synchronisée (${reading.sensorModelName || reading.device}) : ${reading.glucose} ${userProfile.glucoseUnit}${reading.ageMinutes !== undefined ? ` (il y a ${reading.ageMinutes} min)` : ''}.`,
         });
       } else {
         throw new Error(language === 'ar' ? "لم يتم استلام أي قياس حقيقي صالح." : "Aucune mesure réelle valide reçue.");
@@ -444,7 +473,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
           <div className="flex flex-col sm:items-end gap-2">
             {confidenceBadge()}
             <span className="text-[11px] text-slate-500">
-              {language === 'ar' ? 'معادلة دقيقة معتمدة وفق المعهد الوطني للتغذية بتونس (INNT)' : 'Formule déterministe certifiée INNT Tunis'}
+              {language === 'ar' ? 'معادلة محددة : الوزن × الكربوهيدرات لكل 100 غ' : 'Formule déterministe : poids × glucides / 100 g'}
             </span>
           </div>
         </div>
@@ -827,7 +856,10 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                 step={userProfile.glucoseUnit === 'g/L' ? '0.05' : '1'}
                 placeholder={`ex : ${userProfile.glucoseUnit === 'g/L' ? '1.40' : '140'}`}
                 value={currentGlucoseInput}
-                onChange={(e) => setCurrentGlucoseInput(e.target.value)}
+                onChange={(e) => {
+                  setCurrentGlucoseInput(e.target.value);
+                  setCgmTrend(undefined);
+                }}
                 className="w-20 px-2 py-1.5 rounded-xl bg-slate-900 border border-slate-600 text-white text-xs font-bold text-center outline-none focus:border-emerald-400"
               />
               <span className="text-xs font-semibold text-slate-300">
@@ -872,7 +904,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             </div>
           )}
 
-          {currentGlucoseNum !== undefined && (
+          {displayedGlucose !== undefined && (
             <div className="mt-2.5 pt-2 border-t border-white/10 flex flex-col gap-2 text-xs">
               {isHypoglycemia ? (
                 <div className="p-3.5 rounded-xl bg-rose-950/90 border-2 border-rose-500 text-white space-y-2 animate-in fade-in">
@@ -880,8 +912,8 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                     <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 animate-bounce" />
                     <span>
                       {language === 'ar'
-                        ? `🚨 تنبيه هبوط السكر قبل الأكل (${currentGlucoseNum} ${userProfile.glucoseUnit})`
-                        : `🚨 ALERTE HYPOGLYCÉMIE PRÉ-PRANDIALE (${currentGlucoseNum} ${userProfile.glucoseUnit})`}
+                        ? `🚨 تنبيه هبوط السكر قبل الأكل (${displayedGlucose} ${userProfile.glucoseUnit})`
+                        : `🚨 ALERTE HYPOGLYCÉMIE PRÉ-PRANDIALE (${displayedGlucose} ${userProfile.glucoseUnit})`}
                     </span>
                   </div>
 
@@ -912,16 +944,26 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
                 </div>
               ) : isCautionLow ? (
                 <div className="p-2.5 rounded-xl bg-amber-500/20 border border-amber-400/50 text-amber-200 text-xs">
-                  ⚠️ <strong>{language === 'ar' ? `سكر منخفض يستوجب الحذر (${currentGlucoseNum} ${userProfile.glucoseUnit}) :` : `Glycémie basse de prudence (${currentGlucoseNum} ${userProfile.glucoseUnit}) :`}</strong>{' '}
+                  ⚠️ <strong>{language === 'ar' ? `سكر منخفض يستوجب الحذر (${displayedGlucose} ${userProfile.glucoseUnit}) :` : `Glycémie basse de prudence (${displayedGlucose} ${userProfile.glucoseUnit}) :`}</strong>{' '}
                   {language === 'ar'
                     ? 'خطر هبوط السكر أثناء الهضم. راقب أعراضك وفكر في تجزئة الجرعة أو تأخيرها بعد الأكل.'
                     : 'Risque d\'hypoglycémie pendant la digestion. Surveillez vos symptômes et envisagez de scinder ou différer le bolus.'}
                 </div>
-              ) : currentGlucoseNum > userProfile.targetGlucose ? (
+              ) : displayedGlucose > userProfile.targetGlucose ? (
                 <span className="text-amber-300 font-medium">
                   {language === 'ar'
-                    ? `⚠️ السكر أعلى من الهدف المرجو (+${(currentGlucoseNum - userProfile.targetGlucose).toFixed(2)} ${userProfile.glucoseUnit}) : جرعة التصحيح المحسوبة (+${bolusCalculation.correctionBolus} وحدة).`
-                    : `⚠️ Glycémie supérieure à la cible (+${(currentGlucoseNum - userProfile.targetGlucose).toFixed(2)} ${userProfile.glucoseUnit}) : correction calculée (+${bolusCalculation.correctionBolus} UI).`}
+                    ? `⚠️ السكر أعلى من الهدف المرجو (+${(displayedGlucose - userProfile.targetGlucose).toFixed(2)} ${userProfile.glucoseUnit}) : جرعة التصحيح المحسوبة (+${bolusCalculation.correctionBolus} وحدة).`
+                    : `⚠️ Glycémie supérieure à la cible (+${(displayedGlucose - userProfile.targetGlucose).toFixed(2)} ${userProfile.glucoseUnit}) : correction calculée (+${bolusCalculation.correctionBolus} UI${
+                        (bolusCalculation.insulinOnBoardDeducted || 0) > 0
+                          ? `, après déduction de ${bolusCalculation.insulinOnBoardDeducted} UI d'insuline active`
+                          : ''
+                      }).`}
+                </span>
+              ) : displayedGlucose < userProfile.targetGlucose ? (
+                <span className="text-sky-300 font-medium">
+                  {language === 'ar'
+                    ? `السكر أقل من الهدف : تم تخفيض جرعة الوجبة بمقدار ${Math.abs(bolusCalculation.correctionBolus)} وحدة.`
+                    : `Glycémie sous la cible : bolus repas réduit de ${Math.abs(bolusCalculation.correctionBolus)} UI (correction négative).`}
                 </span>
               ) : (
                 <span className="text-emerald-300 font-medium">
@@ -936,17 +978,44 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
 
         {/* Clinically Safe Alert for Capped Bolus or Scale Detection */}
         {bolusCalculation.safetyWarning && (
-          <div className="p-3.5 rounded-2xl bg-amber-950/90 border-2 border-amber-500 text-amber-100 flex items-start gap-2.5 text-xs animate-in fade-in">
+          <div
+            role="alert"
+            className={`p-3.5 rounded-2xl border-2 flex items-start gap-2.5 text-xs animate-in fade-in ${
+              bolusCalculation.isBlocked
+                ? 'bg-rose-950/90 border-rose-500 text-rose-100'
+                : 'bg-amber-950/90 border-amber-500 text-amber-100'
+            }`}
+          >
             <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
             <div>
               <p className="font-extrabold text-amber-200">
-                {bolusCalculation.isCapped
-                  ? (language === 'ar' ? '⚠️ تحذير طبي : سقف الأمان الأقصى للأنسولين (20 وحدة)' : '⚠️ Alerte Sécurité Clinique : Plafond maximal de sécurité atteint (20 UI)')
-                  : (language === 'ar' ? '⚠️ تصحيح مقياس السكر' : '⚠️ Contrôle de plausibilité de l\'échelle glycémique')}
+                {bolusCalculation.isBlocked
+                  ? (language === 'ar' ? '⛔ لا توجد جرعة مقترحة' : '⛔ Aucune dose proposée')
+                  : bolusCalculation.isCapped
+                  ? (language === 'ar'
+                      ? `⚠️ تحذير طبي : سقف الأمان الأقصى للأنسولين (${bolusCalculation.maxBolusUnits} وحدة)`
+                      : `⚠️ Alerte Sécurité Clinique : Plafond maximal de sécurité atteint (${bolusCalculation.maxBolusUnits} UI)`)
+                  : (language === 'ar' ? '⚠️ نقاط للانتباه في حساب الجرعة' : '⚠️ Points de vigilance du calcul')}
               </p>
               <p className="mt-0.5 text-[11px] leading-relaxed text-amber-100/90">
                 {bolusCalculation.safetyWarning}
               </p>
+              {bolusCalculation.profileIssues && (
+                <ul className="mt-1.5 list-disc ps-4 text-[11px] space-y-0.5">
+                  {bolusCalculation.profileIssues.map((issue) => (
+                    <li key={`${issue.field}-${issue.slot || ''}`}>{language === 'ar' ? issue.ar : issue.fr}</li>
+                  ))}
+                </ul>
+              )}
+              {bolusCalculation.blockReason === 'invalid_profile' && (
+                <button
+                  type="button"
+                  onClick={onOpenProfileModal}
+                  className="mt-2 px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 text-white text-[11px] font-bold cursor-pointer"
+                >
+                  {language === 'ar' ? 'تصحيح الملف العلاجي' : 'Corriger mon profil thérapeutique'}
+                </button>
+              )}
               {bolusCalculation.isCapped && bolusCalculation.unclampedTotalBolus && (
                 <p className="mt-1 text-[10px] text-amber-300 font-semibold">
                   {language === 'ar'
@@ -965,7 +1034,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               {language === 'ar' ? 'جرعة الوجبة' : 'Bolus Repas'}
             </span>
             <span className={`font-black text-white block ${isHighContrastMode ? 'text-xl' : 'text-lg'}`}>
-              {bolusCalculation.mealBolus} {language === 'ar' ? 'وحدة' : 'UI'}
+              {bolusCalculation.isBlocked ? '—' : bolusCalculation.mealBolus} {language === 'ar' ? 'وحدة' : 'UI'}
             </span>
             <span className="text-[10px] text-slate-400">
               {meal.total_carbs}{language === 'ar' ? 'غ' : 'g'} ÷ {bolusCalculation.icRatio}
@@ -977,10 +1046,19 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               {language === 'ar' ? 'جرعة التصحيح' : 'Correction'}
             </span>
             <span className={`font-black text-blue-300 block ${isHighContrastMode ? 'text-xl' : 'text-lg'}`}>
-              +{bolusCalculation.correctionBolus} {language === 'ar' ? 'وحدة' : 'UI'}
+              {bolusCalculation.isBlocked
+                ? '—'
+                : `${bolusCalculation.correctionBolus >= 0 ? '+' : ''}${bolusCalculation.correctionBolus}`}{' '}
+              {language === 'ar' ? 'وحدة' : 'UI'}
             </span>
             <span className="text-[10px] text-slate-400">
-              {bolusCalculation.correctionBolus > 0 ? (language === 'ar' ? 'تعديل للهدف' : 'ajustement cible') : (language === 'ar' ? 'لا يوجد' : 'aucune')}
+              {(bolusCalculation.insulinOnBoard || 0) > 0
+                ? (language === 'ar'
+                    ? `إنسولين نشط : ${bolusCalculation.insulinOnBoard} وحدة`
+                    : `insuline active : ${bolusCalculation.insulinOnBoard} UI`)
+                : bolusCalculation.correctionBolus !== 0
+                ? (language === 'ar' ? 'تعديل للهدف' : 'ajustement cible')
+                : (language === 'ar' ? 'لا يوجد' : 'aucune')}
             </span>
           </div>
 
@@ -997,7 +1075,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             <span className={`font-black block tracking-tight ${
               isHighContrastMode ? 'text-2xl text-slate-950 font-black' : 'text-xl'
             }`}>
-              {bolusCalculation.totalBolus} {language === 'ar' ? 'وحدة' : 'UI'}
+              {bolusDisplay} {language === 'ar' ? 'وحدة' : 'UI'}
             </span>
             <span className={`text-[10px] ${
               isHighContrastMode ? 'text-slate-800 font-bold' : 'text-emerald-100/90'
@@ -1008,7 +1086,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         </div>
 
         {/* Recommandation Bolus Carré / Double-Vague (Dual-Wave) */}
-        {dualWaveSuggestion?.is_recommended && (
+        {!bolusCalculation.isBlocked && dualWaveSuggestion?.is_recommended && (
           <div className="mt-4 p-3.5 rounded-2xl bg-indigo-950/70 border border-indigo-500/40 text-left animate-in fade-in">
             <div className="flex items-center gap-2 mb-1 text-indigo-300 font-extrabold text-xs">
               <Waves className="w-4 h-4 text-indigo-400" />
@@ -1063,7 +1141,8 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         <button
           id="btn-validate-meal"
           onClick={handleConfirmAction}
-          className={`w-full sm:w-2/3 py-3.5 px-5 rounded-2xl text-white text-sm font-extrabold shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer ${
+          disabled={isValidationBlocked}
+          className={`w-full sm:w-2/3 py-3.5 px-5 rounded-2xl text-white text-sm font-extrabold shadow-lg flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none ${
             isHypoglycemia
               ? 'bg-rose-600 hover:bg-rose-700 shadow-rose-600/25'
               : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25'
@@ -1071,10 +1150,14 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
         >
           <CheckCircle2 className="w-5 h-5" />
           <span>
-            {isHypoglycemia
+            {isValidationBlocked
               ? (language === 'ar'
-                  ? `اعتماد بعد تصحيح هبوط السكر (≈ ${meal.total_carbs} غ • ${bolusCalculation.totalBolus} وحدة)`
-                  : `Valider après resucrage (≈ ${meal.total_carbs} g • ${bolusCalculation.totalBolus} UI)`)
+                  ? 'الجرعة محجوبة : صحح البيانات أعلاه'
+                  : 'Dose bloquée : corrigez les données ci-dessus')
+              : isHypoglycemia
+              ? (language === 'ar'
+                  ? `تسجيل الوجبة بدون جرعة (≈ ${meal.total_carbs} غ • 0 وحدة) — صحح الهبوط أولاً`
+                  : `Enregistrer sans bolus (≈ ${meal.total_carbs} g • 0 UI) — resucrage d'abord`)
               : (language === 'ar'
                   ? `اعتماد الوجبة والجرعة (≈ ${meal.total_carbs} غ • ${bolusCalculation.totalBolus} وحدة)`
                   : `Valider le repas (≈ ${meal.total_carbs} g • ${bolusCalculation.totalBolus} UI)`)}
@@ -1107,7 +1190,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               <span className={`text-sm font-black block ${
                 isHighContrastMode ? 'text-slate-950 text-base font-black' : 'text-emerald-400'
               }`}>
-                {bolusCalculation.totalBolus} {language === 'ar' ? 'وحدة' : 'UI'}
+                {bolusDisplay} {language === 'ar' ? 'وحدة' : 'UI'}
               </span>
             </div>
           </div>
@@ -1122,7 +1205,8 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             <button
               id="btn-sticky-validate-meal"
               onClick={handleConfirmAction}
-              className={`flex-1 sm:flex-initial py-2.5 px-4 sm:px-6 rounded-xl font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              disabled={isValidationBlocked}
+              className={`flex-1 sm:flex-initial py-2.5 px-4 sm:px-6 rounded-xl font-black text-xs sm:text-sm shadow-md flex items-center justify-center gap-2 transition-all cursor-pointer disabled:cursor-not-allowed disabled:bg-slate-400 disabled:shadow-none ${
                 isHypoglycemia
                   ? 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/25'
                   : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/25'
@@ -1130,8 +1214,10 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
             >
               <CheckCircle2 className="w-4 h-4" />
               <span>
-                {isHypoglycemia
-                  ? (language === 'ar' ? 'اعتماد (بعد تصحيح الهبوط)' : 'Valider (après resucrage)')
+                {isValidationBlocked
+                  ? (language === 'ar' ? 'الجرعة محجوبة' : 'Dose bloquée')
+                  : isHypoglycemia
+                  ? (language === 'ar' ? 'تسجيل بدون جرعة' : 'Enregistrer sans bolus')
                   : (language === 'ar' ? 'اعتماد الوجبة' : 'Valider le repas')}
               </span>
             </button>
@@ -1147,7 +1233,7 @@ export const PortionAdjustmentView: React.FC<PortionAdjustmentViewProps> = ({
               <div className="flex items-center gap-2">
                 <PlusCircle className="w-5 h-5 text-emerald-600" />
                 <h3 className="text-sm font-bold text-slate-900">
-                  {language === 'ar' ? 'إضافة صنف غذائي تونسي معتمد' : 'Ajouter un aliment tunisien certifié'}
+                  {language === 'ar' ? 'إضافة صنف من القاعدة التونسية' : 'Ajouter un aliment de la base tunisienne'}
                 </h3>
               </div>
               <button

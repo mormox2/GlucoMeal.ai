@@ -362,7 +362,7 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
                 <p className="text-[11px] text-slate-500 leading-snug">
                   {isAr
                     ? 'قاعدة الأطعمة التونسية وحاسبة الإنسولين متوفرة دائماً دون إنترنت.'
-                    : 'Base 200+ aliments tunisiens et calcul de bolus accessibles partout sans 4G.'}
+                    : 'Base d’aliments tunisiens et calcul de bolus accessibles sans connexion.'}
                 </p>
               </div>
 

@@ -20,6 +20,7 @@ import {
 } from '../services/firebase';
 import { UserProfileDT1, AccountType, ChildProfileInfo } from '../types';
 import { saveUserProfile, loadUserProfile, loadSavedMeals, saveMeals } from '../utils/storage';
+import { updateConsent } from '../utils/consent';
 import { useLanguage } from '../i18n/LanguageContext';
 import { LanguageSwitcher } from './LanguageSwitcher';
 
@@ -103,6 +104,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
     try {
       const currentProfile = loadUserProfile();
+      // Créer un compte ou s'y connecter, c'est demander la sauvegarde cloud (indiqué sous le formulaire)
+      updateConsent({ cloudSync: true });
 
       if (mode === 'signup') {
         if (!email || !password) {
@@ -560,7 +563,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
         <div className="pt-3 border-t border-slate-100 text-center">
           <p className="text-[11px] text-slate-500">
-            {isRtl ? 'بيانات مشفرة ومحمية • استضافة سحابية Google Firestore' : 'Données protégées • Hébergement sécurisé Google Firestore'}
+            {isRtl
+              ? 'إنشاء حساب أو تسجيل الدخول يفعّل حفظ بياناتك الصحية (وجبات، جرعات، ملف علاجي) على Google Firebase. يمكنك إيقافه أو حذف كل شيء من الملف الشخصي > الخصوصية.'
+              : 'Créer un compte ou vous connecter active la sauvegarde de vos données de santé (repas, doses, profil) sur Google Firebase. Vous pouvez la désactiver ou tout supprimer dans Profil > Confidentialité.'}
           </p>
         </div>
       </div>

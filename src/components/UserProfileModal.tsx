@@ -1,8 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { User, ShieldCheck, Clock, Activity, Target, Save, X, RotateCcw, Sparkles, CheckCircle2, Moon, AlertTriangle, LogOut, Cloud } from 'lucide-react';
-import { UserProfileDT1 } from '../types';
-import { DEFAULT_USER_PROFILE, sanitizeUserProfile } from '../utils/storage';
-import { auth, logoutUser } from '../services/firebase';
+import { ProfileValidationIssue, UserProfileDT1 } from '../types';
+import {
+  DEFAULT_USER_PROFILE,
+  deleteAllLocalData,
+  sanitizeUserProfile,
+  validateTherapeuticProfile,
+  getMaxBolusUnits,
+  isChildProfile,
+} from '../utils/storage';
+import { auth, logoutUser, deleteAllCloudData, clearLocalFirestoreCache } from '../services/firebase';
+import { ConsentState, updateConsent } from '../utils/consent';
+import { getStoredSyncCode } from '../utils/cloudSync';
+import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useLanguage } from '../i18n/LanguageContext';
 
@@ -12,6 +22,8 @@ interface UserProfileModalProps {
   profile?: UserProfileDT1;
   currentProfile?: UserProfileDT1;
   onSave: (updatedProfile: UserProfileDT1) => void;
+  consent?: ConsentState | null;
+  onConsentChange?: (consent: ConsentState | null) => void;
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
@@ -20,11 +32,52 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   profile: propProfile,
   currentProfile,
   onSave,
+  consent,
+  onConsentChange,
 }) => {
   const { language, isRtl } = useLanguage();
   const profile = propProfile || currentProfile || DEFAULT_USER_PROFILE;
   const [formData, setFormData] = useState<UserProfileDT1>(() => sanitizeUserProfile(profile));
   const [savedFeedback, setSavedFeedback] = useState(false);
+  const [profileIssues, setProfileIssues] = useState<ProfileValidationIssue[]>([]);
+  const [isPolicyOpen, setIsPolicyOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleConsentToggle = (changes: { cloudSync?: boolean; analytics?: boolean }) => {
+    const updated = updateConsent(changes);
+    if (onConsentChange) onConsentChange(updated);
+  };
+
+  // Droit à l'effacement : cloud (données + compte), puis appareil
+  const handleDeleteAllData = async () => {
+    const confirmed = window.confirm(
+      language === 'ar'
+        ? 'حذف كل بياناتك نهائياً (الوجبات، الملف العلاجي، الحساب السحابي) ؟ لا يمكن التراجع عن هذا الإجراء.'
+        : 'Supprimer définitivement toutes vos données (repas, profil, compte cloud) ? Cette action est irréversible.'
+    );
+    if (!confirmed) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteAllCloudData(getStoredSyncCode());
+    } catch (err: any) {
+      setIsDeleting(false);
+      setDeleteError(
+        err?.code === 'auth/requires-recent-login'
+          ? language === 'ar'
+            ? 'لأسباب أمنية، سجّل الدخول من جديد ثم أعد المحاولة.'
+            : 'Par sécurité, reconnectez-vous puis relancez la suppression.'
+          : language === 'ar'
+          ? 'تعذر حذف البيانات السحابية. تحقق من الاتصال وأعد المحاولة.'
+          : 'Suppression des données cloud impossible. Vérifiez la connexion et réessayez.'
+      );
+      return;
+    }
+    deleteAllLocalData();
+    await clearLocalFirestoreCache();
+    window.location.reload();
+  };
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(
     () => auth.currentUser?.email || profile?.parentEmail || null
   );
@@ -33,6 +86,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     const active = propProfile || currentProfile;
     if (active) {
       setFormData(sanitizeUserProfile(active));
+      setProfileIssues([]);
       setCurrentUserEmail(auth.currentUser?.email || active?.parentEmail || null);
     }
   }, [propProfile, currentProfile, isOpen]);
@@ -82,6 +136,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanProfile = sanitizeUserProfile(formData);
+    // Garde-fou clinique : un profil hors bornes (ex. ISF 0.4 dans un profil mg/dL) n'est jamais enregistré
+    const issues = validateTherapeuticProfile(cleanProfile);
+    setProfileIssues(issues);
+    if (issues.length > 0) return;
     onSave(cleanProfile);
     setSavedFeedback(true);
     setTimeout(() => {
@@ -755,6 +813,60 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
           </div>
 
+          {/* Section sécurité : plafond de bolus et durée d'action de l'insuline */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
+              <span className="font-bold text-slate-800 block">
+                {language === 'ar' ? 'سقف الجرعة القصوى' : 'Plafond de bolus'}
+              </span>
+              <p className="text-[11px] text-slate-500">
+                {language === 'ar'
+                  ? `يُحدد مع طبيبك. افتراضياً : ${getMaxBolusUnits({ ...formData, maxBolusUnits: undefined })} وحدة.`
+                  : `À régler avec votre diabétologue. Par défaut : ${getMaxBolusUnits({ ...formData, maxBolusUnits: undefined })} UI${
+                      isChildProfile(formData) ? ' (profil enfant)' : ''
+                    }.`}
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  step="0.5"
+                  placeholder={String(getMaxBolusUnits({ ...formData, maxBolusUnits: undefined }))}
+                  value={formData.maxBolusUnits ?? ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, maxBolusUnits: e.target.value === '' ? undefined : Number(e.target.value) })
+                  }
+                  className="w-24 px-3 py-1.5 rounded-xl border border-slate-200 font-black text-slate-900 text-base text-center outline-none focus:border-emerald-500"
+                />
+                <span className="text-xs font-bold text-slate-600">{language === 'ar' ? 'وحدة كحد أقصى' : 'UI maximum'}</span>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
+              <span className="font-bold text-slate-800 block">
+                {language === 'ar' ? 'مدة مفعول الإنسولين السريع' : "Durée d'action de l'insuline rapide"}
+              </span>
+              <p className="text-[11px] text-slate-500">
+                {language === 'ar'
+                  ? 'تُستعمل لحساب الإنسولين النشط وتجنب تراكم جرعات التصحيح.'
+                  : "Sert à estimer l'insuline encore active et éviter l'empilement des corrections."}
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="2"
+                  max="8"
+                  step="0.5"
+                  value={formData.insulinActionHours ?? 4}
+                  onChange={(e) => setFormData({ ...formData, insulinActionHours: Number(e.target.value) })}
+                  className="w-24 px-3 py-1.5 rounded-xl border border-slate-200 font-black text-slate-900 text-base text-center outline-none focus:border-emerald-500"
+                />
+                <span className="text-xs font-bold text-slate-600">{language === 'ar' ? 'ساعات' : 'heures'}</span>
+              </div>
+            </div>
+          </div>
+
           {/* Section 3: Pas d'arrondi */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
@@ -853,12 +965,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <span className="text-xs font-bold text-slate-800 block">
                   {currentUserEmail
                     ? (language === 'ar' ? 'الحساب السحابي Firebase متصل' : 'Compte Cloud Firebase Connecté')
-                    : (language === 'ar' ? 'الوضع المحلي والخاص الآمن' : 'Mode Local / Anonyme Sécurisé')}
+                    : (language === 'ar' ? 'الوضع المحلي' : 'Mode local')}
                 </span>
                 <span className="text-[11px] text-slate-500 block truncate max-w-[220px] sm:max-w-xs">
                   {currentUserEmail
                     ? currentUserEmail
-                    : (language === 'ar' ? 'البيانات محفوظة ومزامنة بأمان' : 'Données synchronisées sur Firestore & cache IndexedDB')}
+                    : consent?.cloudSync
+                      ? (language === 'ar' ? 'البيانات محفوظة على هذا الجهاز ومزامنة مع Firebase' : 'Données sur cet appareil, sauvegardées dans Firebase')
+                      : (language === 'ar' ? 'البيانات محفوظة على هذا الجهاز فقط' : 'Données sur cet appareil uniquement')}
                 </span>
               </div>
             </div>
@@ -875,11 +989,71 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             ) : (
               <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 shrink-0">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{language === 'ar' ? 'حماية مشفرة نشطة' : 'Zero-Trust Actif'}</span>
+                <span>{consent?.cloudSync ? (language === 'ar' ? 'حفظ سحابي مفعل' : 'Sauvegarde cloud active') : (language === 'ar' ? 'بدون حفظ سحابي' : 'Sans sauvegarde cloud')}</span>
               </div>
             )}
           </div>
 
+          {/* Confidentialité : consentements et droit à l'effacement */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-3">
+            <span className="font-bold text-slate-800 block text-xs">
+              {language === 'ar' ? 'الخصوصية' : 'Confidentialité'}
+            </span>
+            <label className="flex items-center justify-between gap-3 text-[11px] text-slate-700">
+              <span>{language === 'ar' ? 'الحفظ السحابي (Google Firebase)' : 'Sauvegarde cloud (Google Firebase)'}</span>
+              <input
+                type="checkbox"
+                checked={Boolean(consent?.cloudSync)}
+                onChange={(e) => handleConsentToggle({ cloudSync: e.target.checked })}
+                className="w-4 h-4 accent-emerald-600"
+              />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-[11px] text-slate-700">
+              <span>{language === 'ar' ? 'قياس الزيارات المجهول (Vercel Analytics)' : 'Mesure d’audience anonyme (Vercel Analytics)'}</span>
+              <input
+                type="checkbox"
+                checked={Boolean(consent?.analytics)}
+                onChange={(e) => handleConsentToggle({ analytics: e.target.checked })}
+                className="w-4 h-4 accent-emerald-600"
+              />
+            </label>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setIsPolicyOpen(true)}
+                className="px-3 py-1.5 rounded-xl bg-white border border-slate-200 text-slate-700 text-[11px] font-bold cursor-pointer"
+              >
+                {language === 'ar' ? 'سياسة الخصوصية' : 'Politique de confidentialité'}
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAllData}
+                disabled={isDeleting}
+                className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white text-[11px] font-bold cursor-pointer"
+              >
+                {isDeleting
+                  ? language === 'ar' ? 'جاري الحذف…' : 'Suppression…'
+                  : language === 'ar' ? 'حذف كل بياناتي' : 'Supprimer toutes mes données'}
+              </button>
+            </div>
+            {deleteError && (
+              <p role="alert" className="text-[11px] text-rose-700 font-semibold">{deleteError}</p>
+            )}
+          </div>
+
+          {profileIssues.length > 0 && (
+            <div role="alert" className="w-full p-3 rounded-xl bg-rose-50 border border-rose-300 text-rose-900 text-[11px] space-y-1">
+              <p className="font-extrabold flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {language === 'ar' ? 'لم يتم الحفظ : قيم خارج الحدود السريرية' : 'Profil non enregistré : valeurs hors bornes cliniques'}
+              </p>
+              <ul className="list-disc ps-4 space-y-0.5">
+                {profileIssues.map((issue) => (
+                  <li key={`${issue.field}-${issue.slot || ''}`}>{language === 'ar' ? issue.ar : issue.fr}</li>
+                ))}
+              </ul>
+            </div>
+          )}
           {/* Action Buttons */}
           <div className="flex items-center justify-between pt-2 border-t border-slate-100">
             <button
@@ -921,6 +1095,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           </div>
         </form>
       </div>
+      <PrivacyPolicyModal isOpen={isPolicyOpen} onClose={() => setIsPolicyOpen(false)} />
     </div>
   );
 };

@@ -25,6 +25,7 @@ import { AnalyzedMeal, UserProfileDT1 } from '../types';
 import { exportUserDataBackup, importUserDataBackup, DEFAULT_USER_PROFILE } from '../utils/storage';
 import { loadPatientCustomPortions } from '../utils/activeLearning';
 import { exportToExcelWorkbook } from '../utils/excelExport';
+import { classifyPostPrandial, getPostPrandialGlucose } from '../utils/postPrandial';
 import { useLanguage } from '../i18n/LanguageContext';
 
 interface HistoryViewProps {
@@ -104,6 +105,10 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
   // Récupération des portions personnalisées apprises dynamiquement
   const patientPortions = loadPatientCustomPortions();
 
+  // Contrôles H+2 lus dans l'unité actuelle du profil (normalisation des anciennes saisies)
+  const historyProfile = userProfile || DEFAULT_USER_PROFILE;
+  const ppStatusOf = (meal: AnalyzedMeal) => classifyPostPrandial(meal, historyProfile);
+
   return (
     <div className={`max-w-5xl xl:max-w-6xl mx-auto py-6 sm:py-8 px-4 sm:px-6 lg:px-8 ${isAr ? 'font-arabic' : ''}`}>
       {/* Header */}
@@ -170,9 +175,14 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
           )}
 
           <button
-            onClick={() => exportToExcelWorkbook(meals, userProfile || DEFAULT_USER_PROFILE)}
+            onClick={() => {
+              exportToExcelWorkbook(meals, userProfile || DEFAULT_USER_PROFILE).catch((err) => {
+                console.error('Export Excel impossible:', err);
+                alert(isAr ? 'تعذر إنشاء ملف إكسيل.' : "Impossible de générer le fichier Excel.");
+              });
+            }}
             className="px-3.5 py-2.5 rounded-2xl bg-emerald-800 hover:bg-emerald-900 text-white text-xs font-bold flex items-center gap-1.5 shadow-md shadow-emerald-800/20 transition-all cursor-pointer"
-            title={isAr ? 'تصدير السجل الطبي وتحليل AGP إلى ملف إكسيل' : "Exporter tout le journal clinique et l'analyse AGP au format Excel (.xlsx)"}
+            title={isAr ? 'تصدير السجل الطبي إلى ملف إكسيل' : 'Exporter tout le journal clinique au format Excel (.xlsx)'}
           >
             <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-300" />
             <span>{isAr ? 'تصدير إكسيل (.xlsx)' : 'Export Excel (.xlsx)'}</span>
@@ -429,9 +439,9 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                         type="button"
                         onClick={() => onRecordPostPrandial && onRecordPostPrandial(meal)}
                         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                          meal.post_prandial_evaluation === 'target'
+                          ppStatusOf(meal) === 'target'
                             ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                            : meal.post_prandial_evaluation === 'hyper'
+                            : ppStatusOf(meal) === 'hyper'
                             ? 'bg-amber-100 text-amber-800 hover:bg-amber-200'
                             : 'bg-rose-100 text-rose-800 hover:bg-rose-200'
                         }`}
@@ -439,10 +449,11 @@ export const HistoryView: React.FC<HistoryViewProps> = ({
                       >
                         <Target className="w-3.5 h-3.5" />
                         <span>
-                          {isAr ? '+2 س :' : '+2h :'} {meal.post_prandial_glucose} {userProfile?.glucoseUnit || (isAr ? 'غ/ل' : 'g/L')}
-                          {meal.post_prandial_evaluation === 'target' && (isAr ? ' (الهدف 🎯)' : ' (Cible 🎯)')}
-                          {meal.post_prandial_evaluation === 'hyper' && (isAr ? ' (مرتفع ⚠️)' : ' (Hyper ⚠️)')}
-                          {meal.post_prandial_evaluation === 'hypo' && (isAr ? ' (منخفض 🚨)' : ' (Hypo 🚨)')}
+                          {isAr ? '+2 س :' : '+2h :'} {getPostPrandialGlucose(meal, historyProfile.glucoseUnit) ?? meal.post_prandial_glucose}{' '}
+                          {historyProfile.glucoseUnit}
+                          {ppStatusOf(meal) === 'target' && (isAr ? ' (الهدف 🎯)' : ' (Cible 🎯)')}
+                          {ppStatusOf(meal) === 'hyper' && (isAr ? ' (مرتفع ⚠️)' : ' (Hyper ⚠️)')}
+                          {ppStatusOf(meal) === 'hypo' && (isAr ? ' (منخفض 🚨)' : ' (Hypo 🚨)')}
                         </span>
                       </button>
                     ) : (
