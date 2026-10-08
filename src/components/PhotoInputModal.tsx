@@ -13,6 +13,7 @@ import {
   Info,
 } from 'lucide-react';
 import { SAMPLE_MEAL_PRESETS, PresetMealSample } from '../data/sampleMeals';
+import { drawScaledJpeg, resizeImageFile } from '../utils/imageResize';
 import { useLanguage } from '../i18n/LanguageContext';
 
 interface PhotoInputModalProps {
@@ -99,13 +100,8 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
   const capturePhotoFromCamera = () => {
     if (!videoRef.current) return;
     const video = videoRef.current;
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    try {
+      const dataUrl = drawScaledJpeg(video, video.videoWidth || 640, video.videoHeight || 480);
       setPreviewImage(dataUrl);
       setSelectedPreset(null);
       // Stop camera
@@ -113,18 +109,22 @@ export const PhotoInputModal: React.FC<PhotoInputModalProps> = ({
         cameraStream.getTracks().forEach((t) => t.stop());
         setCameraStream(null);
       }
+    } catch (err) {
+      console.error('Capture photo impossible:', err);
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setPreviewImage(reader.result as string);
+    try {
+      // Réduction avant envoi (limite de 4,5 Mo des fonctions Vercel)
+      setPreviewImage(await resizeImageFile(file));
       setSelectedPreset(null);
-    };
-    reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Lecture de la photo impossible:', err);
+      alert(isAr ? 'تعذر قراءة الصورة.' : 'Impossible de lire cette photo.');
+    }
   };
 
   const handleSelectPreset = (preset: PresetMealSample) => {

@@ -76,7 +76,12 @@ export interface CalculatedBolusSummary {
   activityReductionPct?: number; // ex: 0, 15, 30, 50
   activityReductionUnits?: number; // ex: 1.5 UI
   rawMealBolus?: number; // Bolus avant modulation d'effort
-  isCapped?: boolean; // True si plafonné au seuil de sécurité max (20 UI)
+  isCapped?: boolean; // True si plafonné au seuil de sécurité (plafond du profil)
+  maxBolusUnits?: number; // Plafond appliqué (UI)
+  rawCorrectionBolus?: number; // Correction avant déduction de l'insuline active et prise en compte de la tendance
+  insulinOnBoard?: number; // Insuline active estimée des bolus précédents (UI)
+  insulinOnBoardDeducted?: number; // Part de l'insuline active déduite de la correction (UI)
+  glucoseTrend?: CGMReading['trend'];
   unclampedTotalBolus?: number; // Valeur brute avant plafonnement
   safetyWarning?: string; // Message d'alerte sécurité clinique si détection anomalie
   isHoneymoonActive?: boolean; // True si le mode rémission partielle / lune de miel est actif
@@ -91,7 +96,7 @@ export interface CalculatedBolusSummary {
 export type BolusBlockReason = 'invalid_profile' | 'invalid_carbs' | 'invalid_glucose' | 'hypoglycemia';
 
 export interface ProfileValidationIssue {
-  field: 'targetGlucose' | 'isf' | 'icRatio';
+  field: 'targetGlucose' | 'isf' | 'icRatio' | 'maxBolusUnits' | 'insulinActionHours';
   slot?: MealSlot;
   fr: string;
   ar: string;
@@ -113,6 +118,7 @@ export interface CGMReading {
   unit: 'g/L' | 'mg/dL';
   trend: 'flat' | 'up_slow' | 'up_fast' | 'down_slow' | 'down_fast';
   timestamp: string;
+  ageMinutes?: number; // Âge de la mesure au moment de la lecture
   device: 'dexcom' | 'freestyle' | 'nightscout' | 'manual' | 'simulator' | 'linx' | 'syai' | 'sibionics';
   sensorExpiryDays?: number;
   sensorSerialNumber?: string;
@@ -212,6 +218,8 @@ export interface UserProfileDT1 {
   ramadanMode?: boolean;
   activeReminderH2?: ActiveReminderH2 | null;
   isHoneymoonPhase?: boolean; // Phase de lune de miel (rémission clinique partielle du DT1)
+  maxBolusUnits?: number; // Plafond de bolus réglé avec le soignant (sinon : 20 UI adulte, 10 UI enfant)
+  insulinActionHours?: number; // Durée d'action de l'insuline rapide pour le calcul de l'insuline active (2 à 8 h, défaut 4 h)
   diagnosisDate?: string; // Date de découverte du DT1 (ex: '2026-01')
   honeymoonNotes?: string; // Notes cliniques de suivi lune de miel
 }
@@ -238,6 +246,7 @@ export interface AnalyzedMeal {
   total_glycemic_load?: number;
   average_glycemic_index?: number;
   post_prandial_glucose?: number;
+  post_prandial_unit?: 'g/L' | 'mg/dL'; // Unité de la mesure (le profil peut changer d'unité ensuite)
   post_prandial_timestamp?: string;
   post_prandial_evaluation?: 'target' | 'hyper' | 'hypo';
   cgm_reading?: CGMReading;

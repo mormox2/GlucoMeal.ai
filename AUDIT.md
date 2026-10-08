@@ -20,11 +20,28 @@ Autres corrections faites en chemin :
 - Firestore refusait les champs `undefined` du profil. Le partage par code échouait donc probablement et passait par l'API non protégée. Corrigé avec `ignoreUndefinedProperties`.
 - L'ancien moteur rattachait « Couscous au poulet » au poulet seul (0 g/100 g) et « Couscous osban » à l'osban (3,5 g/100 g).
 
+**P1 corrigés** :
+
+| Constat | Correction | Vérification |
+|---|---|---|
+| H1 Mesure CGM périmée | Mesure Nightscout ou Bluetooth refusée au-delà de 15 min (ou sans horodatage fiable), âge affiché ; aucune correction positive si la tendance CGM est à la baisse ; décodage Bluetooth conforme au Glucose Profile (drapeaux, décalage horaire, unité kg/L ou mol/L, heure de l'appareil, lecture via le RACP) | `cgmService.test.ts`, `bleGlucose.test.ts` (non testé sur un vrai lecteur) |
+| H2 Secret Nightscout | Jeton en lecture seule recommandé (paramètre `token`) ; l'API_SECRET n'est plus jamais envoyé en clair (SHA-1) ; secrets CGM exclus des sauvegardes JSON et des codes de partage ; métadonnées inventées (MARD, batterie, numéro de série) supprimées | `cgmService.test.ts` |
+| H4 Statistiques inventées | Plus de TIR 75 %, HbA1c 6,7 %, CV 28,4 % ni taux de 85 % par défaut : « — » sans donnée ; indicateurs renommés en « contrôles H+2 » ; TIR, GMI et CV non calculés (pas de données CGM continues) ; glycémie H+2 invalide refusée au lieu d'être classée « dans la cible » | `postPrandialAndExports.test.ts` |
+| H6 (partiel) Glycémie H+2 | Saisie H+2 normalisée comme la glycémie avant repas et enregistrée avec son unité ; les anciennes saisies sont relues normalisées (« 65 » en g/L redevient une hypo et ne pousse plus à augmenter l'insuline) | `postPrandialAndExports.test.ts` |
+| H7 Plafond et IOB | Plafond réglable dans le profil (1 à 50 UI ; par défaut 20 UI adulte, **10 UI enfant**) ; insuline active estimée (décroissance linéaire, durée d'action réglable de 2 à 8 h) et déduite de la correction ; correction négative sous la cible | `bolusSafety.test.ts` + test navigateur |
+| H8 + H9 Erreurs et photos | Erreurs d'analyse affichées (fait en P0) ; photos réduites à 1600 px en JPEG avant envoi ; limite serveur abaissée à 5 Mo | `postPrandialAndExports.test.ts` |
+| M1 Dépendances | `xlsx` (vulnérable, sans correctif sur npm) remplacé par `write-excel-file` (chargé à la demande) ; `npm audit fix` ; `@grpc/grpc-js` forcé en 1.14 (`overrides`) ; `npm audit` : 0 vulnérabilité | export Excel vérifié dans le navigateur |
+| M8 Storage | `storage.rules` : photos lisibles et modifiables par leur seul propriétaire, images uniquement, 5 Mo maximum | 10 scénarios validés dans l'émulateur Storage |
+| M9 App Check | Activation par `VITE_RECAPTCHA_SITE_KEY` (+ jeton de débogage) ; l'application obligatoire reste à activer dans la console | — |
+
 À noter pour la suite :
+- Le plafond de 10 UI pour un enfant est une valeur prudente par défaut : il doit être réglé avec le diabétologue.
+- L'insuline active suppose que chaque bolus validé dans l'application a bien été injecté.
+- La lecture Bluetooth suit la norme Glucose Profile mais n'a pas pu être testée sur un vrai lecteur.
 - Les anciens codes de synchronisation (format court) ne sont plus lisibles.
 - Une politique TTL Firestore sur `syncCodes.expiresAt` reste à activer dans la console.
 - La base d'aliments contient des identifiants en double (`reg-01` à `reg-08`) ; à dédoublonner.
-- Les priorités P1 et P2 restent ouvertes.
+- La priorité P2 reste ouverte (H5 benchmark, reste de H6, M2 à M7, M10, section 4).
 
 ## 0. Synthèse
 

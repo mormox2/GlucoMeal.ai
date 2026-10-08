@@ -1,15 +1,28 @@
-import * as XLSX from 'xlsx';
+import type { Row, Sheet } from 'write-excel-file/browser';
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
 import { sanitizeUserProfile } from './storage';
+import { classifyPostPrandial, getPostPrandialGlucose } from './postPrandial';
+
+type SheetRow = Record<string, string | number>;
 
 /**
- * Exporte l'ensemble des données du patient dans un classeur Excel (.xlsx) complet multi-onglets
+ * Convertit des lignes { colonne: valeur } en données d'onglet : ligne d'en-tête en gras puis valeurs.
  */
-export function exportToExcelWorkbook(
-  meals: AnalyzedMeal[],
-  profile: UserProfileDT1
-): void {
-  const wb = XLSX.utils.book_new();
+function toSheet(name: string, rows: SheetRow[], widths: number[]): Sheet<Blob> {
+  const headers = Object.keys(rows[0] || {});
+  const data: Row[] = [
+    headers.map((header) => ({ value: header, fontWeight: 'bold' as const })),
+    ...rows.map((row) => headers.map((header) => row[header] ?? '')),
+  ];
+  return { sheet: name, data, columns: widths.map((width) => ({ width })) };
+}
+
+/**
+ * Construit les onglets du classeur Excel du patient (fonction pure, testable sans navigateur).
+ */
+export function buildExcelSheets(meals: AnalyzedMeal[], profile: UserProfileDT1): Sheet<Blob>[] {
+  const safeProfile = sanitizeUserProfile(profile);
+  const unit = safeProfile.glucoseUnit;
 
   // ==========================================
   // ONGLET 1 : JOURNAL DES REPAS & BOLUS
@@ -35,10 +48,12 @@ export function exportToExcelWorkbook(
       0
     );
 
+    const ppStatus = classifyPostPrandial(m, safeProfile);
+    const ppGlucose = getPostPrandialGlucose(m, unit);
     let evalText = 'Non mesuré';
-    if (m.post_prandial_evaluation === 'target') evalText = 'Dans la Cible (0.70 - 1.80)';
-    else if (m.post_prandial_evaluation === 'hyper') evalText = 'Hyperglycémie (> 1.80)';
-    else if (m.post_prandial_evaluation === 'hypo') evalText = 'Hypoglycémie (< 0.70)';
+    if (ppStatus === 'target') evalText = 'Dans la cible';
+    else if (ppStatus === 'hyper') evalText = 'Au-dessus de la cible';
+    else if (ppStatus === 'hypo') evalText = 'Hypoglycémie';
 
     return {
       'N°': idx + 1,
@@ -58,136 +73,52 @@ export function exportToExcelWorkbook(
         ? `-${m.bolus_calculated.activityReductionPct}% (-${m.bolus_calculated.activityReductionUnits} UI)`
         : 'Aucune (Repos)',
       'Glycémie Pré-prandiale': m.bolus_calculated?.currentGlucose
-        ? `${m.bolus_calculated.currentGlucose} ${profile.glucoseUnit}`
+        ? `${m.bolus_calculated.currentGlucose} ${unit}`
         : '-',
       'Bolus Correction (UI)': m.bolus_calculated?.correctionBolus || 0,
       'Bolus Total Injecté (UI)': m.bolus_calculated?.totalBolus || '-',
-      'Glycémie H+2': m.post_prandial_glucose !== undefined
-        ? `${m.post_prandial_glucose} ${profile.glucoseUnit}`
-        : 'Non renseignée',
+      'Glycémie H+2': ppGlucose !== undefined ? `${ppGlucose} ${unit}` : 'Non renseignée',
       'Évaluation H+2': evalText,
       'Détail des Ingrédients INNT': componentsSummary,
     };
   });
 
-  const wsMeals = XLSX.utils.json_to_sheet(mealsRows);
-  // Ajustement largeur des colonnes
-  wsMeals['!cols'] = [
-    { wch: 5 },  // N°
-    { wch: 12 }, // Date
-    { wch: 8 },  // Heure
-    { wch: 12 }, // Créneau
-    { wch: 32 }, // Nom plat
-    { wch: 22 }, // Nom arabe
-    { wch: 16 }, // Glucides
-    { wch: 14 }, // Poids
-    { wch: 16 }, // IG
-    { wch: 16 }, // CG
-    { wch: 12 }, // Saisie
-    { wch: 20 }, // Ratio
-    { wch: 16 }, // Bolus repas
-    { wch: 22 }, // Modulation effort
-    { wch: 20 }, // Pré-prandiale
-    { wch: 18 }, // Correction
-    { wch: 20 }, // Bolus total
-    { wch: 16 }, // H+2
-    { wch: 24 }, // Eval H+2
-    { wch: 60 }, // Composants
-  ];
-  XLSX.utils.book_append_sheet(wb, wsMeals, 'Journal des Repas');
+  const mealsSheet = toSheet('Journal des Repas', mealsRows, [5, 12, 8, 12, 32, 22, 16, 14, 16, 16, 12, 20, 16, 22, 20, 18, 20, 16, 24, 60]);
 
   // ==========================================
-  // ONGLET 2 : SYNTHÈSE AGP & TÉLÉMÉDECINE
+  // ONGLET 2 : SYNTHÈSE DES CONTRÔLES POST-PRANDIAUX
+  // Contrôles ponctuels à H+2 : ce ne sont pas des données CGM continues, donc ni TIR, ni GMI, ni CV.
   // ==========================================
-  const mealsWithH2 = meals.filter((m) => typeof m.post_prandial_glucose === 'number');
-  const countTotal = meals.length;
-  const countEvaluated = mealsWithH2.length;
+  const statuses = meals.map((m) => classifyPostPrandial(m, safeProfile)).filter((st) => st !== undefined);
+  const values = meals.map((m) => getPostPrandialGlucose(m, unit)).filter((v): v is number => v !== undefined);
+  const countEvaluated = statuses.length;
+  const pct = (status: string) =>
+    countEvaluated > 0 ? `${Math.round((statuses.filter((st) => st === status).length / countEvaluated) * 100)}%` : 'N/D';
+  const mean =
+    values.length > 0
+      ? `${(values.reduce((a, v) => a + v, 0) / values.length).toFixed(unit === 'g/L' ? 2 : 0)} ${unit}`
+      : 'N/D';
 
-  let tir = 0;
-  let tar = 0;
-  let tbr = 0;
-  let meanGlucose = 0;
-  let cv = 0;
-  let gmi = 0;
-
-  if (countEvaluated > 0) {
-    const inTarget = mealsWithH2.filter((m) => {
-      const g = m.post_prandial_glucose!;
-      return profile.glucoseUnit === 'mg/dL' ? g >= 70 && g <= 180 : g >= 0.7 && g <= 1.8;
-    }).length;
-    const hyper = mealsWithH2.filter((m) => {
-      const g = m.post_prandial_glucose!;
-      return profile.glucoseUnit === 'mg/dL' ? g > 180 : g > 1.8;
-    }).length;
-    const hypo = mealsWithH2.filter((m) => {
-      const g = m.post_prandial_glucose!;
-      return profile.glucoseUnit === 'mg/dL' ? g < 70 : g < 0.7;
-    }).length;
-
-    tir = Math.round((inTarget / countEvaluated) * 100);
-    tar = Math.round((hyper / countEvaluated) * 100);
-    tbr = Math.round((hypo / countEvaluated) * 100);
-
-    const valuesInMg = mealsWithH2.map((m) =>
-      profile.glucoseUnit === 'g/L' ? m.post_prandial_glucose! * 100 : m.post_prandial_glucose!
-    );
-    const sum = valuesInMg.reduce((a, b) => a + b, 0);
-    meanGlucose = sum / countEvaluated;
-
-    const variance =
-      valuesInMg.reduce((acc, v) => acc + Math.pow(v - meanGlucose, 2), 0) / countEvaluated;
-    const stdDev = Math.sqrt(variance);
-    cv = Math.round((stdDev / meanGlucose) * 100);
-
-    // Formule GMI (HbA1c estimée consensus Bergenstal / ADA) : GMI (%) = 3.31 + (0.02392 * Moyenne_mg/dL)
-    gmi = Number((3.31 + 0.02392 * meanGlucose).toFixed(1));
-  }
-
-  const agpSummaryRows = [
-    { Indicateur: 'Patient', Valeur: profile.name, Cible_Clinique: 'Patient DT1 sous Insulinothérapie' },
-    { Indicateur: 'Total Repas Enregistrés', Valeur: countTotal, Cible_Clinique: '-' },
-    { Indicateur: 'Contrôles Post-Prandiaux H+2', Valeur: countEvaluated, Cible_Clinique: 'Idéalement 100% des repas' },
+  const summaryRows: SheetRow[] = [
+    { Indicateur: 'Patient', Valeur: safeProfile.name, Remarque: 'Patient DT1 sous insulinothérapie' },
+    { Indicateur: 'Total repas enregistrés', Valeur: meals.length, Remarque: '-' },
+    { Indicateur: 'Contrôles post-prandiaux H+2', Valeur: countEvaluated, Remarque: 'Idéalement 100% des repas' },
+    { Indicateur: 'Contrôles H+2 dans la cible', Valeur: pct('target'), Remarque: `Cible ≤ cible + ${unit === 'g/L' ? '0.40' : '40'} ${unit}` },
+    { Indicateur: 'Contrôles H+2 au-dessus de la cible', Valeur: pct('hyper'), Remarque: '-' },
+    { Indicateur: 'Contrôles H+2 en hypoglycémie', Valeur: pct('hypo'), Remarque: `< ${unit === 'g/L' ? '0.70' : '70'} ${unit}` },
+    { Indicateur: 'Glycémie H+2 moyenne', Valeur: mean, Remarque: '-' },
     {
-      Indicateur: 'Temps dans la Cible (TIR 70-180 mg/dL)',
-      Valeur: `${tir}%`,
-      Cible_Clinique: '> 70% (Consensus SFD / ADA)',
-    },
-    {
-      Indicateur: 'Temps au-dessus de la Cible (TAR > 180 mg/dL)',
-      Valeur: `${tar}%`,
-      Cible_Clinique: '< 25%',
-    },
-    {
-      Indicateur: 'Temps en Hypoglycémie (TBR < 70 mg/dL)',
-      Valeur: `${tbr}%`,
-      Cible_Clinique: '< 4% (Urgence clinique)',
-    },
-    {
-      Indicateur: 'Glycémie Post-Prandiale Moyenne',
-      Valeur: `${(profile.glucoseUnit === 'g/L' ? meanGlucose / 100 : meanGlucose).toFixed(2)} ${profile.glucoseUnit}`,
-      Cible_Clinique: '< 1.80 g/L (< 180 mg/dL)',
-    },
-    {
-      Indicateur: 'HbA1c Estimée (GMI)',
-      Valeur: gmi ? `${gmi}%` : 'N/D',
-      Cible_Clinique: '< 7.0% chez l\'adulte DT1',
-    },
-    {
-      Indicateur: 'Variabilité Glycémique (CV%)',
-      Valeur: cv ? `${cv}%` : 'N/D',
-      Cible_Clinique: '< 36% (Stabilité optimale)',
+      Indicateur: 'TIR / GMI / CV',
+      Valeur: 'Non calculés',
+      Remarque: 'Nécessitent un enregistrement CGM continu (contrôles ponctuels insuffisants)',
     },
   ];
-
-  const wsAGP = XLSX.utils.json_to_sheet(agpSummaryRows);
-  wsAGP['!cols'] = [{ wch: 36 }, { wch: 22 }, { wch: 38 }];
-  XLSX.utils.book_append_sheet(wb, wsAGP, 'Synthèse AGP & Diabéto');
+  const summarySheet = toSheet('Synthèse H+2', summaryRows, [36, 22, 60]);
 
   // ==========================================
   // ONGLET 3 : PROFIL & RATIOS INSULINE:GLUCIDES
   // ==========================================
-  const safeProfile = sanitizeUserProfile(profile);
-  const profileRows = [
+  const profileRows: SheetRow[] = [
     { Paramètre: 'Nom du Patient', Valeur: safeProfile.name },
     { Paramètre: 'Unité Glycémique', Valeur: safeProfile.glucoseUnit },
     { Paramètre: 'Glycémie Cible', Valeur: `${safeProfile.targetGlucose} ${safeProfile.glucoseUnit}` },
@@ -201,17 +132,17 @@ export function exportToExcelWorkbook(
     { Paramètre: 'Ratio Iftar (Rupture Jeûne)', Valeur: `1 UI pour ${safeProfile.icRatios.iftar || 8} g` },
     { Paramètre: 'Ratio Sahriya (Soirée)', Valeur: `1 UI pour ${safeProfile.icRatios.sahriya || 9} g` },
     { Paramètre: 'Ratio Shor (Aube)', Valeur: `1 UI pour ${safeProfile.icRatios.shor || 12} g` },
+    { Paramètre: 'Plafond de bolus', Valeur: safeProfile.maxBolusUnits ? `${safeProfile.maxBolusUnits} UI` : 'Valeur par défaut' },
+    { Paramètre: "Durée d'action de l'insuline", Valeur: `${safeProfile.insulinActionHours} h` },
   ];
 
-  const wsProfile = XLSX.utils.json_to_sheet(profileRows);
-  wsProfile['!cols'] = [{ wch: 32 }, { wch: 36 }];
-  XLSX.utils.book_append_sheet(wb, wsProfile, 'Ratios & Paramètres ITF');
+  const profileSheet = toSheet('Ratios & Paramètres', profileRows, [32, 36]);
 
   // ==========================================
   // ONGLET 4 : CALIBRAGE ACTIF & PORTIONS
   // ==========================================
   const portions = profile.customPortions || [];
-  const portionRows = portions.map((p, i) => ({
+  const portionRows: SheetRow[] = portions.map((p, i) => ({
     'N°': i + 1,
     'Aliment Tunisien': p.food_name,
     'Portion Apprise (g)': p.custom_portion_g,
@@ -221,13 +152,21 @@ export function exportToExcelWorkbook(
     'Dernière mise à jour': new Date(p.last_updated).toLocaleDateString('fr-FR'),
   }));
 
-  const wsPortions = XLSX.utils.json_to_sheet(
-    portionRows.length > 0 ? portionRows : [{ Info: 'Aucune portion personnalisée apprise pour le moment.' }]
+  const portionsSheet = toSheet(
+    'Portions Apprises',
+    portionRows.length > 0 ? portionRows : [{ Info: 'Aucune portion personnalisée apprise pour le moment.' }],
+    [6, 30, 20, 24, 18, 24, 20]
   );
-  wsPortions['!cols'] = [{ wch: 6 }, { wch: 30 }, { wch: 20 }, { wch: 24 }, { wch: 18 }, { wch: 24 }, { wch: 20 }];
-  XLSX.utils.book_append_sheet(wb, wsPortions, 'Portions Apprises');
 
-  // Déclenchement du téléchargement
+  return [mealsSheet, summarySheet, profileSheet, portionsSheet];
+}
+
+/**
+ * Exporte l'ensemble des données du patient dans un classeur Excel (.xlsx) multi-onglets.
+ * La bibliothèque d'écriture n'est chargée qu'au moment de l'export.
+ */
+export async function exportToExcelWorkbook(meals: AnalyzedMeal[], profile: UserProfileDT1): Promise<void> {
+  const { default: writeXlsxFile } = await import('write-excel-file/browser');
   const dateStamp = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `GlucoMeal_Export_Diabetologue_${dateStamp}.xlsx`);
+  await writeXlsxFile(buildExcelSheets(meals, profile)).toFile(`GlucoMeal_Export_Diabetologue_${dateStamp}.xlsx`);
 }

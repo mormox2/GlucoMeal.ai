@@ -336,8 +336,20 @@ Cette commande compile le frontend Vite dans `/dist` et bundle `server.ts` avec 
 | `APP_URL` | Non | URL canonique de l'application (ex: `https://glucomeal.ai`). |
 | `PORT` | Non | Port d'écoute du serveur local (par défaut `3000`). |
 | `VERCEL` | Auto | Détecte l'exécution en environnement Vercel Serverless. |
+| `VITE_RECAPTCHA_SITE_KEY` | Recommandé | Clé de site reCAPTCHA v3 pour Firebase App Check. Sans elle, App Check est désactivé. |
+| `VITE_APPCHECK_DEBUG_TOKEN` | Non | Jeton de débogage App Check, pour le développement local uniquement. |
 
-*Note : La configuration Firebase côté client est sécurisée et préconfigurée dans `firebase-applet-config.json`.*
+*Note : la configuration Firebase côté client (clés publiques) est dans `firebase-applet-config.json`.*
+
+### Sécurité Firebase (à faire dans la console)
+
+1. **Déployer les règles** après chaque modification : `firebase deploy --only firestore:rules,storage`.
+2. **App Check** : enregistrer l'application web avec reCAPTCHA v3 (console Firebase > App Check), renseigner `VITE_RECAPTCHA_SITE_KEY`, vérifier les métriques, puis activer l'application obligatoire (« Enforce ») pour Firestore et Storage.
+3. **TTL Firestore** : créer une politique d'expiration sur le champ `expiresAt` de la collection `syncCodes`.
+
+### Nightscout
+
+Utilisez un **jeton d'accès en lecture seule** (Nightscout > Admin Tools > rôle `readable`, ex. `lecture-1a2b3c4d5e6f7a8b`). L'`API_SECRET` est encore accepté (il est envoyé haché en SHA-1, jamais en clair), mais il donne un accès administrateur complet. Une mesure de plus de 15 minutes n'est jamais utilisée pour calculer un bolus.
 
 ---
 

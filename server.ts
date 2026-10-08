@@ -78,7 +78,8 @@ function rateLimiter(maxRequests: number, windowMs: number, customMessage?: stri
   };
 }
 
-app.use(express.json({ limit: '20mb' }));
+// Les photos sont réduites côté client ; la limite des fonctions Vercel est de 4,5 Mo
+app.use(express.json({ limit: '5mb' }));
 
 // Compatibility rewrite if /api prefix is omitted by hosting environment
 app.use((req, res, next) => {

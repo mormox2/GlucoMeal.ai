@@ -53,11 +53,19 @@ if (!getApps().length) {
   app = getApp();
 }
 
-// Initialisation sécurisée App Check si recaptchaSiteKey est configuré
-if (typeof window !== 'undefined' && firebaseConfig.recaptchaSiteKey) {
+// App Check : seules les instances authentiques de l'application peuvent appeler Firestore et Storage
+// (limite la création massive de comptes anonymes et les écritures abusives). La clé de site reCAPTCHA v3
+// vient de VITE_RECAPTCHA_SITE_KEY ou de firebase-applet-config.json ; l'application obligatoire
+// (« enforcement ») s'active ensuite dans la console Firebase > App Check.
+const recaptchaSiteKey = import.meta.env?.VITE_RECAPTCHA_SITE_KEY || firebaseConfig.recaptchaSiteKey;
+if (typeof window !== 'undefined' && recaptchaSiteKey) {
   try {
+    // En développement, un jeton de débogage enregistré dans la console remplace reCAPTCHA
+    if (import.meta.env?.DEV && import.meta.env?.VITE_APPCHECK_DEBUG_TOKEN) {
+      (self as any).FIREBASE_APPCHECK_DEBUG_TOKEN = import.meta.env.VITE_APPCHECK_DEBUG_TOKEN;
+    }
     initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(firebaseConfig.recaptchaSiteKey),
+      provider: new ReCaptchaV3Provider(recaptchaSiteKey),
       isTokenAutoRefreshEnabled: true,
     });
   } catch (err) {
@@ -184,6 +192,8 @@ export async function syncProfileToFirestore(profile: UserProfileDT1): Promise<v
         icRatios: profile.icRatios,
         roundingStep: profile.roundingStep,
         ramadanMode: !!profile.ramadanMode,
+        maxBolusUnits: profile.maxBolusUnits,
+        insulinActionHours: profile.insulinActionHours,
         accountType: profile.accountType || 'patient',
         childProfile: profile.childProfile || null,
         parentEmail: profile.parentEmail || user.email || null,

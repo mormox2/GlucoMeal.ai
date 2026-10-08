@@ -3612,7 +3612,7 @@ function rateLimiter(maxRequests, windowMs, customMessage) {
     next();
   };
 }
-app.use(express.json({ limit: "20mb" }));
+app.use(express.json({ limit: "5mb" }));
 app.use((req, res, next) => {
   if (!req.url.startsWith("/api") && !req.url.startsWith("/assets") && !req.url.startsWith("/src") && !req.url.startsWith("/public") && !req.url.startsWith("/@") && !req.url.startsWith("/node_modules") && req.url !== "/" && !path.extname(req.url.split("?")[0])) {
     req.url = "/api" + req.url;

@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { User, ShieldCheck, Clock, Activity, Target, Save, X, RotateCcw, Sparkles, CheckCircle2, Moon, AlertTriangle, LogOut, Cloud } from 'lucide-react';
 import { ProfileValidationIssue, UserProfileDT1 } from '../types';
-import { DEFAULT_USER_PROFILE, sanitizeUserProfile, validateTherapeuticProfile } from '../utils/storage';
+import {
+  DEFAULT_USER_PROFILE,
+  sanitizeUserProfile,
+  validateTherapeuticProfile,
+  getMaxBolusUnits,
+  isChildProfile,
+} from '../utils/storage';
 import { auth, logoutUser } from '../services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -757,6 +763,60 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   />
                   <span className="text-xs font-bold text-slate-600">{formData.glucoseUnit}</span>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section sécurité : plafond de bolus et durée d'action de l'insuline */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
+              <span className="font-bold text-slate-800 block">
+                {language === 'ar' ? 'سقف الجرعة القصوى' : 'Plafond de bolus'}
+              </span>
+              <p className="text-[11px] text-slate-500">
+                {language === 'ar'
+                  ? `يُحدد مع طبيبك. افتراضياً : ${getMaxBolusUnits({ ...formData, maxBolusUnits: undefined })} وحدة.`
+                  : `À régler avec votre diabétologue. Par défaut : ${getMaxBolusUnits({ ...formData, maxBolusUnits: undefined })} UI${
+                      isChildProfile(formData) ? ' (profil enfant)' : ''
+                    }.`}
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  step="0.5"
+                  placeholder={String(getMaxBolusUnits({ ...formData, maxBolusUnits: undefined }))}
+                  value={formData.maxBolusUnits ?? ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, maxBolusUnits: e.target.value === '' ? undefined : Number(e.target.value) })
+                  }
+                  className="w-24 px-3 py-1.5 rounded-xl border border-slate-200 font-black text-slate-900 text-base text-center outline-none focus:border-emerald-500"
+                />
+                <span className="text-xs font-bold text-slate-600">{language === 'ar' ? 'وحدة كحد أقصى' : 'UI maximum'}</span>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-2">
+              <span className="font-bold text-slate-800 block">
+                {language === 'ar' ? 'مدة مفعول الإنسولين السريع' : "Durée d'action de l'insuline rapide"}
+              </span>
+              <p className="text-[11px] text-slate-500">
+                {language === 'ar'
+                  ? 'تُستعمل لحساب الإنسولين النشط وتجنب تراكم جرعات التصحيح.'
+                  : "Sert à estimer l'insuline encore active et éviter l'empilement des corrections."}
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number"
+                  min="2"
+                  max="8"
+                  step="0.5"
+                  value={formData.insulinActionHours ?? 4}
+                  onChange={(e) => setFormData({ ...formData, insulinActionHours: Number(e.target.value) })}
+                  className="w-24 px-3 py-1.5 rounded-xl border border-slate-200 font-black text-slate-900 text-base text-center outline-none focus:border-emerald-500"
+                />
+                <span className="text-xs font-bold text-slate-600">{language === 'ar' ? 'ساعات' : 'heures'}</span>
               </div>
             </div>
           </div>

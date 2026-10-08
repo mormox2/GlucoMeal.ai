@@ -4,6 +4,7 @@ import {
   MealSlot,
   PhysicalActivityLevel,
   CalculatedBolusSummary,
+  CGMReading,
   ProfileValidationIssue,
 } from '../types';
 import { syncMealToFirestore, syncProfileToFirestore, deleteMealFromFirestore } from '../services/firebase';
@@ -163,6 +164,12 @@ export function sanitizeUserProfile(profile?: Partial<UserProfileDT1> | null): U
     isHoneymoonPhase: Boolean(profile.isHoneymoonPhase),
     diagnosisDate: typeof profile.diagnosisDate === 'string' ? profile.diagnosisDate : undefined,
     honeymoonNotes: typeof profile.honeymoonNotes === 'string' ? profile.honeymoonNotes : undefined,
+    maxBolusUnits:
+      typeof profile.maxBolusUnits === 'number' && profile.maxBolusUnits > 0 ? profile.maxBolusUnits : undefined,
+    insulinActionHours:
+      typeof profile.insulinActionHours === 'number' && profile.insulinActionHours > 0
+        ? profile.insulinActionHours
+        : DEFAULT_INSULIN_ACTION_HOURS,
   };
 }
 
@@ -230,6 +237,52 @@ export function getCurrentMealSlot(ramadanMode: boolean = false): MealSlot {
 }
 
 export const MAX_SAFE_BOLUS_UNITS = 20.0;
+// Plafond par défaut, prudent, d'un profil enfant tant que le soignant n'a pas réglé le plafond
+export const DEFAULT_CHILD_MAX_BOLUS_UNITS = 10.0;
+export const DEFAULT_INSULIN_ACTION_HOURS = 4;
+
+export function isChildProfile(profile: Partial<UserProfileDT1>): boolean {
+  return profile.accountType === 'parent' || Boolean(profile.childProfile);
+}
+
+/**
+ * Plafond de bolus applicable : réglé dans le profil (avec le soignant), sinon 20 UI pour un adulte
+ * et 10 UI pour un enfant.
+ */
+export function getMaxBolusUnits(profile: Partial<UserProfileDT1>): number {
+  if (typeof profile.maxBolusUnits === 'number' && profile.maxBolusUnits > 0) return profile.maxBolusUnits;
+  return isChildProfile(profile) ? DEFAULT_CHILD_MAX_BOLUS_UNITS : MAX_SAFE_BOLUS_UNITS;
+}
+
+/**
+ * Insuline encore active (IOB) des bolus enregistrés, avec une décroissance linéaire sur la durée
+ * d'action de l'insuline rapide. Les repas sans bolus ou au bolus bloqué sont ignorés.
+ */
+export function computeInsulinOnBoard(
+  meals: AnalyzedMeal[],
+  actionHours: number = DEFAULT_INSULIN_ACTION_HOURS,
+  now: number = Date.now(),
+  excludeMealId?: string
+): number {
+  const actionMs = actionHours * 3600 * 1000;
+  let iob = 0;
+  for (const meal of meals) {
+    if (meal.id === excludeMealId) continue;
+    const dose = meal.bolus_calculated?.totalBolus;
+    if (!dose || dose <= 0 || meal.bolus_calculated?.isBlocked) continue;
+    const time = Date.parse(meal.created_at || meal.timestamp || '');
+    if (Number.isNaN(time)) continue;
+    const elapsed = now - time;
+    if (elapsed < 0 || elapsed >= actionMs) continue;
+    iob += dose * (1 - elapsed / actionMs);
+  }
+  return Number(iob.toFixed(2));
+}
+
+export interface BolusCalculationOptions {
+  insulinOnBoard?: number; // Insuline active (UI), voir computeInsulinOnBoard
+  glucoseTrend?: CGMReading['trend']; // Tendance de la lecture CGM utilisée (absente pour une saisie manuelle)
+}
 
 /**
  * Bornes cliniques des paramètres thérapeutiques (par unité de glycémie).
@@ -246,6 +299,8 @@ export const THERAPEUTIC_BOUNDS = {
     'g/L': { min: 0.7, max: 2 },
     'mg/dL': { min: 70, max: 200 },
   },
+  maxBolusUnits: { min: 1, max: 50 },
+  insulinActionHours: { min: 2, max: 8 },
 } as const;
 
 const SLOT_LABELS: Record<MealSlot, { fr: string; ar: string }> = {
@@ -282,6 +337,26 @@ export function validateTherapeuticProfile(profile?: Partial<UserProfileDT1> | n
       field: 'isf',
       fr: `Sensibilité (ISF) ${safe.isf} ${unit}/UI hors bornes (${isf.min} – ${isf.max} ${unit}/UI). Vérifiez l'unité.`,
       ar: `معامل الحساسية ${safe.isf} ${unit}/وحدة خارج الحدود (${isf.min} – ${isf.max}). تحقق من الوحدة.`,
+    });
+  }
+
+  if (safe.maxBolusUnits !== undefined) {
+    const cap = THERAPEUTIC_BOUNDS.maxBolusUnits;
+    if (!(safe.maxBolusUnits >= cap.min && safe.maxBolusUnits <= cap.max)) {
+      issues.push({
+        field: 'maxBolusUnits',
+        fr: `Plafond de bolus ${safe.maxBolusUnits} UI hors bornes (${cap.min} – ${cap.max} UI).`,
+        ar: `سقف الجرعة ${safe.maxBolusUnits} وحدة خارج الحدود (${cap.min} – ${cap.max}).`,
+      });
+    }
+  }
+
+  const action = THERAPEUTIC_BOUNDS.insulinActionHours;
+  if (!(safe.insulinActionHours! >= action.min && safe.insulinActionHours! <= action.max)) {
+    issues.push({
+      field: 'insulinActionHours',
+      fr: `Durée d'action de l'insuline ${safe.insulinActionHours} h hors bornes (${action.min} – ${action.max} h).`,
+      ar: `مدة مفعول الإنسولين ${safe.insulinActionHours} ساعة خارج الحدود (${action.min} – ${action.max}).`,
     });
   }
 
@@ -356,7 +431,8 @@ export function calculatePersonalizedBolus(
   profile: UserProfileDT1,
   slot: MealSlot,
   currentGlucose?: number,
-  activityLevel: PhysicalActivityLevel = 'none'
+  activityLevel: PhysicalActivityLevel = 'none',
+  options: BolusCalculationOptions = {}
 ): CalculatedBolusSummary {
   const safeProfile = sanitizeUserProfile(profile);
   const unit = safeProfile.glucoseUnit;
@@ -400,23 +476,48 @@ export function calculatePersonalizedBolus(
   const isCautionLow =
     normalizedCurrentGlucose !== undefined && !isHypoglycemia && normalizedCurrentGlucose < cautionThreshold;
 
-  // Bolus de correction (si glycémie renseignée et > cible)
+  // Bolus de correction : positif au-dessus de la cible, négatif (réduction du bolus repas) en dessous
   let rawCorrectionBolus = 0;
-  if (
-    typeof normalizedCurrentGlucose === 'number' &&
-    normalizedCurrentGlucose > safeProfile.targetGlucose &&
-    safeProfile.isf > 0
-  ) {
+  if (typeof normalizedCurrentGlucose === 'number' && !isHypoglycemia && safeProfile.isf > 0) {
     rawCorrectionBolus = (normalizedCurrentGlucose - safeProfile.targetGlucose) / safeProfile.isf;
   }
 
-  const rawTotal = netMealBolus + rawCorrectionBolus;
+  // Insuline active (IOB) : déduite de la correction positive pour éviter l'empilement des corrections
+  const insulinOnBoard = Math.max(0, options.insulinOnBoard || 0);
+  let correctionBolus = rawCorrectionBolus;
+  let insulinOnBoardDeducted = 0;
+  if (correctionBolus > 0 && insulinOnBoard > 0) {
+    insulinOnBoardDeducted = Math.min(insulinOnBoard, correctionBolus);
+    correctionBolus -= insulinOnBoardDeducted;
+    warnings.push(
+      `Insuline active : ${insulinOnBoardDeducted.toFixed(1)} UI déduite(s) de la correction (bolus précédents encore actifs).`
+    );
+  } else if (insulinOnBoard > 0 && normalizedCurrentGlucose === undefined) {
+    warnings.push(
+      `Insuline active estimée à ${insulinOnBoard.toFixed(1)} UI (bolus récents) : mesurez votre glycémie avant toute correction.`
+    );
+  }
+
+  // Glycémie en baisse (tendance CGM) : pas de correction positive
+  const isFalling = options.glucoseTrend === 'down_fast' || options.glucoseTrend === 'down_slow';
+  if (correctionBolus > 0 && isFalling) {
+    correctionBolus = 0;
+    warnings.push('Glycémie en baisse (tendance CGM) : aucune correction ajoutée.');
+  }
+  if (correctionBolus < 0) {
+    warnings.push(
+      `Glycémie sous la cible : bolus repas réduit de ${Math.abs(correctionBolus).toFixed(1)} UI (correction négative).`
+    );
+  }
+
+  const rawTotal = netMealBolus + correctionBolus;
   const step = safeProfile.roundingStep || 0.5;
   const roundedTotal = Math.max(0, Math.round(rawTotal / step) * step);
 
-  // Plafond de sécurité maximal absolu (Safety Cap à 20 UI)
-  const exceedsCap = roundedTotal > MAX_SAFE_BOLUS_UNITS;
-  let safeTotalBolus = exceedsCap ? MAX_SAFE_BOLUS_UNITS : roundedTotal;
+  // Plafond de sécurité : réglé dans le profil, sinon 20 UI (adulte) / 10 UI (enfant)
+  const maxBolusUnits = getMaxBolusUnits(safeProfile);
+  const exceedsCap = roundedTotal > maxBolusUnits;
+  let safeTotalBolus = exceedsCap ? maxBolusUnits : roundedTotal;
 
   // Blocages de sécurité : aucune dose n'est proposée
   let blockReason: CalculatedBolusSummary['blockReason'];
@@ -444,7 +545,7 @@ export function calculatePersonalizedBolus(
     safeTotalBolus = 0;
   } else if (isCapped) {
     warnings.push(
-      `⚠️ ALERTE SÉCURITÉ CLINIQUE : Dose calculée (${roundedTotal.toFixed(1)} UI) plafonnée d'office à ${MAX_SAFE_BOLUS_UNITS} UI max pour prévenir tout surdosage critique.`
+      `⚠️ ALERTE SÉCURITÉ CLINIQUE : Dose calculée (${roundedTotal.toFixed(1)} UI) plafonnée d'office à ${maxBolusUnits} UI max pour prévenir tout surdosage critique.`
     );
   }
 
@@ -467,7 +568,12 @@ export function calculatePersonalizedBolus(
     icRatio,
     rawMealBolus: Number(rawMealBolus.toFixed(2)),
     mealBolus: Number(netMealBolus.toFixed(2)),
-    correctionBolus: Number(rawCorrectionBolus.toFixed(2)),
+    correctionBolus: Number(correctionBolus.toFixed(2)),
+    rawCorrectionBolus: Number(rawCorrectionBolus.toFixed(2)),
+    insulinOnBoard,
+    insulinOnBoardDeducted: Number(insulinOnBoardDeducted.toFixed(2)),
+    glucoseTrend: options.glucoseTrend,
+    maxBolusUnits,
     totalBolus: Number(safeTotalBolus.toFixed(1)),
     unclampedTotalBolus: Number(roundedTotal.toFixed(1)),
     isCapped,
@@ -492,10 +598,12 @@ export function calculatePersonalizedBolus(
  * Exporte l'intégralité des données en format JSON de sauvegarde
  */
 export function exportUserDataBackup(): void {
+  // Les identifiants d'appareils (clé Nightscout, mots de passe cloud CGM) ne sont jamais exportés
+  const { cgmConfig: _secrets, ...profile } = loadUserProfile();
   const backupData = {
     exported_at: new Date().toISOString(),
     version: '1.0',
-    profile: loadUserProfile(),
+    profile,
     meals: loadSavedMeals(),
   };
 
@@ -524,7 +632,8 @@ export function importUserDataBackup(jsonContent: string): { success: boolean; c
       }
     }
     if (data.profile) {
-      saveUserProfile(data.profile);
+      // La configuration CGM locale est conservée (elle n'est jamais incluse dans une sauvegarde)
+      saveUserProfile({ ...data.profile, cgmConfig: loadUserProfile().cgmConfig });
     }
     if (Array.isArray(data.meals)) {
       saveMeals(data.meals);

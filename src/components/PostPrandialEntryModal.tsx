@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
 import { evaluatePostPrandialResult, fetchCurrentCGMReading, loadCGMConfig } from '../utils/cgmService';
+import { interpretGlucoseInput } from '../utils/storage';
 import { useLanguage } from '../i18n/LanguageContext';
 
 interface PostPrandialEntryModalProps {
@@ -44,8 +45,12 @@ export const PostPrandialEntryModal: React.FC<PostPrandialEntryModalProps> = ({
 
   if (!isOpen) return null;
 
-  const numVal = parseFloat(glucoseInput);
-  const isValidNumber = !isNaN(numVal) && numVal > 0;
+  // Normalisation identique à l'écran de bolus : « 65 » dans un profil g/L = 0.65 g/L ;
+  // une valeur ambiguë (ex. mmol/L) est refusée
+  const interpreted = interpretGlucoseInput(glucoseInput ? parseFloat(glucoseInput) : undefined, userProfile.glucoseUnit);
+  const isValidNumber = interpreted.status === 'ok';
+  const numVal = interpreted.status === 'ok' ? interpreted.value : NaN;
+  const isInvalidInput = interpreted.status === 'invalid';
   const evaluation = isValidNumber
     ? evaluatePostPrandialResult(numVal, userProfile.targetGlucose, userProfile.glucoseUnit)
     : null;
@@ -197,6 +202,20 @@ export const PostPrandialEntryModal: React.FC<PostPrandialEntryModalProps> = ({
                 {userProfile.glucoseUnit}
               </span>
             </div>
+            {interpreted.status === 'ok' && interpreted.converted && (
+              <p className="text-[11px] text-amber-700 font-semibold">
+                {language === 'ar'
+                  ? `تم تفسير القيمة ${glucoseInput} وتحويلها إلى ${interpreted.value} ${userProfile.glucoseUnit}.`
+                  : `Valeur ${glucoseInput} interprétée et convertie en ${interpreted.value} ${userProfile.glucoseUnit}.`}
+              </p>
+            )}
+            {isInvalidInput && (
+              <p role="alert" className="text-[11px] text-rose-700 font-semibold">
+                {language === 'ar'
+                  ? `قيمة غير مفهومة بوحدة ${userProfile.glucoseUnit} (mmol/L ؟). أعد الإدخال.`
+                  : `Valeur ininterprétable en ${userProfile.glucoseUnit} (mmol/L ?). Ressaisissez la valeur.`}
+              </p>
+            )}
           </div>
 
           {cgmFeedback && (

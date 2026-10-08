@@ -160,13 +160,18 @@ export default function App() {
   };
 
   const handleSavePostPrandial = (mealId: string, glucoseValue: number) => {
-    const updated = savePostPrandialMeasurement(
-      mealId,
-      glucoseValue,
-      userProfile.targetGlucose,
-      userProfile.glucoseUnit
-    );
-    setSavedMeals(updated);
+    try {
+      const updated = savePostPrandialMeasurement(
+        mealId,
+        glucoseValue,
+        userProfile.targetGlucose,
+        userProfile.glucoseUnit
+      );
+      setSavedMeals(updated);
+    } catch (err) {
+      // La saisie est déjà validée dans la fenêtre H+2 ; une valeur ininterprétable n'est jamais enregistrée
+      console.error('Glycémie post-prandiale refusée:', err);
+    }
   };
 
   const handleSaveCGMConfig = (newCfg: CGMConfig) => {
@@ -459,6 +464,7 @@ export default function App() {
                 onConfirmMeal={handleConfirmMeal}
                 onCancel={handleStartNewMeal}
                 onOpenProfileModal={() => setIsProfileModalOpen(true)}
+                recentMeals={savedMeals}
               />
             )}
 

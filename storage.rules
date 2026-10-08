@@ -1,0 +1,24 @@
+rules_version = '2';
+
+// Photos de repas : données de santé, accessibles uniquement par leur propriétaire.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /users/{userId}/meals/{fileName} {
+      function isOwner() {
+        return request.auth != null && request.auth.uid == userId;
+      }
+
+      allow read: if isOwner();
+      // Images uniquement, 5 Mo maximum (les photos sont réduites côté client)
+      allow create, update: if isOwner()
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+      allow delete: if isOwner();
+    }
+
+    // Tout autre chemin est interdit
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import { AnalyzedMeal, UserProfileDT1, MealSlot } from '../types';
 import { sanitizeUserProfile } from './storage';
+import { classifyPostPrandial, getPostPrandialGlucose } from './postPrandial';
 
 export interface SlotTitrationAnalysis {
   slot: MealSlot;
@@ -98,7 +99,7 @@ export function analyzePatientTitration(
 
   (Object.keys(slotsMap) as MealSlot[]).forEach((slot) => {
     const slotMeals = slotsMap[slot];
-    const mealsWithPP = slotMeals.filter((m) => m.post_prandial_glucose !== undefined || m.post_prandial_evaluation);
+    const mealsWithPP = slotMeals.filter((m) => classifyPostPrandial(m, safeProfile) !== undefined);
     const countPP = mealsWithPP.length;
     totalWithPP += countPP;
 
@@ -106,28 +107,23 @@ export function analyzePatientTitration(
     let hyperCount = 0;
     let hypoCount = 0;
     let glucoseSum = 0;
+    let glucoseCount = 0;
 
     mealsWithPP.forEach((m) => {
-      if (m.post_prandial_glucose) {
-        glucoseSum += m.post_prandial_glucose;
+      // Valeurs normalisées dans l'unité du profil (une ancienne saisie « 65 » en g/L = 0.65 g/L, hypo)
+      const value = getPostPrandialGlucose(m, safeProfile.glucoseUnit);
+      if (value !== undefined) {
+        glucoseSum += value;
+        glucoseCount++;
       }
-      if (m.post_prandial_evaluation === 'target') targetCount++;
-      else if (m.post_prandial_evaluation === 'hyper') hyperCount++;
-      else if (m.post_prandial_evaluation === 'hypo') hypoCount++;
-      else if (m.post_prandial_glucose) {
-        // Déduction si évaluation manquante (seuil g/L vs mg/dL)
-        const isMgDl = safeProfile.glucoseUnit === 'mg/dL';
-        const val = m.post_prandial_glucose;
-        const low = isMgDl ? 70 : 0.7;
-        const high = isMgDl ? 180 : 1.8;
-        if (val < low) hypoCount++;
-        else if (val > high) hyperCount++;
-        else targetCount++;
-      }
+      const status = classifyPostPrandial(m, safeProfile);
+      if (status === 'target') targetCount++;
+      else if (status === 'hyper') hyperCount++;
+      else if (status === 'hypo') hypoCount++;
     });
 
     totalTarget += targetCount;
-    const avgPP = countPP > 0 && glucoseSum > 0 ? Math.round((glucoseSum / countPP) * 100) / 100 : null;
+    const avgPP = glucoseCount > 0 ? Math.round((glucoseSum / glucoseCount) * 100) / 100 : null;
 
     const targetPct = countPP > 0 ? Math.round((targetCount / countPP) * 100) : 0;
     const hyperPct = countPP > 0 ? Math.round((hyperCount / countPP) * 100) : 0;

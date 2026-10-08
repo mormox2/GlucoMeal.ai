@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { AnalyzedMeal, UserProfileDT1, MealSlot } from '../types';
 import { analyzePatientTitration } from '../utils/autoTitration';
+import { classifyPostPrandial, getPostPrandialGlucose } from '../utils/postPrandial';
 import { useLanguage } from '../i18n/LanguageContext';
 
 // Portail de consultation en LECTURE SEULE : il ne modifie jamais le profil d'insuline.
@@ -51,40 +52,33 @@ export const DoctorPortalView: React.FC<DoctorPortalViewProps> = ({
 
   const report = analyzePatientTitration(meals, userProfile, language);
 
-  // Calcul des métriques AGP (Ambulatory Glucose Profile)
-  const isMgDl = userProfile.glucoseUnit === 'mg/dL';
-  const ppMeals = meals.filter((m) => m.post_prandial_glucose !== undefined || m.post_prandial_evaluation);
-  const totalPP = ppMeals.length;
+  // Indicateurs calculés sur les contrôles post-prandiaux ponctuels (glycémies normalisées dans l'unité
+  // du profil). Ce ne sont pas des données CGM continues : TIR, GMI et CV ne sont donc pas calculés.
+  // Sans mesure, aucune valeur n'est affichée (aucune statistique par défaut).
+  const unit = userProfile.glucoseUnit;
+  const isMgDl = unit === 'mg/dL';
+  const ppStatuses = meals
+    .map((m) => classifyPostPrandial(m, userProfile))
+    .filter((status): status is NonNullable<typeof status> => status !== undefined);
+  const totalPP = ppStatuses.length;
+  const countOf = (status: string) => ppStatuses.filter((st) => st === status).length;
+  const pctOf = (status: string) => (totalPP > 0 ? Math.round((countOf(status) / totalPP) * 100) : null);
+  const tirPct = pctOf('target');
+  const tarPct = pctOf('hyper');
+  const tbrPct = pctOf('hypo');
+  const formatPct = (pct: number | null) => (pct === null ? '—' : `${pct}%`);
 
-  let targetCount = 0;
-  let hyperCount = 0;
-  let hypoCount = 0;
-  let sumGlucose = 0;
-
-  ppMeals.forEach((m) => {
-    if (m.post_prandial_glucose) sumGlucose += m.post_prandial_glucose;
-    if (m.post_prandial_evaluation === 'target') targetCount++;
-    else if (m.post_prandial_evaluation === 'hyper') hyperCount++;
-    else if (m.post_prandial_evaluation === 'hypo') hypoCount++;
-    else if (m.post_prandial_glucose) {
-      const val = m.post_prandial_glucose;
-      const low = isMgDl ? 70 : 0.7;
-      const high = isMgDl ? 180 : 1.8;
-      if (val < low) hypoCount++;
-      else if (val > high) hyperCount++;
-      else targetCount++;
-    }
-  });
-
-  const tirPct = totalPP > 0 ? Math.round((targetCount / totalPP) * 100) : 75;
-  const tarPct = totalPP > 0 ? Math.round((hyperCount / totalPP) * 100) : 20;
-  const tbrPct = totalPP > 0 ? Math.round((hypoCount / totalPP) * 100) : 5;
-
-  // Calcul HbA1c estimée (GMI)
-  const avgGlucoseMgDl = totalPP > 0 && sumGlucose > 0
-    ? (isMgDl ? sumGlucose / totalPP : (sumGlucose / totalPP) * 100)
-    : 140;
-  const estimatedHbA1c = (3.31 + 0.02392 * avgGlucoseMgDl).toFixed(1);
+  const ppValues = meals
+    .map((m) => getPostPrandialGlucose(m, unit))
+    .filter((v): v is number => v !== undefined);
+  const avgPostPrandial =
+    ppValues.length > 0
+      ? isMgDl
+        ? Math.round(ppValues.reduce((a, v) => a + v, 0) / ppValues.length)
+        : Number((ppValues.reduce((a, v) => a + v, 0) / ppValues.length).toFixed(2))
+      : null;
+  const hypoLimit = isMgDl ? 70 : 0.7;
+  const hyperLimit = isMgDl ? userProfile.targetGlucose + 40 : Number((userProfile.targetGlucose + 0.4).toFixed(2));
 
   const handleSaveNotes = () => {
     localStorage.setItem('glucomal_doctor_notes_v1', consultationNotes);
@@ -168,41 +162,45 @@ export const DoctorPortalView: React.FC<DoctorPortalViewProps> = ({
           <div className="flex items-center gap-3">
             <div className="text-right rtl:text-left">
               <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                {isAr ? 'التراكمي التقديري (HbA1c / GMI)' : 'HbA1c estimée (GMI)'}
+                {isAr ? 'متوسط السكر بعد ساعتين' : 'Glycémie H+2 moyenne'}
               </span>
-              <span className="text-lg font-black text-teal-700">{estimatedHbA1c}%</span>
+              <span className="text-lg font-black text-teal-700">
+                {avgPostPrandial === null ? '—' : `${avgPostPrandial} ${unit}`}
+              </span>
             </div>
             <div className="text-right rtl:text-left pl-3 rtl:pl-0 rtl:pr-3 border-l rtl:border-l-0 rtl:border-r border-slate-200">
               <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                {isAr ? 'استقرار السكر (CV%)' : 'Stabilité (CV%)'}
+                {isAr ? 'قياسات بعد ساعتين' : 'Contrôles H+2'}
               </span>
-              <span className="text-lg font-black text-slate-800">
-                28.4% <span className="text-[10px] text-emerald-600 font-semibold">({isAr ? 'الهدف < 36%' : 'Cible <36%'})</span>
-              </span>
+              <span className="text-lg font-black text-slate-800">{totalPP}</span>
             </div>
           </div>
         </div>
 
-        {/* AGP Ambulatory Glucose Profile Metrics */}
+        {/* Contrôles post-prandiaux (H+2) : pas un profil AGP, faute de données CGM continues */}
+        <p className="text-[11px] text-slate-500 -mb-2">
+          {isAr
+            ? 'مؤشرات محسوبة على قياسات متفرقة بعد الوجبات بساعتين، وليست على تسجيل CGM متواصل (لا يمكن حساب TIR وGMI).'
+            : 'Indicateurs calculés sur les contrôles ponctuels à H+2, pas sur un enregistrement CGM continu (TIR et GMI non calculables).'}
+          {totalPP === 0 && (isAr ? ' لا توجد قياسات بعد.' : ' Aucun contrôle enregistré pour le moment.')}
+        </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* TIR */}
           <div className="p-5 rounded-3xl bg-emerald-50/70 border border-emerald-200/80 shadow-xs">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-emerald-900 uppercase tracking-wider">
-                {isAr ? 'الوقت في النطاق المستهدف (TIR)' : 'Temps dans la Cible (TIR)'}
+                {isAr ? 'قياسات H+2 في الهدف' : 'Contrôles H+2 dans la cible'}
               </span>
               <span className="text-[10px] font-black bg-emerald-200/60 text-emerald-900 px-2 py-0.5 rounded">
                 {isAr ? 'الهدف > 70%' : 'Cible > 70%'}
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl sm:text-4xl font-black text-emerald-800">{tirPct}%</span>
-              <span className="text-xs text-emerald-700 font-medium">0.70 - 1.80 g/L</span>
+              <span className="text-3xl sm:text-4xl font-black text-emerald-800">{formatPct(tirPct)}</span>
+              <span className="text-xs text-emerald-700 font-medium">{hypoLimit} - {hyperLimit} {unit}</span>
             </div>
             <p className="text-[11px] text-emerald-700 mt-2">
-              {isAr
-                ? 'مستويات السكر بعد الأكل بساعتين متوازنة وضمن النطاق العلاجي.'
-                : 'Glycémies post-prandiales H+2 parfaitement équilibrées.'}
+              {isAr ? `${countOf('target')} من ${totalPP} قياس.` : `${countOf('target')} contrôle(s) sur ${totalPP}.`}
             </p>
           </div>
 
@@ -210,20 +208,18 @@ export const DoctorPortalView: React.FC<DoctorPortalViewProps> = ({
           <div className="p-5 rounded-3xl bg-amber-50/70 border border-amber-200/80 shadow-xs">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-amber-900 uppercase tracking-wider">
-                {isAr ? 'وقت ارتفاع السكر (TAR)' : 'En Hyperglycémie (TAR)'}
+                {isAr ? 'قياسات H+2 مرتفعة' : 'Contrôles H+2 au-dessus de la cible'}
               </span>
               <span className="text-[10px] font-black bg-amber-200/60 text-amber-900 px-2 py-0.5 rounded">
                 {isAr ? 'الهدف < 25%' : 'Cible < 25%'}
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl sm:text-4xl font-black text-amber-800">{tarPct}%</span>
-              <span className="text-xs text-amber-700 font-medium">&gt; 1.40 g/L</span>
+              <span className="text-3xl sm:text-4xl font-black text-amber-800">{formatPct(tarPct)}</span>
+              <span className="text-xs text-amber-700 font-medium">&gt; {hyperLimit} {unit}</span>
             </div>
             <p className="text-[11px] text-amber-700 mt-2">
-              {isAr
-                ? 'ارتفاعات سكرية ملحوظة بعد الوجبات ذات الحمل الكربوهيدراتي العالي.'
-                : 'Pics hyperglycémiques constatés sur les repas à charge glucidique élevée.'}
+              {isAr ? `${countOf('hyper')} من ${totalPP} قياس.` : `${countOf('hyper')} contrôle(s) sur ${totalPP}.`}
             </p>
           </div>
 
@@ -231,20 +227,18 @@ export const DoctorPortalView: React.FC<DoctorPortalViewProps> = ({
           <div className="p-5 rounded-3xl bg-rose-50/70 border border-rose-200/80 shadow-xs">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-rose-900 uppercase tracking-wider">
-                {isAr ? 'وقت هبوط السكر (TBR)' : 'En Hypoglycémie (TBR)'}
+                {isAr ? 'قياسات H+2 منخفضة' : 'Contrôles H+2 en hypoglycémie'}
               </span>
               <span className="text-[10px] font-black bg-rose-200/60 text-rose-900 px-2 py-0.5 rounded">
                 {isAr ? 'أمان سريري < 4%' : 'Sécurité < 4%'}
               </span>
             </div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl sm:text-4xl font-black text-rose-800">{tbrPct}%</span>
-              <span className="text-xs text-rose-700 font-medium">&lt; 0.70 g/L</span>
+              <span className="text-3xl sm:text-4xl font-black text-rose-800">{formatPct(tbrPct)}</span>
+              <span className="text-xs text-rose-700 font-medium">&lt; {hypoLimit} {unit}</span>
             </div>
             <p className="text-[11px] text-rose-700 mt-2">
-              {isAr
-                ? 'مراقبة نشطة لمنع هبوط السكر الليلي وبعد الوجبات.'
-                : 'Surveillance active anti-hypoglycémie nocturne et post-prandiale.'}
+              {isAr ? `${countOf('hypo')} من ${totalPP} قياس.` : `${countOf('hypo')} contrôle(s) sur ${totalPP}.`}
             </p>
           </div>
         </div>

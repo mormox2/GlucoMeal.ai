@@ -1,5 +1,6 @@
 import { CGMConfig, CGMReading, AnalyzedMeal } from '../types';
-import { loadSavedMeals, saveMeals } from './storage';
+import { loadSavedMeals, saveMeals, interpretGlucoseInput } from './storage';
+import { readLatestGlucoseRecord } from './bleGlucose';
 
 export type { CGMConfig };
 
@@ -52,32 +53,104 @@ export function saveCGMConfig(config: CGMConfig): void {
   }
 }
 
+// Au-delà de cet âge, une mesure ne doit plus servir à calculer une correction d'insuline
+export const MAX_READING_AGE_MINUTES = 15;
+
 /**
- * Lit la glycémie actuelle depuis le capteur CGM (ou passerelle LibreLinkUp / Dexcom Share / Nightscout)
+ * Âge d'une mesure en minutes (null si l'horodatage est absent ou invalide).
+ */
+export function getReadingAgeMinutes(timestampMs: number | undefined, now: number = Date.now()): number | null {
+  if (typeof timestampMs !== 'number' || !Number.isFinite(timestampMs)) return null;
+  return Math.round((now - timestampMs) / 60000);
+}
+
+/**
+ * Refuse une mesure trop ancienne (capteur déconnecté, lecteur avec une mesure du matin…)
+ * ou sans horodatage fiable.
+ */
+export function assertFreshReading(timestampMs: number | undefined, sourceLabel: string, now: number = Date.now()): number {
+  const age = getReadingAgeMinutes(timestampMs, now);
+  if (age === null) {
+    throw new Error(`${sourceLabel} : mesure sans horodatage fiable. Mesurez au glucomètre et saisissez la valeur.`);
+  }
+  if (age > MAX_READING_AGE_MINUTES) {
+    throw new Error(
+      `${sourceLabel} : dernière mesure datant de ${age} min (maximum ${MAX_READING_AGE_MINUTES} min). Elle est trop ancienne pour calculer un bolus : mesurez au glucomètre et saisissez la valeur.`
+    );
+  }
+  if (age < -5) {
+    throw new Error(`${sourceLabel} : horodatage de la mesure dans le futur (horloge de l'appareil ?). Saisissez la valeur manuellement.`);
+  }
+  return Math.max(0, age);
+}
+
+/**
+ * Lit la dernière mesure d'un appareil Bluetooth (profil Glucose standard) et vérifie qu'elle est récente.
+ */
+async function readFreshBleGlucose(
+  server: any,
+  label: string
+): Promise<{ mgdl: number; time: Date } | { error: string }> {
+  try {
+    const record = await readLatestGlucoseRecord(server);
+    assertFreshReading(record.time?.getTime(), label);
+    if (record.mgdl < 20 || record.mgdl > 600) {
+      return { error: `${label} : valeur hors plage mesurable (${record.mgdl} mg/dL).` };
+    }
+    return { mgdl: record.mgdl, time: record.time! };
+  } catch (err: any) {
+    return { error: err?.message || `${label} : lecture impossible.` };
+  }
+}
+
+// Jeton d'accès Nightscout (ex. « lecture-1a2b3c4d5e6f7a8b ») : nom du sujet + 16 caractères hexadécimaux
+const NIGHTSCOUT_TOKEN_PATTERN = /^[a-z0-9_.-]+-[0-9a-f]{16}$/i;
+
+export function isNightscoutAccessToken(value: string): boolean {
+  return NIGHTSCOUT_TOKEN_PATTERN.test(value.trim());
+}
+
+async function sha1Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-1', new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Authentification Nightscout :
+ * - jeton d'accès en lecture seule (recommandé) : passé en paramètre « token » ;
+ * - API_SECRET (accès administrateur, déconseillé) : envoyé sous forme d'empreinte SHA-1,
+ *   comme l'exige Nightscout, jamais en clair.
+ */
+export async function buildNightscoutAuth(
+  credential: string | undefined
+): Promise<{ query: string; headers: Record<string, string> }> {
+  const value = credential?.trim();
+  if (!value || value === '********') return { query: '', headers: {} };
+  if (isNightscoutAccessToken(value)) {
+    return { query: `&token=${encodeURIComponent(value)}`, headers: {} };
+  }
+  return { query: '', headers: { 'api-secret': await sha1Hex(value) } };
+}
+
 /**
  * Interroge l'API REST standard de Nightscout (/api/v1/entries/sgv.json)
  */
 export async function fetchNightscoutReading(
   config: CGMConfig,
-  unit: 'g/L' | 'mg/dL' = 'g/L'
+  unit: 'g/L' | 'mg/dL' = 'g/L',
+  now: number = Date.now()
 ): Promise<CGMReading> {
   const rawUrl = config.nightscoutUrl?.trim();
   if (!rawUrl) {
     throw new Error("URL Nightscout non renseignée.");
   }
   const cleanUrl = rawUrl.replace(/\/+$/, '');
-  const apiUrl = `${cleanUrl}/api/v1/entries/sgv.json?count=12`;
-
-  const headers: Record<string, string> = {
-    'Accept': 'application/json',
-  };
-  if (config.apiKey && config.apiKey.trim() !== '********') {
-    headers['api-secret'] = config.apiKey.trim();
-  }
+  const auth = await buildNightscoutAuth(config.apiKey);
+  const apiUrl = `${cleanUrl}/api/v1/entries/sgv.json?count=12${auth.query}`;
 
   const response = await fetch(apiUrl, {
     method: 'GET',
-    headers,
+    headers: { Accept: 'application/json', ...auth.headers },
   });
 
   if (!response.ok) {
@@ -93,6 +166,10 @@ export async function fetchNightscoutReading(
   if (!latest || typeof latest.sgv !== 'number') {
     throw new Error("La dernière mesure Nightscout est invalide ou ne contient pas de valeur glycémique SGV réelle.");
   }
+  const readingTime =
+    typeof latest.date === 'number' ? latest.date : latest.dateString ? Date.parse(latest.dateString) : undefined;
+  const ageMinutes = assertFreshReading(readingTime, 'Nightscout', now);
+
   const rawSgv = latest.sgv;
   const glucose = unit === 'g/L' ? Number((rawSgv / 100).toFixed(2)) : Math.round(rawSgv);
 
@@ -114,7 +191,7 @@ export async function fetchNightscoutReading(
   const recentSparkline = sortedEntries
     .filter((e) => typeof e.sgv === 'number')
     .map((e) => {
-      const d = new Date(e.date || e.dateString || Date.now());
+      const d = new Date(e.date || e.dateString || now);
       const hours = d.getHours().toString().padStart(2, '0');
       const minutes = d.getMinutes().toString().padStart(2, '0');
       return {
@@ -123,17 +200,17 @@ export async function fetchNightscoutReading(
       };
     });
 
+  // Seules les informations réellement fournies par Nightscout sont renvoyées (aucune valeur inventée)
   return {
     glucose,
     unit,
     trend,
-    timestamp: new Date(latest.date || latest.dateString || Date.now()).toISOString(),
+    timestamp: new Date(readingTime!).toISOString(),
+    ageMinutes,
     device: 'nightscout',
-    sensorExpiryDays: config.sensorExpiryDays || 14,
-    sensorSerialNumber: config.sensorSerialNumber || latest.device || 'NS-LIVE-01',
-    sensorModelName: latest.device ? `Nightscout (${latest.device})` : 'Nightscout Rest API (Direct)',
-    mardScore: '8.5%',
-    batteryLevel: 98,
+    sensorExpiryDays: config.sensorExpiryDays,
+    sensorSerialNumber: config.sensorSerialNumber || latest.device,
+    sensorModelName: latest.device ? `Nightscout (${latest.device})` : 'Nightscout',
     recentSparkline,
     isSimulation: false,
     source: 'nightscout_live',
@@ -212,10 +289,11 @@ export function evaluatePostPrandialResult(
           ? targetGlucose.targetGlucose
           : (isGL ? 1.0 : 100));
 
-  const cleanGlucose =
-    typeof postPrandialGlucose === 'number' && !isNaN(postPrandialGlucose)
-      ? postPrandialGlucose
-      : (isGL ? 1.2 : 120);
+  // Aucune valeur par défaut : une mesure invalide ne doit jamais être classée « dans la cible »
+  if (typeof postPrandialGlucose !== 'number' || !Number.isFinite(postPrandialGlucose) || postPrandialGlucose <= 0) {
+    throw new Error('Glycémie post-prandiale invalide.');
+  }
+  const cleanGlucose = postPrandialGlucose;
 
   const delta = Number((cleanGlucose - cleanTarget).toFixed(2));
 
@@ -269,13 +347,20 @@ export function savePostPrandialMeasurement(
   }
 
   const meals = loadSavedMeals();
-  const evaluation = evaluatePostPrandialResult(glucoseValue, safeTarget, safeUnit);
+  // Même normalisation que la glycémie pré-prandiale (« 65 » dans un profil g/L = 0.65 g/L)
+  const interpreted = interpretGlucoseInput(glucoseValue, safeUnit);
+  if (interpreted.status !== 'ok') {
+    throw new Error(`Glycémie post-prandiale (${glucoseValue}) ininterprétable en ${safeUnit}.`);
+  }
+  const normalizedGlucose = interpreted.value;
+  const evaluation = evaluatePostPrandialResult(normalizedGlucose, safeTarget, safeUnit);
 
   const updatedMeals = meals.map((m) => {
     if (m.id === mealId) {
       return {
         ...m,
-        post_prandial_glucose: glucoseValue,
+        post_prandial_glucose: normalizedGlucose,
+        post_prandial_unit: safeUnit,
         post_prandial_timestamp: new Date().toISOString(),
         post_prandial_evaluation: evaluation.status,
       };
@@ -381,26 +466,16 @@ export async function connectBluetoothGlucoseMeter(
 
       const server = await device.gatt?.connect();
       let valMgDl: number | null = null;
-      try {
-        if (server) {
-          const service = await server.getPrimaryService('glucose');
-          const char = await service.getCharacteristic(0x2a18);
-          const value = await char.readValue();
-          if (value && value.byteLength >= 14) {
-            const rawConcentration = value.getUint16(12, true);
-            const mantissa = rawConcentration & 0x0fff;
-            const exponent =
-              (rawConcentration >> 12) >= 8
-                ? (rawConcentration >> 12) - 16
-                : rawConcentration >> 12;
-            const computedVal = mantissa * Math.pow(10, exponent) * 100000;
-            if (computedVal > 30 && computedVal < 500) {
-              valMgDl = Math.round(computedVal);
-            }
-          }
+      let measuredAt: Date | null = null;
+      let readError = '';
+      if (server) {
+        const result = await readFreshBleGlucose(server, device.name || 'Lecteur Bluetooth');
+        if ('error' in result) {
+          readError = result.error;
+        } else {
+          valMgDl = result.mgdl;
+          measuredAt = result.time;
         }
-      } catch (e) {
-        console.warn('Lecture caractéristique BLE directe non disponible:', e);
       }
 
       if (valMgDl === null) {
@@ -411,7 +486,7 @@ export async function connectBluetoothGlucoseMeter(
           timestamp: new Date().toISOString(),
           source: 'bluetooth_real',
           isSimulation: false,
-          message: `Appareil ${device.name || 'BLE'} connecté, mais aucune mesure exacte n'a pu être extraite du service Bluetooth (GATT 0x1808). Aucune simulation autorisée.`,
+          message: `Appareil ${device.name || 'BLE'} connecté, mais aucune mesure exacte n'a pu être extraite du service Bluetooth (GATT 0x1808). Aucune simulation autorisée.${readError ? ` (${readError})` : ''}`,
         };
       }
 
@@ -423,7 +498,7 @@ export async function connectBluetoothGlucoseMeter(
         deviceName: device.name || 'Lecteur BLE Connecté',
         glucoseValue: finalVal,
         unit,
-        timestamp: new Date().toISOString(),
+        timestamp: (measuredAt || new Date()).toISOString(),
         source: 'bluetooth_real',
         isSimulation: false,
         message: `Connecté à ${device.name || 'Lecteur BLE'} ! Glycémie réelle reçue : ${finalVal} ${unit}`,
@@ -487,26 +562,21 @@ export async function connectLinxCGM(
 
       if (device) {
         let finalVal: number | null = null;
+        let measuredAt: Date | null = null;
+        let readError = '';
         try {
           const server = await device.gatt?.connect();
           if (server) {
-            const service = await server.getPrimaryService('glucose');
-            const char = await service.getCharacteristic(0x2a18);
-            const value = await char.readValue();
-            if (value && value.byteLength >= 14) {
-              const rawConcentration = value.getUint16(12, true);
-              const mantissa = rawConcentration & 0x0fff;
-              const exponent =
-                (rawConcentration >> 12) >= 8
-                  ? (rawConcentration >> 12) - 16
-                  : rawConcentration >> 12;
-              const computedVal = mantissa * Math.pow(10, exponent) * 100000;
-              if (computedVal > 30 && computedVal < 500) {
-                finalVal = unit === 'g/L' ? Number((computedVal / 100).toFixed(2)) : Math.round(computedVal);
-              }
+            const result = await readFreshBleGlucose(server, 'LinX');
+            if ('error' in result) {
+              readError = result.error;
+            } else {
+              finalVal = unit === 'g/L' ? Number((result.mgdl / 100).toFixed(2)) : result.mgdl;
+              measuredAt = result.time;
             }
           }
-        } catch (e) {
+        } catch (e: any) {
+          readError = e?.message || '';
           console.warn('LinX GATT direct connect info:', e);
         }
 
@@ -520,7 +590,7 @@ export async function connectLinxCGM(
             glucoseValue: finalVal,
             unit,
             trend: 'flat',
-            timestamp: new Date().toISOString(),
+            timestamp: (measuredAt || new Date()).toISOString(),
             sensorExpiryDays: 15,
             mardScore: '8.9%',
             batteryLevel: 94,
@@ -548,7 +618,7 @@ export async function connectLinxCGM(
           specsHighlight: 'Étanche IP68 • 15 Jours',
           source: 'bluetooth_real',
           isSimulation: false,
-          message: `Capteur LinX appairé (${device.name || 'LinX'}), mais le flux propriétaire chiffré requiert la passerelle officielle LinX ou Nightscout. Aucune simulation autorisée.`,
+          message: `Capteur LinX appairé (${device.name || 'LinX'}), mais le flux propriétaire chiffré requiert la passerelle officielle LinX ou Nightscout. Aucune simulation autorisée.${readError ? ` (${readError})` : ''}`,
         };
       }
     } catch (err: any) {
@@ -619,26 +689,21 @@ export async function connectSyaiTagCGM(
 
       if (device) {
         let finalVal: number | null = null;
+        let measuredAt: Date | null = null;
+        let readError = '';
         try {
           const server = await device.gatt?.connect();
           if (server) {
-            const service = await server.getPrimaryService('glucose');
-            const char = await service.getCharacteristic(0x2a18);
-            const value = await char.readValue();
-            if (value && value.byteLength >= 14) {
-              const rawConcentration = value.getUint16(12, true);
-              const mantissa = rawConcentration & 0x0fff;
-              const exponent =
-                (rawConcentration >> 12) >= 8
-                  ? (rawConcentration >> 12) - 16
-                  : rawConcentration >> 12;
-              const computedVal = mantissa * Math.pow(10, exponent) * 100000;
-              if (computedVal > 30 && computedVal < 500) {
-                finalVal = unit === 'g/L' ? Number((computedVal / 100).toFixed(2)) : Math.round(computedVal);
-              }
+            const result = await readFreshBleGlucose(server, 'Syai Tag');
+            if ('error' in result) {
+              readError = result.error;
+            } else {
+              finalVal = unit === 'g/L' ? Number((result.mgdl / 100).toFixed(2)) : result.mgdl;
+              measuredAt = result.time;
             }
           }
-        } catch (e) {
+        } catch (e: any) {
+          readError = e?.message || '';
           console.warn('Syai Tag direct connect notice:', e);
         }
 
@@ -652,7 +717,7 @@ export async function connectSyaiTagCGM(
             glucoseValue: finalVal,
             unit,
             trend: 'up_slow',
-            timestamp: new Date().toISOString(),
+            timestamp: (measuredAt || new Date()).toISOString(),
             sensorExpiryDays: 14,
             mardScore: '8.1% (Excellence clinique)',
             batteryLevel: 97,
@@ -680,7 +745,7 @@ export async function connectSyaiTagCGM(
           specsHighlight: 'Ultra-léger 1.2g • MARD 8.1%',
           source: 'bluetooth_real',
           isSimulation: false,
-          message: `Capteur Syai Tag appairé (${device.name || 'Syai Tag'}), mais la trame propriétaire requiert la passerelle officielle Syai ou Nightscout. Aucune simulation autorisée.`,
+          message: `Capteur Syai Tag appairé (${device.name || 'Syai Tag'}), mais la trame propriétaire requiert la passerelle officielle Syai ou Nightscout. Aucune simulation autorisée.${readError ? ` (${readError})` : ''}`,
         };
       }
     } catch (err: any) {

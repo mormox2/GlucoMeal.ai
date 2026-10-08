@@ -7,8 +7,11 @@ import {
   validateTherapeuticProfile,
   saveUserProfile,
   interpretGlucoseInput,
+  computeInsulinOnBoard,
+  getMaxBolusUnits,
+  DEFAULT_CHILD_MAX_BOLUS_UNITS,
 } from '../storage';
-import { UserProfileDT1 } from '../../types';
+import { AnalyzedMeal, UserProfileDT1 } from '../../types';
 
 describe('Calculateur de Bolus & Plafond de Sécurité (DT1)', () => {
   const baseProfile: UserProfileDT1 = {
@@ -188,7 +191,9 @@ describe('Blocages de sécurité du bolus (hypoglycémie, profil, saisies invali
     expect(res.currentGlucose).toBe(0.75);
     expect(res.isCautionLow).toBe(true);
     expect(res.isBlocked).toBe(false);
-    expect(res.totalBolus).toBe(6);
+    // Correction négative : (0.75 - 1.0) / 0.4 = -0.625 UI → 6 - 0.625 = 5.375 → arrondi 5.5
+    expect(res.correctionBolus).toBe(-0.63);
+    expect(res.totalBolus).toBe(5.5);
   });
 
   it('refuse une glycémie ininterprétable (ex. 12, probablement en mmol/L)', () => {
@@ -266,5 +271,74 @@ describe('Interprétation de la glycémie saisie (interpretGlucoseInput)', () =>
   it('considère une saisie vide comme absente', () => {
     expect(interpretGlucoseInput(undefined, 'g/L')).toEqual({ status: 'empty' });
     expect(interpretGlucoseInput(NaN, 'g/L')).toEqual({ status: 'empty' });
+  });
+});
+
+describe('Insuline active, tendance CGM et plafond adapté', () => {
+  const profile: UserProfileDT1 = {
+    ...DEFAULT_USER_PROFILE,
+    glucoseUnit: 'g/L',
+    targetGlucose: 1.0,
+    isf: 0.4,
+    icRatios: { ...DEFAULT_USER_PROFILE.icRatios, lunch: 10 },
+  };
+  const now = Date.parse('2026-10-08T12:00:00Z');
+  const mealAt = (id: string, minutesAgo: number, totalBolus: number, extra: Partial<AnalyzedMeal['bolus_calculated']> = {}) =>
+    ({
+      id,
+      meal_name: id,
+      input_type: 'text',
+      items: [],
+      total_carbs: 50,
+      overall_confidence: 'high',
+      confidence_score: 90,
+      created_at: new Date(now - minutesAgo * 60000).toISOString(),
+      bolus_calculated: { slot: 'lunch', icRatio: 10, mealBolus: totalBolus, correctionBolus: 0, totalBolus, ...extra },
+    }) as AnalyzedMeal;
+
+  it('calcule l’insuline active avec une décroissance linéaire sur la durée d’action', () => {
+    const meals = [mealAt('a', 60, 8), mealAt('b', 300, 6), mealAt('c', 30, 4, { isBlocked: true })];
+    // 8 UI il y a 1 h sur 4 h → 6 UI actives ; le bolus de 5 h est terminé ; le bolus bloqué est ignoré
+    expect(computeInsulinOnBoard(meals, 4, now)).toBe(6);
+    expect(computeInsulinOnBoard(meals, 4, now, 'a')).toBe(0);
+  });
+
+  it('déduit l’insuline active de la correction (pas d’empilement des corrections)', () => {
+    // Correction brute (1.8 - 1.0) / 0.4 = 2 UI ; 1.5 UI encore active → 0.5 UI de correction
+    const res = calculatePersonalizedBolus(40, profile, 'lunch', 1.8, 'none', { insulinOnBoard: 1.5 });
+    expect(res.rawCorrectionBolus).toBe(2);
+    expect(res.insulinOnBoardDeducted).toBe(1.5);
+    expect(res.correctionBolus).toBe(0.5);
+    expect(res.totalBolus).toBe(4.5);
+  });
+
+  it('ne déduit jamais l’insuline active du bolus repas', () => {
+    const res = calculatePersonalizedBolus(40, profile, 'lunch', 1.0, 'none', { insulinOnBoard: 5 });
+    expect(res.totalBolus).toBe(4);
+  });
+
+  it('n’ajoute aucune correction si la glycémie est en baisse (tendance CGM)', () => {
+    const res = calculatePersonalizedBolus(40, profile, 'lunch', 1.8, 'none', { glucoseTrend: 'down_fast' });
+    expect(res.correctionBolus).toBe(0);
+    expect(res.totalBolus).toBe(4);
+  });
+
+  it('applique un plafond de 10 UI par défaut à un profil enfant', () => {
+    const child: UserProfileDT1 = { ...profile, accountType: 'parent' };
+    expect(getMaxBolusUnits(child)).toBe(DEFAULT_CHILD_MAX_BOLUS_UNITS);
+    const res = calculatePersonalizedBolus(150, child, 'lunch');
+    expect(res.isCapped).toBe(true);
+    expect(res.totalBolus).toBe(DEFAULT_CHILD_MAX_BOLUS_UNITS);
+  });
+
+  it('applique le plafond réglé dans le profil', () => {
+    const res = calculatePersonalizedBolus(100, { ...profile, maxBolusUnits: 6 }, 'lunch');
+    expect(res.totalBolus).toBe(6);
+    expect(res.maxBolusUnits).toBe(6);
+  });
+
+  it('refuse un plafond ou une durée d’action hors bornes', () => {
+    const issues = validateTherapeuticProfile({ ...profile, maxBolusUnits: 80, insulinActionHours: 12 });
+    expect(issues.map((i) => i.field).sort()).toEqual(['insulinActionHours', 'maxBolusUnits']);
   });
 });

@@ -33,6 +33,7 @@ import {
 } from 'recharts';
 import { AnalyzedMeal, UserProfileDT1 } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
+import { classifyPostPrandial, getPostPrandialGlucose } from '../utils/postPrandial';
 
 interface MedicalReportModalProps {
   isOpen: boolean;
@@ -81,7 +82,7 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
         avgDailyBolus: 0,
         totalCarbsSum: 0,
         totalBolusSum: 0,
-        targetPostPrandialRate: 0,
+        targetPostPrandialRate: null as number | null,
         hyperPostPrandialCount: 0,
         hypoPostPrandialCount: 0,
         slotBreakdown: { morning: 0, lunch: 0, dinner: 0, snack: 0 },
@@ -120,12 +121,13 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
         slotCarbs[slot].totalCarbs += meal.total_carbs;
       }
 
-      // Post-prandial
-      if (typeof meal.post_prandial_glucose === 'number') {
+      // Post-prandial (classé sur la glycémie normalisée dans l'unité du profil)
+      const ppStatus = classifyPostPrandial(meal, userProfile);
+      if (ppStatus) {
         postPrandialMeasured += 1;
-        if (meal.post_prandial_evaluation === 'target') postPrandialInTarget += 1;
-        if (meal.post_prandial_evaluation === 'hyper') hyperCount += 1;
-        if (meal.post_prandial_evaluation === 'hypo') hypoCount += 1;
+        if (ppStatus === 'target') postPrandialInTarget += 1;
+        if (ppStatus === 'hyper') hyperCount += 1;
+        if (ppStatus === 'hypo') hypoCount += 1;
       }
 
       // Frequence plat
@@ -152,10 +154,9 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
     const avgDailyCarbs = Math.round(totalCarbsSum / uniqueDaysCount);
     const avgDailyBolus = Number((totalBolusSum / uniqueDaysCount).toFixed(1));
 
-    const targetPostPrandialRate =
-      postPrandialMeasured > 0
-        ? Math.round((postPrandialInTarget / postPrandialMeasured) * 100)
-        : 85;
+    // Sans contrôle enregistré, aucun taux n'est affiché (pas de valeur par défaut)
+    const targetPostPrandialRate: number | null =
+      postPrandialMeasured > 0 ? Math.round((postPrandialInTarget / postPrandialMeasured) * 100) : null;
 
     // Top 5 repas
     const topMeals = Object.entries(mealFrequency)
@@ -204,7 +205,7 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
       topMeals,
       dailyData,
     };
-  }, [filteredMeals, periodDays, isAr, dateLocale]);
+  }, [filteredMeals, periodDays, isAr, dateLocale, userProfile]);
 
   // Données de répartition des créneaux pour graphique Pie
   const slotPieData = [
@@ -274,8 +275,10 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
         m.bolus_calculated?.correctionBolus || 0,
         m.bolus_calculated?.totalBolus || '',
         m.bolus_calculated?.currentGlucose ? `${m.bolus_calculated.currentGlucose} ${userProfile.glucoseUnit}` : '',
-        m.post_prandial_glucose ? `${m.post_prandial_glucose} ${userProfile.glucoseUnit}` : '',
-        `"${m.post_prandial_evaluation || (isAr ? 'لم يُقس' : 'Non renseigné')}"`,
+        getPostPrandialGlucose(m, userProfile.glucoseUnit) !== undefined
+          ? `${getPostPrandialGlucose(m, userProfile.glucoseUnit)} ${userProfile.glucoseUnit}`
+          : '',
+        `"${classifyPostPrandial(m, userProfile) || (isAr ? 'لم يُقس' : 'Non renseigné')}"`,
         m.dual_wave?.is_recommended ? (isAr ? 'نعم (60% فوري / 40% ممتد)' : 'Oui (60% imm. / 40% étalé)') : (isAr ? 'لا' : 'Non'),
         `"${ingredients.replace(/"/g, '""')}"`,
       ].join(',');
@@ -506,7 +509,7 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
                   {isAr ? 'الهدف بعد الأكل (+2س)' : 'Objectif Post-Prandial (+2h)'}
                 </span>
                 <span className="text-2xl font-black text-emerald-800">
-                  {stats.targetPostPrandialRate}%
+                  {stats.targetPostPrandialRate === null ? '—' : `${stats.targetPostPrandialRate}%`}
                 </span>
                 <span className="text-[10px] text-slate-500 block mt-0.5">
                   {stats.hyperPostPrandialCount > 0 &&
@@ -730,17 +733,17 @@ export const MedicalReportModal: React.FC<MedicalReportModalProps> = ({
                           {meal.post_prandial_glucose ? (
                             <span
                               className={`font-bold px-2 py-0.5 rounded-md ${
-                                meal.post_prandial_evaluation === 'target'
+                                classifyPostPrandial(meal, userProfile) === 'target'
                                   ? 'bg-emerald-100 text-emerald-800'
-                                  : meal.post_prandial_evaluation === 'hyper'
+                                  : classifyPostPrandial(meal, userProfile) === 'hyper'
                                   ? 'bg-amber-100 text-amber-800'
                                   : 'bg-rose-100 text-rose-800'
                               }`}
                             >
-                              {meal.post_prandial_glucose} {userProfile.glucoseUnit}
-                              {meal.post_prandial_evaluation === 'target' && ' 🎯'}
-                              {meal.post_prandial_evaluation === 'hyper' && ' ⚠️'}
-                              {meal.post_prandial_evaluation === 'hypo' && ' 🚨'}
+                              {getPostPrandialGlucose(meal, userProfile.glucoseUnit) ?? meal.post_prandial_glucose} {userProfile.glucoseUnit}
+                              {classifyPostPrandial(meal, userProfile) === 'target' && ' 🎯'}
+                              {classifyPostPrandial(meal, userProfile) === 'hyper' && ' ⚠️'}
+                              {classifyPostPrandial(meal, userProfile) === 'hypo' && ' 🚨'}
                             </span>
                           ) : (
                             <span className="text-slate-400 italic text-[11px]">
