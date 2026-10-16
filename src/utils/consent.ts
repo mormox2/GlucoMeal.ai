@@ -2,7 +2,7 @@
  * Consentement au traitement des données de santé (RGPD art. 9, loi tunisienne n° 2004-63).
  * Version incrémentée à chaque changement substantiel de la politique : le consentement est alors redemandé.
  */
-export const CONSENT_VERSION = 1;
+export const CONSENT_VERSION = 2;
 const CONSENT_KEY = 'glucomal_consent_v1';
 
 export interface ConsentState {
@@ -10,7 +10,7 @@ export interface ConsentState {
   acceptedAt: string;
   // Indispensable : traitement des données de santé sur l'appareil et analyse des repas par l'IA (Google Gemini)
   healthData: true;
-  // Facultatif : sauvegarde et synchronisation dans le cloud (Google Firebase)
+  // Facultatif : sauvegarde et synchronisation dans le cloud (Supabase)
   cloudSync: boolean;
   // Facultatif : mesure d'audience anonyme (Vercel Analytics)
   analytics: boolean;

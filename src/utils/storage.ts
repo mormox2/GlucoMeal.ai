@@ -7,17 +7,11 @@ import {
   CGMReading,
   ProfileValidationIssue,
 } from '../types';
-import {
-  syncMealToFirestore,
-  syncProfileToFirestore,
-  deleteMealFromFirestore,
-  deleteAllMealsFromFirestore,
-} from '../services/firebase';
+import { queueMealUpsert, queueMealDelete, queueAllMealsDelete, queueProfileUpsert } from './syncQueue';
 
 const STORAGE_KEYS = {
   MEALS: 'glucomal_meals_history_v1',
   PROFILE: 'glucomal_user_profile_v1',
-  OFFLINE_QUEUE: 'glucomal_offline_queue_v1',
 };
 
 // Profil diabétique par défaut basé sur les standards diabétologiques (Insulinothérapie fonctionnelle)
@@ -91,8 +85,8 @@ export function saveSingleMeal(meal: AnalyzedMeal): AnalyzedMeal[] {
   const current = loadSavedMeals();
   const updated = [meal, ...current.filter((m) => m.id !== meal.id)];
   saveMeals(updated);
-  // Synchronisation asynchrone non-bloquante avec Firebase Firestore
-  syncMealToFirestore(meal).catch(() => {});
+  // Envoi vers le cloud via la file d'attente (conservé hors-ligne jusqu'au retour du réseau)
+  queueMealUpsert(meal);
   return updated;
 }
 
@@ -107,7 +101,7 @@ export function toggleFavoriteMeal(mealId: string): AnalyzedMeal[] {
   saveMeals(updated);
   const target = updated.find((m) => m.id === mealId);
   if (target) {
-    syncMealToFirestore(target).catch(() => {});
+    queueMealUpsert(target);
   }
   return updated;
 }
@@ -119,8 +113,7 @@ export function deleteMealFromHistory(mealId: string): AnalyzedMeal[] {
   const current = loadSavedMeals();
   const updated = current.filter((m) => m.id !== mealId);
   saveMeals(updated);
-  // Suppression synchrone dans Firestore
-  deleteMealFromFirestore(mealId).catch(() => {});
+  queueMealDelete(mealId);
   return updated;
 }
 
@@ -130,7 +123,7 @@ export function deleteMealFromHistory(mealId: string): AnalyzedMeal[] {
 export function clearAllMeals(): AnalyzedMeal[] {
   saveMeals([]);
   // Les repas sont aussi supprimés du cloud (sinon la synchronisation les ferait réapparaître)
-  deleteAllMealsFromFirestore().catch((err) => console.warn('Suppression cloud des repas:', err));
+  queueAllMealsDelete();
   return [];
 }
 
@@ -233,8 +226,8 @@ export function saveUserProfile(profile: UserProfileDT1): ProfileValidationIssue
   try {
     const sanitized = sanitizeUserProfile(profile);
     localStorage.setItem(STORAGE_KEYS.PROFILE, JSON.stringify(sanitized));
-    // Synchronisation asynchrone avec Firestore
-    syncProfileToFirestore(sanitized).catch(() => {});
+    // Envoi vers le cloud via la file d'attente
+    queueProfileUpsert(sanitized);
   } catch (err) {
     console.error('Erreur sauvegarde profil DT1:', err);
   }

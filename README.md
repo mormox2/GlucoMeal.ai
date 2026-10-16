@@ -8,7 +8,7 @@
 [![TypeScript: 5.8](https://img.shields.io/badge/TypeScript-5.8-3178C6.svg?style=flat-square&logo=typescript)](#)
 [![Tailwind CSS: 4.1](https://img.shields.io/badge/Tailwind_CSS-v4.1-38B2AC.svg?style=flat-square&logo=tailwind-css)](#)
 [![Gemini: 2.5 Flash](https://img.shields.io/badge/Google_Gemini-2.5_Flash-4285F4.svg?style=flat-square&logo=google)](#)
-[![Firebase: 12.18](https://img.shields.io/badge/Firebase-Firestore_%26_Auth-FFCA28.svg?style=flat-square&logo=firebase)](#)
+[![Supabase](https://img.shields.io/badge/Supabase-Postgres_%26_Auth-3ECF8E.svg?style=flat-square&logo=supabase)](#)
 [![Tests: Vitest 150](https://img.shields.io/badge/Tests-150%20%2B%206%20r%C3%A8gles-10B981.svg?style=flat-square&logo=vitest)](#-tests--assurance-qualité)
 [![PWA: Offline Ready](https://img.shields.io/badge/PWA-Offline%20%26%20Installable-7C3AED.svg?style=flat-square)](#)
 
@@ -38,7 +38,7 @@
 7. [Variables d'Environnement](#-variables-denvironnement)
 8. [Référence des Endpoints API](#-référence-des-endpoints-api)
 9. [Tests & Assurance Qualité](#-tests--assurance-qualité)
-10. [Sécurité & Règles Firestore](#-sécurité--règles-firestore)
+10. [Sécurité & Politiques RLS](#-sécurité--politiques-rls)
 11. [Confidentialité & Consentement](#-confidentialité--consentement)
 12. [Avertissement Médical & Réglementaire](#-avertissement-médical--réglementaire)
 
@@ -190,7 +190,7 @@ GlucoMeal intègre un banc d'évaluation interne pour mesurer l'écart entre les
 ### 10. Synchronisation Cloud & Télé-surveillance
 
 - **Fonctionnement Offline First (PWA)** : Données persistées localement via IndexedDB / LocalStorage et Service Worker (cache versionné à chaque build).
-- **Synchronisation Cloud Firestore (facultative)** : uniquement si l'utilisateur l'a acceptée dans l'écran de consentement ou en créant un compte ; désactivable dans Profil > Confidentialité.
+- **Synchronisation cloud Supabase (facultative)** : uniquement si l'utilisateur l'a acceptée dans l'écran de consentement ou en créant un compte ; désactivable dans Profil > Confidentialité. Chaque écriture locale passe par une file d'attente (`src/utils/syncQueue.ts`) conservée hors-ligne et envoyée au retour du réseau.
 - **Code de partage patient/famille** : code aléatoire de 80 bits (`GLUCO-XXXX-XXXX-XXXX-XXXX`), valable 7 jours, modifiable uniquement par le compte qui l'a créé. Les repas sont restaurés ; les paramètres d'insuline reçus ne sont appliqués qu'après confirmation explicite et contrôle des bornes cliniques. Les secrets d'appareil (clé Nightscout) ne sont jamais partagés.
 
 ---
@@ -203,10 +203,10 @@ GlucoMeal intègre un banc d'évaluation interne pour mesurer l'écart entre les
 | **PWA & Offline** | Service Worker (`sw.js`), Manifest Web App, IndexedDB / LocalStorage, Persistent Cache |
 | **Backend & API** | Node.js, Express, Vercel Serverless Function (`api/index.js`), esbuild |
 | **Moteur IA** | Google Gen AI SDK (`@google/genai`), modèle configurable (`GEMINI_MODEL`, défaut `gemini-2.5-flash`) avec repli facultatif (`GEMINI_FALLBACK_MODEL`) et délai maximal |
-| **Base de Données & Auth** | Firebase Cloud Firestore, Firebase Auth (Anonyme & Email), Firebase Storage, App Check |
-| **Sécurité & Règles** | Limiteur de requêtes par IP, CORS restreint, en-têtes HTTP (CSP, HSTS, Permissions-Policy) dans `vercel.json`, règles `firestore.rules` et `storage.rules` testées sur émulateur |
+| **Base de Données & Auth** | Supabase : Postgres avec Row Level Security, Auth (anonyme & e-mail), Realtime |
+| **Sécurité & Règles** | Limiteur de requêtes par IP, CORS restreint, en-têtes HTTP (CSP, HSTS, Permissions-Policy) dans `vercel.json`, politiques RLS (`supabase/migrations`) testées avec pgTAP |
 | **Scanner & Code-barres** | ZXing Browser (`@zxing/browser`, `@zxing/library`), Open Food Facts API |
-| **Tests & Qualité** | Vitest 5, `@firebase/rules-unit-testing` (émulateurs), TypeScript (`tsc --noEmit`) |
+| **Tests & Qualité** | Vitest 5, pgTAP (`supabase test db`), TypeScript (`tsc --noEmit`) |
 | **Déploiement** | Vercel (SPA statique + fonction serverless `api/index.js`) |
 
 ---
@@ -223,7 +223,10 @@ GlucoMeal.ai/
 │   ├── gemini.ts               # Client Gemini, modèle/repli/délai, validation des images
 │   ├── localParser.ts          # Analyse locale du texte quand l'IA est indisponible
 │   └── mealItems.ts            # Rapprochement avec la base, bornes de portion, confiance
-├── tests/rules/                # Tests des règles Firestore et Storage (émulateurs)
+├── supabase/                   # Projet Supabase
+│   ├── config.toml             # Configuration locale (connexion anonyme, pas de confirmation d'e-mail)
+│   ├── migrations/             # Schéma, contraintes et politiques RLS
+│   └── tests/                  # Tests pgTAP des politiques RLS
 ├── public/                     # Assets statiques, manifeste PWA et Service Worker
 │   ├── favicon.ico
 │   ├── icon.svg
@@ -271,7 +274,7 @@ GlucoMeal.ai/
 │   │   ├── LanguageContext.tsx
 │   │   └── translations.ts
 │   ├── services/               # Services externes
-│   │   └── firebase.ts                 # Client Firebase Auth, Firestore, Storage & App Check
+│   │   └── supabase.ts                 # Client Supabase : auth, profil, repas, temps réel, codes de partage
 │   ├── types/                  # Définitions TypeScript
 │   │   ├── benchmark.ts                # Types pour l'évaluation métrologique
 │   │   └── index.ts
@@ -287,12 +290,11 @@ GlucoMeal.ai/
 │   │   ├── excelExport.ts              # Générateur de feuilles Excel (.xlsx) stylisées
 │   │   ├── h2Reminder.ts               # Planificateur d'alertes postprandiales
 │   │   ├── healthySubstitutions.ts     # Algorithme de recommandation d'alternatives
-│   │   └── storage.ts                  # Persistance locale sécurisée et assainissement
+│   │   ├── storage.ts                  # Persistance locale sécurisée et assainissement
+│   │   └── syncQueue.ts                # File d'attente hors-ligne des envois vers le cloud
 │   ├── App.tsx                 # Composant racine et orchestrateur de flux
 │   ├── main.tsx                # Point de montage React
 │   └── types.ts                # Modèles de données globaux
-├── firestore.rules             # Règles de sécurité Firestore
-├── storage.rules               # Règles de sécurité Storage (photos de repas)
 ├── index.html                  # Fichier HTML principal & PWA meta
 ├── package.json                # Dépendances et scripts de build
 ├── server.ts                   # Serveur Express & API Gemini (Backend)
@@ -300,8 +302,7 @@ GlucoMeal.ai/
 ├── metadata.json               # Métadonnées Google AI Studio (conservé pour l'import dans AI Studio)
 ├── vercel.json                 # Routage, build et en-têtes de sécurité Vercel
 ├── vite.config.ts              # Configuration Vite & Tailwind v4
-├── vitest.config.ts            # Configuration des tests unitaires
-└── vitest.rules.config.ts      # Configuration des tests de règles (émulateurs)
+└── vitest.config.ts            # Configuration des tests unitaires
 ```
 
 ---
@@ -360,16 +361,18 @@ Cette commande compile le frontend Vite dans `/dist` puis régénère `api/index
 | `APP_URL` | Non | URL canonique de l'application (ex: `https://glucomeal.ai`). |
 | `PORT` | Non | Port d'écoute du serveur local (par défaut `3000`). |
 | `VERCEL` | Auto | Détecte l'exécution en environnement Vercel Serverless. |
-| `VITE_RECAPTCHA_SITE_KEY` | Recommandé | Clé de site reCAPTCHA v3 pour Firebase App Check. Sans elle, App Check est désactivé. |
-| `VITE_APPCHECK_DEBUG_TOKEN` | Non | Jeton de débogage App Check, pour le développement local uniquement. |
+| `VITE_SUPABASE_URL` | Pour le cloud | URL du projet Supabase. Sans elle, l'application fonctionne en mode 100 % local. |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | Pour le cloud | Clé publiable du projet (ou ancienne clé « anon »). Publique : la sécurité repose sur les politiques RLS. |
 
-*Note : la configuration Firebase côté client (clés publiques) est dans `firebase-applet-config.json`.*
+### Mise en place de Supabase (plan gratuit)
 
-### Sécurité Firebase (à faire dans la console)
+1. Créer un projet sur [supabase.com](https://supabase.com) en choisissant une **région de l'Union européenne** (la politique de confidentialité l'indique).
+2. **Authentication > Sign In / Providers** : activer « Allow anonymous sign-ins » et désactiver « Confirm email ». Activer une protection CAPTCHA (Turnstile ou hCaptcha) est recommandé contre la création massive de comptes anonymes.
+3. Appliquer le schéma : `npx supabase link --project-ref <ref>` puis `npx supabase db push` (ou coller `supabase/migrations/*.sql` dans l'éditeur SQL).
+4. Renseigner `VITE_SUPABASE_URL` et `VITE_SUPABASE_PUBLISHABLE_KEY` dans `.env` et dans les variables d'environnement Vercel.
+5. Un projet gratuit inactif pendant une semaine est mis en pause : à surveiller avant une utilisation avec de vrais patients.
 
-1. **Déployer les règles** après chaque modification : `firebase deploy --only firestore:rules,storage`.
-2. **App Check** : enregistrer l'application web avec reCAPTCHA v3 (console Firebase > App Check), renseigner `VITE_RECAPTCHA_SITE_KEY`, vérifier les métriques, puis activer l'application obligatoire (« Enforce ») pour Firestore et Storage.
-3. **TTL Firestore** : créer une politique d'expiration sur le champ `expiresAt` de la collection `syncCodes`.
+En local : `npx supabase start` (Docker requis) lance une base identique sur `http://127.0.0.1:54321`, avec la clé publiable affichée par la commande.
 
 ### Nightscout
 
@@ -387,7 +390,7 @@ Utilisez un **jeton d'accès en lecture seule** (Nightscout > Admin Tools > rôl
 | `GET` | `/api/benchmark/dataset` | Dataset d'évaluation interne (indicateur `synthetic`) | Illimité |
 | `POST` | `/api/benchmark/evaluate` | Évaluation des seules prédictions fournies (aucune simulation) | Illimité |
 | `POST` | `/api/benchmark/live-vision` | Analyse d'une photo réelle (`imageBase64` obligatoire) d'un repas du dataset | 30 req/min |
-| `*` | `/api/sync/*` | Retirée (410 Gone) : la synchronisation passe uniquement par Firestore | — |
+| `*` | `/api/sync/*` | Retirée (410 Gone) : la synchronisation passe uniquement par Supabase | — |
 
 En cas d'échec (IA indisponible, aliment ou code-barres inconnu, glucides illisibles), `/api/analyze-meal` renvoie une erreur explicite (`{ error, code }`, HTTP 4xx/5xx) et **jamais** une estimation de glucides par défaut. Principaux codes : `TEXT_MISSING`, `TEXT_TOO_LONG` (plus de 500 caractères), `INVALID_IMAGE` (JPEG, PNG, WebP ou HEIC uniquement), `NO_FOOD_RECOGNIZED`, `CARBS_UNREADABLE`, `AI_ERROR`, `SERVER_ERROR` (sans détail interne).
 
@@ -400,8 +403,8 @@ En cas d'échec (IA indisponible, aliment ou code-barres inconnu, glucides illis
 ## 🧪 Tests & Assurance Qualité
 
 ```bash
-npm test            # 150 tests unitaires et d'API (Vitest)
-npm run test:rules  # 6 tests des règles Firestore et Storage sur émulateurs (Java requis)
+npm test            # Tests unitaires et d'API (Vitest)
+npm run test:db     # Tests pgTAP des politiques RLS sur la base locale (npx supabase start, Docker requis)
 ```
 
 ### Ce qui est testé :
@@ -410,7 +413,8 @@ npm run test:rules  # 6 tests des règles Firestore et Storage sur émulateurs (
 - **API d'analyse** : erreurs explicites sans glucides par défaut, analyseur local, bornes des portions, validation des images, séparation des consignes et de la saisie, repli de modèle, CORS et en-têtes.
 - **Banc d'évaluation** : aucune prédiction simulée, identifiants uniques de la base.
 - **CGM et BLE**, statistiques postprandiales, exports, consentement.
-- **Règles de sécurité** : propriété et expiration des codes de partage, profil, et photos Storage (propriétaire, type, taille).
+- **Politiques RLS** : isolation des dossiers, accès en lecture du médecin délégué, contraintes de validation, propriété, expiration et non-listage des codes de partage, suppression du compte en cascade.
+- **File d'attente hors-ligne** : conservation sans réseau, ordre, regroupement, refus définitifs, consentement.
 
 Vérification des types TypeScript :
 ```bash
@@ -419,13 +423,14 @@ npm run lint
 
 ---
 
-## 🔒 Sécurité & Règles Firestore
+## 🔒 Sécurité & Politiques RLS
 
-La base de données Firebase Firestore est verrouillée par des règles d'accès strictes définies dans [`firestore.rules`](firestore.rules) et [`storage.rules`](storage.rules) :
-- **Isolation des données patients** : Chaque utilisateur authentifié ne peut lire et modifier que ses propres repas et profils (`request.auth.uid == userId`).
-- **Délégation médicale & parentale** : Accès en lecture autorisé aux comptes délégués enregistrés dans `/users/{userId}/delegates/{delegateId}`.
-- **Validation stricte des schémas** : Plafond sur les glucides totaux (0 à 1000g), vérification des types de données, assainissement des chaînes de caractères.
-- **Protection Anti-Abus** : Intégration de Firebase App Check (reCAPTCHA v3) pour empêcher l'accès aux bots.
+La base Supabase est verrouillée par des politiques Row Level Security définies dans [`supabase/migrations`](supabase/migrations) :
+- **Isolation des données patients** : chaque compte (anonyme ou e-mail) ne peut lire et modifier que ses propres repas et son profil (`user_id = auth.uid()`).
+- **Délégation médicale & parentale** : accès en lecture seule pour les comptes enregistrés dans la table `delegates`, révocable par le patient.
+- **Validation stricte des schémas** : contraintes CHECK sur les glucides totaux (0 à 1000 g), l'unité glycémique, la cible et l'ISF, le format des identifiants.
+- **Codes de partage** : modifiables par leur seul créateur, lisibles par code via la fonction `get_sync_code` tant qu'ils n'ont pas expiré, jamais listables ; les codes expirés sont purgés chaque nuit (pg_cron).
+- **Anti-abus** : limites de débit de Supabase Auth ; CAPTCHA activable dans le tableau de bord.
 
 ---
 
@@ -433,7 +438,7 @@ La base de données Firebase Firestore est verrouillée par des règles d'accès
 
 - **Consentement explicite** (RGPD art. 9, loi tunisienne n° 2004-63) demandé avant toute utilisation : le traitement des données de santé et l'envoi des repas à Google Gemini sont obligatoires pour utiliser l'application ; la **sauvegarde cloud** et la **mesure d'audience** (Vercel Analytics) sont facultatives et désactivées par défaut.
 - Le consentement est versionné (`src/utils/consent.ts`) : il est redemandé à chaque changement substantiel de la politique.
-- **Profil > Confidentialité** : modifier ses choix, lire la politique, et **supprimer toutes ses données** (appareil, cache Firestore, repas, profil, codes de partage, photos Storage et compte Firebase).
+- **Profil > Confidentialité** : modifier ses choix, lire la politique, et **supprimer toutes ses données** (appareil, file d'attente hors-ligne, repas, profil, codes de partage et compte Supabase).
 - Les identifiants de capteurs (Nightscout, comptes CGM) restent sur l'appareil.
 
 ---

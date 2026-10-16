@@ -22,8 +22,8 @@ import { ConsentScreen } from './components/ConsentScreen';
 import { Analytics } from '@vercel/analytics/react';
 import { ConsentState, loadConsent } from './utils/consent';
 import { AnalyzedMeal, InputMode, UserProfileDT1 } from './types';
-import { onAuthStateChanged } from 'firebase/auth';
-import { auth, subscribeToMeals } from './services/firebase';
+import { onAuthChange, getCurrentUserId, subscribeToMeals } from './services/supabase';
+import { startSyncQueue, withoutPendingMeals } from './utils/syncQueue';
 import {
   loadSavedMeals,
   saveMeals,
@@ -117,14 +117,21 @@ export default function App() {
     return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
   }, []);
 
-  // Écoute temps réel des repas depuis Firestore dès que l'utilisateur est authentifié
+  // Envoi des écritures en attente (démarrage, retour du réseau, connexion)
+  useEffect(() => startSyncQueue(), []);
+
+  // Écoute temps réel des repas dans le cloud dès que l'utilisateur est authentifié
   useEffect(() => {
     let unsubscribeSnapshot: (() => void) | null = null;
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      if (user) {
+    let subscribedUserId: string | null = null;
+    const unsubscribeAuth = onAuthChange((user) => {
+      if (user && user.id !== subscribedUserId) {
         if (unsubscribeSnapshot) unsubscribeSnapshot();
-        unsubscribeSnapshot = subscribeToMeals(user.uid, (remoteMeals) => {
-          if (remoteMeals && remoteMeals.length > 0) {
+        subscribedUserId = user.id;
+        unsubscribeSnapshot = subscribeToMeals(user.id, (cloudMeals) => {
+          // Les repas modifiés ou supprimés hors-ligne gardent leur version locale
+          const remoteMeals = withoutPendingMeals(cloudMeals);
+          if (remoteMeals.length > 0) {
             setSavedMeals((prev) => {
               const remoteIds = new Set(remoteMeals.map((m) => m.id));
               const localUnsynced = prev.filter((m) => !remoteIds.has(m.id));
@@ -218,7 +225,7 @@ export default function App() {
 
     try {
       const result = await getResult();
-      setCurrentMealDraft(toAnalyzedMeal(result, inputType, defaultName, auth.currentUser?.uid || 'user-local'));
+      setCurrentMealDraft(toAnalyzedMeal(result, inputType, defaultName, getCurrentUserId() || 'user-local'));
       setMealFlowState('review');
     } catch (err) {
       console.error(`Meal analysis error (${inputType}):`, err);

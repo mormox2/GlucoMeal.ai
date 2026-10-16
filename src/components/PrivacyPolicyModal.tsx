@@ -32,7 +32,7 @@ const SECTIONS_FR: Section[] = [
     body: [
       'Sur votre appareil (stockage du navigateur) : par défaut, toutes vos données y restent.',
       'Analyse des repas : la photo ou la description est envoyée au service Google Gemini pour identifier les aliments et les portions. Elle n’est pas conservée par GlucoMeal après l’analyse.',
-      'Sauvegarde cloud (facultative) : si vous l’activez ou créez un compte, vos données sont enregistrées dans Google Firebase (Firestore et Storage), accessibles uniquement par votre compte. Un code de partage expire au bout de 7 jours.',
+      'Sauvegarde cloud (facultative) : si vous l’activez ou créez un compte, vos données sont enregistrées dans une base Supabase hébergée dans l’Union européenne, accessibles uniquement par votre compte (et par un soignant que vous autorisez). Un code de partage expire au bout de 7 jours.',
       'Mesure d’audience (facultative) : Vercel Analytics, statistiques de visites anonymes, sans données de santé.',
     ],
   },
@@ -70,7 +70,7 @@ const SECTIONS_AR: Section[] = [
     title: '3. أين تذهب بياناتك',
     body: [
       'على جهازك افتراضياً. تُرسل صورة الوجبة أو وصفها إلى خدمة Google Gemini للتحليل فقط.',
-      'الحفظ السحابي (اختياري) على Google Firebase، متاح لحسابك فقط. قياس الزيارات (اختياري) عبر Vercel Analytics دون بيانات صحية.',
+      'الحفظ السحابي (اختياري) على Supabase بخوادم في الاتحاد الأوروبي، متاح لحسابك فقط. قياس الزيارات (اختياري) عبر Vercel Analytics دون بيانات صحية.',
     ],
   },
   {

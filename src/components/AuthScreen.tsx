@@ -11,13 +11,8 @@ import {
   ArrowLeft,
   HeartPulse,
 } from 'lucide-react';
-import {
-  registerWithEmail,
-  loginWithEmail,
-  syncProfileToFirestore,
-  fetchUserDataFromFirestore,
-  syncBatchMealsToFirestore,
-} from '../services/firebase';
+import { registerWithEmail, loginWithEmail, fetchUserDataFromCloud, getAuthErrorCode } from '../services/supabase';
+import { queueMealsUpsert, flushSyncQueue } from '../utils/syncQueue';
 import { UserProfileDT1, AccountType, ChildProfileInfo } from '../types';
 import { saveUserProfile, loadUserProfile, loadSavedMeals, saveMeals } from '../utils/storage';
 import { updateConsent } from '../utils/consent';
@@ -116,29 +111,32 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           throw new Error(isRtl ? 'يرجى إدخال اسم الطفل.' : "Veuillez renseigner le prénom de votre enfant.");
         }
 
-        // Inscription Firebase
-        let newRegisteredUser: any;
+        // Inscription Supabase
         try {
-          newRegisteredUser = await registerWithEmail(email, password);
-        } catch (firebaseErr: any) {
-          if (firebaseErr.code === 'auth/email-already-in-use') {
+          await registerWithEmail(email, password);
+        } catch (authErr: any) {
+          const code = getAuthErrorCode(authErr);
+          if (code === 'user_already_exists' || code === 'email_exists') {
             throw new Error(isRtl ? 'هذا البريد الإلكتروني مسجل بالفعل. يرجى تسجيل الدخول.' : 'Cet e-mail est déjà associé à un compte. Veuillez vous connecter.');
-          } else if (firebaseErr.code === 'auth/weak-password') {
+          } else if (code === 'weak_password') {
             throw new Error(isRtl ? 'يجب أن تتكون كلمة المرور من 6 أحرف على الأقل.' : 'Le mot de passe doit comporter au moins 6 caractères.');
-          } else if (firebaseErr.code === 'auth/invalid-email') {
+          } else if (code === 'email_address_invalid' || code === 'validation_failed') {
             throw new Error(isRtl ? 'صيغة البريد الإلكتروني غير صالحة.' : 'Format d’adresse e-mail invalide.');
-          } else if (
-            firebaseErr.code === 'auth/admin-restricted-operation' ||
-            firebaseErr.code === 'auth/operation-not-allowed'
-          ) {
+          } else if (code === 'over_request_rate_limit' || code === 'over_email_send_rate_limit') {
             throw new Error(
               isRtl
-                ? 'التسجيل معطّل حالياً في إعدادات Firebase. يرجى تفعيل مزود البريد الإلكتروني وفتح التسجيل في وحدة تحكم Firebase.'
-                : 'Les inscriptions sont désactivées dans Firebase. Veuillez activer le fournisseur "Adresse e-mail/Mot de passe" et autoriser les inscriptions dans la console Firebase.'
+                ? 'محاولات كثيرة جداً. يرجى الانتظار قليلاً ثم إعادة المحاولة.'
+                : 'Trop de tentatives. Veuillez patienter quelques minutes avant de réessayer.'
+            );
+          } else if (code === 'signup_disabled' || code === 'email_provider_disabled') {
+            throw new Error(
+              isRtl
+                ? 'التسجيل معطّل حالياً في إعدادات Supabase. يرجى تفعيل مزود البريد الإلكتروني والسماح بالتسجيل.'
+                : 'Les inscriptions sont désactivées dans Supabase. Veuillez activer le fournisseur « Email » et autoriser les inscriptions (Authentication > Sign In / Providers).'
             );
           } else {
             throw new Error(
-              firebaseErr.message ||
+              authErr.message ||
                 (isRtl ? 'فشل إنشاء الحساب. يرجى المحاولة مرة أخرى.' : 'Échec de création de compte. Veuillez réessayer.')
             );
           }
@@ -148,16 +146,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         const updatedProfile = buildCurrentFormProfile();
         saveUserProfile(updatedProfile);
 
-        // Synchroniser le profil et migrer les repas locaux vers Firestore
-        try {
-          await syncProfileToFirestore(updatedProfile);
-          const localMeals = loadSavedMeals();
-          if (localMeals && localMeals.length > 0) {
-            await syncBatchMealsToFirestore(localMeals);
-          }
-        } catch (syncErr) {
-          console.warn('Sync notice:', syncErr);
-        }
+        // Le profil est déjà en file d'attente (saveUserProfile) : y ajouter les repas locaux et tout envoyer
+        queueMealsUpsert(loadSavedMeals());
+        await flushSyncQueue();
 
         onSuccess(updatedProfile);
       } else {
@@ -166,39 +157,39 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           throw new Error(isRtl ? 'يرجى إدخال البريد الإلكتروني وكلمة المرور.' : 'Veuillez saisir votre e-mail et mot de passe.');
         }
 
-        let loggedUser: any;
+        let loggedUser: { id: string } | null = null;
         try {
           loggedUser = await loginWithEmail(email, password);
-        } catch (firebaseErr: any) {
-          console.error('Firebase login error:', firebaseErr);
-          if (
-            firebaseErr.code === 'auth/wrong-password' ||
-            firebaseErr.code === 'auth/invalid-credential' ||
-            firebaseErr.code === 'auth/user-not-found'
-          ) {
+        } catch (authErr: any) {
+          console.error('Supabase login error:', authErr);
+          const code = getAuthErrorCode(authErr);
+          if (code === 'invalid_credentials') {
             throw new Error(
               isRtl
                 ? 'البريد الإلكتروني أو كلمة المرور غير صحيحة.'
                 : 'Adresse e-mail ou mot de passe incorrect.'
             );
-          } else if (firebaseErr.code === 'auth/too-many-requests') {
+          } else if (code === 'email_not_confirmed') {
+            throw new Error(
+              isRtl
+                ? 'يرجى تأكيد بريدك الإلكتروني عبر الرابط المرسل قبل تسجيل الدخول.'
+                : 'Veuillez confirmer votre adresse e-mail via le lien reçu avant de vous connecter.'
+            );
+          } else if (code === 'over_request_rate_limit') {
             throw new Error(
               isRtl
                 ? 'تم حظر الحساب مؤقتًا بسبب كثرة المحاولات. يرجى المحاولة لاحقًا.'
                 : 'Trop de tentatives infructueuses. Veuillez patienter avant de réessayer.'
             );
-          } else if (
-            firebaseErr.code === 'auth/operation-not-allowed' ||
-            firebaseErr.code === 'auth/admin-restricted-operation'
-          ) {
+          } else if (code === 'email_provider_disabled') {
             throw new Error(
               isRtl
-                ? 'تسجيل الدخول بالبريد الإلكتروني معطّل في إعدادات Firebase.'
-                : 'La méthode de connexion par e-mail est désactivée dans la console Firebase (Sign-in method).'
+                ? 'تسجيل الدخول بالبريد الإلكتروني معطّل في إعدادات Supabase.'
+                : 'La connexion par e-mail est désactivée dans Supabase (Authentication > Sign In / Providers).'
             );
           } else {
             throw new Error(
-              firebaseErr.message ||
+              authErr.message ||
                 (isRtl ? 'فشل تسجيل الدخول. يرجى التحقق من اتصالك.' : 'Échec de connexion. Veuillez vérifier vos identifiants.')
             );
           }
@@ -209,10 +200,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           parentEmail: email.trim(),
         };
 
-        // Restauration des données distantes depuis Firestore
+        // Restauration des données distantes depuis le cloud
         try {
-          if (loggedUser?.uid) {
-            const remote = await fetchUserDataFromFirestore(loggedUser.uid);
+          if (loggedUser?.id) {
+            const remote = await fetchUserDataFromCloud(loggedUser.id);
             if (remote.profile) {
               updatedProfile = {
                 ...currentProfile,
@@ -232,7 +223,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             }
           }
         } catch (fetchErr) {
-          console.warn('Restauration des données Firestore:', fetchErr);
+          console.warn('Restauration des données cloud:', fetchErr);
         }
 
         saveUserProfile(updatedProfile);
@@ -325,7 +316,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             <div className="pt-2 border-t border-red-200/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <span className="text-[11px] text-slate-700">
                 {isRtl
-                  ? 'يمكنك حفظ هذا الملف والمتابعة محلياً دون انتظار تفعيل Firebase:'
+                  ? 'يمكنك حفظ هذا الملف والمتابعة محلياً دون انتظار تفعيل الحفظ السحابي:'
                   : 'Vous pouvez enregistrer ce profil et continuer en mode local :'}
               </span>
               <button
@@ -564,8 +555,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         <div className="pt-3 border-t border-slate-100 text-center">
           <p className="text-[11px] text-slate-500">
             {isRtl
-              ? 'إنشاء حساب أو تسجيل الدخول يفعّل حفظ بياناتك الصحية (وجبات، جرعات، ملف علاجي) على Google Firebase. يمكنك إيقافه أو حذف كل شيء من الملف الشخصي > الخصوصية.'
-              : 'Créer un compte ou vous connecter active la sauvegarde de vos données de santé (repas, doses, profil) sur Google Firebase. Vous pouvez la désactiver ou tout supprimer dans Profil > Confidentialité.'}
+              ? 'إنشاء حساب أو تسجيل الدخول يفعّل حفظ بياناتك الصحية (وجبات، جرعات، ملف علاجي) على Supabase (خوادم في الاتحاد الأوروبي). يمكنك إيقافه أو حذف كل شيء من الملف الشخصي > الخصوصية.'
+              : 'Créer un compte ou vous connecter active la sauvegarde de vos données de santé (repas, doses, profil) sur Supabase (serveurs dans l’Union européenne). Vous pouvez la désactiver ou tout supprimer dans Profil > Confidentialité.'}
           </p>
         </div>
       </div>

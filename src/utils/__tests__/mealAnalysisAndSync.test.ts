@@ -42,7 +42,7 @@ describe('buildMealFromPreset', () => {
 });
 
 describe('Codes de synchronisation', () => {
-  it('génère des codes de 80 bits au format attendu par les règles Firestore', () => {
+  it('génère des codes de 80 bits au format attendu par la contrainte de la base Supabase', () => {
     const codes = new Set(Array.from({ length: 200 }, () => generateSyncCode()));
     expect(codes.size).toBe(200);
     for (const code of codes) {
