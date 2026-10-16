@@ -274,8 +274,9 @@ app.post('/api/analyze-meal', rateLimiter(30, 60 * 1000, 'Trop de requêtes d’
         try {
           return res.json(await analyzeMealText(ai, inputText, isArabicInput));
         } catch (err) {
-          // Description sans aliment : inutile d'essayer l'analyse locale
-          if (err instanceof AnalysisFailure && err.code === 'NO_FOOD_RECOGNIZED') throw err;
+          // Y compris quand l'IA ne trouve aucun aliment : Gemini renvoie parfois une liste vide pour
+          // un repas courant (ex. « 2 tranches de pain + omelette + une pomme »), l'analyse locale
+          // par mots entiers sert alors de second avis avant de répondre « aucun aliment reconnu ».
           console.error('Analyse texte IA en échec, analyse locale :', (err as Error).message);
         }
       }

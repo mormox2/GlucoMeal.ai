@@ -47,7 +47,7 @@ export function estimateCarbsFallback(name: string): number {
   if (/sans sucre|light|z[ée]ro/.test(q)) return 5;
   if (/^(sucre|sugar|سكر)/.test(q)) return 100;
   if (/^(miel|عسل)/.test(q)) return 82;
-  if (/(^|[\s'’])(huile|beurre|eau|caf[ée]|th[ée]|thon|poisson|oeuf|œuf|fromage)(?=$|[\s,.'’])/.test(q)) return 1;
+  if (/(^|[\s'’])(huile|beurre|eau|caf[ée]|th[ée]|thon|poisson|oeufs?|œufs?|omelettes?|fromage)(?=$|[\s,.'’])/.test(q)) return 1;
   if (q.includes('pain') || q.includes('baguette') || q.includes('tabouna') || q.includes('mlawi')) return 48;
   if (q.includes('riz') || q.includes('rouz') || q.includes('semoule') || q.includes('couscous')) return 28;
   if (q.includes('pâte') || q.includes('pate') || q.includes('makrouna') || q.includes('nwasser')) return 24;

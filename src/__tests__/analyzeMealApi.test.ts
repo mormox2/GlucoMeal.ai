@@ -8,7 +8,10 @@ let baseUrl = '';
 
 beforeAll(async () => {
   process.env.VERCEL = '1'; // empêche le démarrage automatique du serveur Vite
-  delete process.env.GEMINI_API_KEY;
+  // Clé vide plutôt que supprimée : `import 'dotenv/config'` (server.ts) recharge les variables
+  // absentes depuis .env, mais n'écrase jamais une variable déjà définie. Sans cela, un .env local
+  // avec une clé réelle ferait appeler Gemini (réseau) et rendrait ces tests non déterministes.
+  process.env.GEMINI_API_KEY = '';
   const { app } = await import('../../server');
   server = app.listen(0);
   await new Promise<void>((resolve) => server.once('listening', () => resolve()));
