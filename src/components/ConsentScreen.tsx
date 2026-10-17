@@ -57,8 +57,8 @@ export const ConsentScreen: React.FC<ConsentScreenProps> = ({ onAccept, onDeclin
               {isAr ? 'معالجة بياناتي الصحية (إلزامي)' : 'Traitement de mes données de santé (obligatoire)'}
             </strong>
             {isAr
-              ? 'أوافق على معالجة قياسات السكر والجرعات والوجبات على هذا الجهاز، وعلى إرسال صور وأوصاف وجباتي إلى Google Gemini لتحليلها.'
-              : 'J’accepte le traitement de mes glycémies, doses et repas sur cet appareil, et l’envoi des photos et descriptions de repas à Google Gemini pour leur analyse.'}
+              ? 'أوافق على معالجة قياسات السكر والجرعات والوجبات على هذا الجهاز، وعلى إرسال صور وأوصاف وجباتي إلى Google Gemini لتحليلها (أو إلى Mistral AI في الاتحاد الأوروبي إذا تعذّر ذلك).'
+              : 'J’accepte le traitement de mes glycémies, doses et repas sur cet appareil, et l’envoi des photos et descriptions de repas à Google Gemini pour leur analyse (ou à Mistral AI, dans l’Union européenne, si Gemini est indisponible).'}
           </span>
         </label>
 

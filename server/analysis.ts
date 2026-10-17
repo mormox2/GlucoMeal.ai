@@ -1,5 +1,5 @@
-import { GoogleGenAI, Type } from '@google/genai';
-import { generateJson, parseImageDataUrl } from './gemini';
+import { Type } from '@google/genai';
+import { AiProviders, generateJson, parseImageDataUrl } from './ai';
 import { AiComponent, MealAnalysis, componentToItem, hasLowConfidenceItem, totalCarbs } from './mealItems';
 
 /**
@@ -84,13 +84,14 @@ function buildAnalysis(
  * Analyse d'une photo de repas : l'IA identifie les composants et les portions, GlucoMeal calcule
  * les glucides. Utilisée par l'application et par le banc de test (même pipeline).
  */
-export async function analyzeMealPhoto(ai: GoogleGenAI, image: unknown): Promise<MealAnalysis> {
+export async function analyzeMealPhoto(ai: AiProviders, image: unknown): Promise<MealAnalysis> {
   const { mimeType, data } = requireImage(image);
   let parsed: any;
+  let model: string;
   try {
-    parsed = await generateJson<any>(
+    ({ data: parsed, model } = await generateJson<any>(
       ai,
-      [{ role: 'user', parts: [{ inlineData: { mimeType, data } }] }],
+      { image: { mimeType, data } },
       {
         type: Type.OBJECT,
         properties: {
@@ -103,9 +104,9 @@ export async function analyzeMealPhoto(ai: GoogleGenAI, image: unknown): Promise
         required: ['meal_name', 'components', 'confidence_tier'],
       },
       PHOTO_SYSTEM_INSTRUCTION
-    );
+    ));
   } catch (err) {
-    console.error('Gemini vision analysis error:', (err as Error)?.message);
+    console.error('Analyse photo IA en échec:', (err as Error)?.message);
     throw new AnalysisFailure(503, 'AI_ERROR', 'L’analyse de la photo a échoué. Réessayez ou saisissez votre repas manuellement.');
   }
 
@@ -124,6 +125,7 @@ export async function analyzeMealPhoto(ai: GoogleGenAI, image: unknown): Promise
     total_carbs: total,
     overall_confidence: overall,
     confidence_score: overall === 'high' ? 90 : overall === 'medium' ? 68 : 42,
+    ai_model: model,
   };
 }
 
@@ -131,25 +133,26 @@ export async function analyzeMealPhoto(ai: GoogleGenAI, image: unknown): Promise
  * Analyse d'une description de repas (texte ou transcription vocale). La description est envoyée
  * comme message utilisateur séparé des consignes (protection contre l'injection de consignes).
  */
-export async function analyzeMealText(ai: GoogleGenAI, text: string, isArabic: boolean): Promise<MealAnalysis> {
+export async function analyzeMealText(ai: AiProviders, text: string, isArabic: boolean): Promise<MealAnalysis> {
   const langInstruction = isArabic
     ? 'La description est en dialecte tunisien (derja) ou en arabe : meal_name en arabe tunisien, name_ar en arabe, name_fr en traduction française courte.'
     : 'La description est en français : meal_name en français, name_ar en arabe tunisien.';
 
   let parsed: any;
+  let model: string;
   try {
-    parsed = await generateJson<any>(
+    ({ data: parsed, model } = await generateJson<any>(
       ai,
-      [{ role: 'user', parts: [{ text }] }],
+      { text },
       {
         type: Type.OBJECT,
         properties: { meal_name: { type: Type.STRING }, components: COMPONENTS_SCHEMA },
         required: ['meal_name', 'components'],
       },
       `${TEXT_SYSTEM_INSTRUCTION}\n${langInstruction}`
-    );
+    ));
   } catch (err) {
-    console.error('Gemini text analysis error:', (err as Error)?.message);
+    console.error('Analyse texte IA en échec:', (err as Error)?.message);
     throw new AnalysisFailure(503, 'AI_ERROR', 'L’analyse du texte a échoué.');
   }
 
@@ -167,19 +170,21 @@ export async function analyzeMealText(ai: GoogleGenAI, text: string, isArabic: b
     notes: hasLow
       ? 'Certains aliments sont absents de la base ou estimés : vérifiez leurs glucides.'
       : 'Vérifiez chaque portion avant de valider.',
+    ai_model: model,
   };
 }
 
 /**
  * Lecture d'une étiquette nutritionnelle : aucune valeur de glucides n'est devinée.
  */
-export async function analyzeNutritionLabel(ai: GoogleGenAI, image: unknown): Promise<MealAnalysis> {
+export async function analyzeNutritionLabel(ai: AiProviders, image: unknown): Promise<MealAnalysis> {
   const { mimeType, data } = requireImage(image);
   let parsed: any;
+  let model: string;
   try {
-    parsed = await generateJson<any>(
+    ({ data: parsed, model } = await generateJson<any>(
       ai,
-      [{ role: 'user', parts: [{ inlineData: { mimeType, data } }] }],
+      { image: { mimeType, data } },
       {
         type: Type.OBJECT,
         properties: {
@@ -193,13 +198,14 @@ export async function analyzeNutritionLabel(ai: GoogleGenAI, image: unknown): Pr
         required: ['product_name', 'portion_g'],
       },
       LABEL_SYSTEM_INSTRUCTION
-    );
+    ));
   } catch (err) {
-    console.error('Label OCR error with Gemini:', (err as Error)?.message);
+    console.error('Lecture d’étiquette IA en échec:', (err as Error)?.message);
     throw new AnalysisFailure(503, 'AI_ERROR', 'La lecture de l’étiquette a échoué. Réessayez ou saisissez les glucides manuellement.');
   }
 
-  const carbsPer100 = Number(parsed.carbs_per_100g);
+  // Seul un nombre est accepté : une valeur absente ou null (étiquette illisible) ne vaut jamais 0 g
+  const carbsPer100 = typeof parsed.carbs_per_100g === 'number' ? parsed.carbs_per_100g : NaN;
   if (!Number.isFinite(carbsPer100) || carbsPer100 < 0 || carbsPer100 > 100) {
     throw new AnalysisFailure(
       422,
@@ -234,5 +240,6 @@ export async function analyzeNutritionLabel(ai: GoogleGenAI, image: unknown): Pr
     overall_confidence: 'medium',
     confidence_score: 80,
     notes: `Lecture OCR de l’étiquette : ${carbs100g} g de glucides / 100 g, portion ${portion} g. Vérifiez avec l’emballage.`,
+    ai_model: model,
   };
 }

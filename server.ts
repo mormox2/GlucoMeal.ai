@@ -4,7 +4,7 @@ import path from 'path';
 import { TUNISIAN_FOOD_DATABASE } from './src/data/tunisianFoodDatabase';
 import { TUNISIAN_DATASET, TUNISIAN_DATASET_100 } from './src/types/benchmark';
 import { runAutomatedBenchmark } from './src/utils/benchmarkEvaluator';
-import { getGeminiClient, getGeminiModel } from './server/gemini';
+import { getAiProviders } from './server/ai';
 import {
   AnalysisFailure,
   MAX_MEAL_TEXT_LENGTH,
@@ -190,7 +190,7 @@ app.post('/api/benchmark/live-vision', rateLimiter(30, 60 * 1000, 'Trop de tests
   if (!imageBase64) {
     return res.status(400).json({ error: 'Une photo du repas est nécessaire pour un test de vision.', code: 'IMAGE_REQUIRED' });
   }
-  const ai = getGeminiClient();
+  const ai = getAiProviders();
   if (!ai) {
     return res.status(503).json({ error: 'Service d’IA non configuré : test impossible.', code: 'AI_UNAVAILABLE' });
   }
@@ -212,7 +212,7 @@ app.post('/api/benchmark/live-vision', rateLimiter(30, 60 * 1000, 'Trop de tests
       passed_clinical_threshold: relativeErrorPct <= 15.0,
       insulin_impact_units: Number((deltaCarbs / 10).toFixed(1)),
       latency_ms: Date.now() - startTime,
-      model: getGeminiModel(),
+      model: analysis.ai_model,
       detected_meal_name: analysis.meal_name,
       detected_components: analysis.items.map((item) => ({
         name: item.name_fr,
@@ -243,7 +243,7 @@ function sendAnalysisError(res: express.Response, status: number, code: string, 
 app.post('/api/analyze-meal', rateLimiter(30, 60 * 1000, 'Trop de requêtes d’analyse. Veuillez patienter une minute.'), async (req, res) => {
   try {
     const { mode, image, text, audioTranscript, barcode } = req.body || {};
-    const ai = getGeminiClient();
+    const ai = getAiProviders();
 
     // Photo du repas
     if (mode === 'photo' && image) {

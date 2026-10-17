@@ -3563,14 +3563,15 @@ function getGeminiClient() {
   }
   return aiClient;
 }
-async function generateJson(ai, contents, responseSchema, systemInstruction) {
+async function callGemini(ai, input, responseSchema, systemInstruction) {
+  const part = "image" in input ? { inlineData: input.image } : { text: input.text };
   const models = [getGeminiModel(), getGeminiFallbackModel()].filter((m) => Boolean(m));
   let lastError;
   for (const model of models) {
     try {
       const response = await ai.models.generateContent({
         model,
-        contents,
+        contents: [{ role: "user", parts: [part] }],
         config: {
           responseMimeType: "application/json",
           responseSchema,
@@ -3580,13 +3581,105 @@ async function generateJson(ai, contents, responseSchema, systemInstruction) {
       });
       const raw = response.text?.trim();
       if (!raw) throw new Error("R\xE9ponse vide du mod\xE8le.");
-      return JSON.parse(raw);
+      return { data: JSON.parse(raw), model: `gemini/${model}` };
     } catch (err) {
       lastError = err;
       console.warn(`Gemini (${model}) en \xE9chec:`, err?.message);
     }
   }
   throw lastError instanceof Error ? lastError : new Error("\xC9chec de l\u2019appel Gemini.");
+}
+
+// server/mistral.ts
+var MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
+function getMistralModel() {
+  return process.env.MISTRAL_MODEL || "mistral-small-latest";
+}
+function getMistralTimeoutMs() {
+  return Number(process.env.MISTRAL_TIMEOUT_MS) || 25e3;
+}
+function getMistralClient() {
+  return process.env.MISTRAL_API_KEY ? { apiKey: process.env.MISTRAL_API_KEY } : null;
+}
+var MISTRAL_IMAGE_TYPES = /^image\/(jpeg|png|webp|gif)$/;
+function mistralSupportsImage(mimeType) {
+  return MISTRAL_IMAGE_TYPES.test(mimeType);
+}
+async function callMistral(client, userContent, jsonSchema, systemInstruction) {
+  const messages = [
+    ...systemInstruction ? [{ role: "system", content: systemInstruction }] : [],
+    { role: "user", content: userContent }
+  ];
+  const response = await fetch(MISTRAL_API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${client.apiKey}`
+    },
+    body: JSON.stringify({
+      model: getMistralModel(),
+      messages,
+      temperature: 0.2,
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "glucomeal_analysis", schema: jsonSchema, strict: true }
+      }
+    }),
+    signal: AbortSignal.timeout(getMistralTimeoutMs())
+  });
+  if (!response.ok) {
+    throw new Error(`Mistral HTTP ${response.status}`);
+  }
+  const payload = await response.json();
+  const content = payload?.choices?.[0]?.message?.content;
+  const raw = typeof content === "string" ? content.trim() : "";
+  if (!raw) throw new Error("R\xE9ponse vide du mod\xE8le.");
+  return raw;
+}
+
+// server/ai.ts
+function getAiProviders() {
+  const providers = { gemini: getGeminiClient(), mistral: getMistralClient() };
+  return providers.gemini || providers.mistral ? providers : null;
+}
+function toJsonSchema(schema, nullable = false) {
+  const baseType = String(schema.type).toLowerCase();
+  const type = nullable ? [baseType, "null"] : baseType;
+  if (baseType === "object") {
+    const required = new Set(schema.required || []);
+    const properties = {};
+    for (const [key, value] of Object.entries(schema.properties || {})) {
+      properties[key] = toJsonSchema(value, !required.has(key));
+    }
+    return { type, properties, required: Object.keys(properties), additionalProperties: false };
+  }
+  if (baseType === "array") {
+    return { type, items: toJsonSchema(schema.items) };
+  }
+  return { type };
+}
+async function generateJson(providers, input, responseSchema, systemInstruction) {
+  let lastError = new Error("Aucun fournisseur d\u2019IA configur\xE9.");
+  if (providers.gemini) {
+    try {
+      return await callGemini(providers.gemini, input, responseSchema, systemInstruction);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  const mistralCanRead = !("image" in input) || mistralSupportsImage(input.image.mimeType);
+  if (providers.mistral && mistralCanRead) {
+    try {
+      const content = "image" in input ? [{ type: "image_url", image_url: `data:${input.image.mimeType};base64,${input.image.data}` }] : input.text;
+      const raw = await callMistral(providers.mistral, content, toJsonSchema(responseSchema), systemInstruction);
+      return { data: JSON.parse(raw), model: `mistral/${getMistralModel()}` };
+    } catch (err) {
+      lastError = err;
+      console.warn("Mistral en \xE9chec:", err?.message);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("\xC9chec de l\u2019appel \xE0 l\u2019IA.");
 }
 var ACCEPTED_IMAGE_TYPES = /^image\/(jpeg|png|webp|heic|heif)$/;
 function parseImageDataUrl(image) {
@@ -3721,10 +3814,11 @@ function buildAnalysis(components, defaultConfidence, emptyMessage) {
 async function analyzeMealPhoto(ai, image) {
   const { mimeType, data } = requireImage(image);
   let parsed;
+  let model;
   try {
-    parsed = await generateJson(
+    ({ data: parsed, model } = await generateJson(
       ai,
-      [{ role: "user", parts: [{ inlineData: { mimeType, data } }] }],
+      { image: { mimeType, data } },
       {
         type: Type.OBJECT,
         properties: {
@@ -3737,9 +3831,9 @@ async function analyzeMealPhoto(ai, image) {
         required: ["meal_name", "components", "confidence_tier"]
       },
       PHOTO_SYSTEM_INSTRUCTION
-    );
+    ));
   } catch (err) {
-    console.error("Gemini vision analysis error:", err?.message);
+    console.error("Analyse photo IA en \xE9chec:", err?.message);
     throw new AnalysisFailure(503, "AI_ERROR", "L\u2019analyse de la photo a \xE9chou\xE9. R\xE9essayez ou saisissez votre repas manuellement.");
   }
   const { items, total, hasLow } = buildAnalysis(
@@ -3756,16 +3850,18 @@ async function analyzeMealPhoto(ai, image) {
     items,
     total_carbs: total,
     overall_confidence: overall,
-    confidence_score: overall === "high" ? 90 : overall === "medium" ? 68 : 42
+    confidence_score: overall === "high" ? 90 : overall === "medium" ? 68 : 42,
+    ai_model: model
   };
 }
 async function analyzeMealText(ai, text, isArabic) {
   const langInstruction = isArabic ? "La description est en dialecte tunisien (derja) ou en arabe : meal_name en arabe tunisien, name_ar en arabe, name_fr en traduction fran\xE7aise courte." : "La description est en fran\xE7ais : meal_name en fran\xE7ais, name_ar en arabe tunisien.";
   let parsed;
+  let model;
   try {
-    parsed = await generateJson(
+    ({ data: parsed, model } = await generateJson(
       ai,
-      [{ role: "user", parts: [{ text }] }],
+      { text },
       {
         type: Type.OBJECT,
         properties: { meal_name: { type: Type.STRING }, components: COMPONENTS_SCHEMA },
@@ -3773,9 +3869,9 @@ async function analyzeMealText(ai, text, isArabic) {
       },
       `${TEXT_SYSTEM_INSTRUCTION}
 ${langInstruction}`
-    );
+    ));
   } catch (err) {
-    console.error("Gemini text analysis error:", err?.message);
+    console.error("Analyse texte IA en \xE9chec:", err?.message);
     throw new AnalysisFailure(503, "AI_ERROR", "L\u2019analyse du texte a \xE9chou\xE9.");
   }
   const { items, total, hasLow } = buildAnalysis(
@@ -3789,16 +3885,18 @@ ${langInstruction}`
     total_carbs: total,
     overall_confidence: hasLow ? "low" : "high",
     confidence_score: hasLow ? 55 : 94,
-    notes: hasLow ? "Certains aliments sont absents de la base ou estim\xE9s : v\xE9rifiez leurs glucides." : "V\xE9rifiez chaque portion avant de valider."
+    notes: hasLow ? "Certains aliments sont absents de la base ou estim\xE9s : v\xE9rifiez leurs glucides." : "V\xE9rifiez chaque portion avant de valider.",
+    ai_model: model
   };
 }
 async function analyzeNutritionLabel(ai, image) {
   const { mimeType, data } = requireImage(image);
   let parsed;
+  let model;
   try {
-    parsed = await generateJson(
+    ({ data: parsed, model } = await generateJson(
       ai,
-      [{ role: "user", parts: [{ inlineData: { mimeType, data } }] }],
+      { image: { mimeType, data } },
       {
         type: Type.OBJECT,
         properties: {
@@ -3812,12 +3910,12 @@ async function analyzeNutritionLabel(ai, image) {
         required: ["product_name", "portion_g"]
       },
       LABEL_SYSTEM_INSTRUCTION
-    );
+    ));
   } catch (err) {
-    console.error("Label OCR error with Gemini:", err?.message);
+    console.error("Lecture d\u2019\xE9tiquette IA en \xE9chec:", err?.message);
     throw new AnalysisFailure(503, "AI_ERROR", "La lecture de l\u2019\xE9tiquette a \xE9chou\xE9. R\xE9essayez ou saisissez les glucides manuellement.");
   }
-  const carbsPer100 = Number(parsed.carbs_per_100g);
+  const carbsPer100 = typeof parsed.carbs_per_100g === "number" ? parsed.carbs_per_100g : NaN;
   if (!Number.isFinite(carbsPer100) || carbsPer100 < 0 || carbsPer100 > 100) {
     throw new AnalysisFailure(
       422,
@@ -3850,7 +3948,8 @@ async function analyzeNutritionLabel(ai, image) {
     total_carbs: total,
     overall_confidence: "medium",
     confidence_score: 80,
-    notes: `Lecture OCR de l\u2019\xE9tiquette : ${carbs100g} g de glucides / 100 g, portion ${portion} g. V\xE9rifiez avec l\u2019emballage.`
+    notes: `Lecture OCR de l\u2019\xE9tiquette : ${carbs100g} g de glucides / 100 g, portion ${portion} g. V\xE9rifiez avec l\u2019emballage.`,
+    ai_model: model
   };
 }
 
@@ -4290,7 +4389,7 @@ app.post("/api/benchmark/live-vision", rateLimiter(30, 60 * 1e3, "Trop de tests 
   if (!imageBase64) {
     return res.status(400).json({ error: "Une photo du repas est n\xE9cessaire pour un test de vision.", code: "IMAGE_REQUIRED" });
   }
-  const ai = getGeminiClient();
+  const ai = getAiProviders();
   if (!ai) {
     return res.status(503).json({ error: "Service d\u2019IA non configur\xE9 : test impossible.", code: "AI_UNAVAILABLE" });
   }
@@ -4310,7 +4409,7 @@ app.post("/api/benchmark/live-vision", rateLimiter(30, 60 * 1e3, "Trop de tests 
       passed_clinical_threshold: relativeErrorPct <= 15,
       insulin_impact_units: Number((deltaCarbs / 10).toFixed(1)),
       latency_ms: Date.now() - startTime,
-      model: getGeminiModel(),
+      model: analysis.ai_model,
       detected_meal_name: analysis.meal_name,
       detected_components: analysis.items.map((item) => ({
         name: item.name_fr,
@@ -4336,7 +4435,7 @@ function sendAnalysisError(res, status, code, error) {
 app.post("/api/analyze-meal", rateLimiter(30, 60 * 1e3, "Trop de requ\xEAtes d\u2019analyse. Veuillez patienter une minute."), async (req, res) => {
   try {
     const { mode, image, text, audioTranscript, barcode } = req.body || {};
-    const ai = getGeminiClient();
+    const ai = getAiProviders();
     if (mode === "photo" && image) {
       if (!ai) {
         return sendAnalysisError(
