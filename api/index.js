@@ -3606,7 +3606,7 @@ function estimateCarbsFallback(name) {
   if (/sans sucre|light|z[ée]ro/.test(q)) return 5;
   if (/^(sucre|sugar|سكر)/.test(q)) return 100;
   if (/^(miel|عسل)/.test(q)) return 82;
-  if (/(^|[\s'’])(huile|beurre|eau|caf[ée]|th[ée]|thon|poisson|oeuf|œuf|fromage)(?=$|[\s,.'’])/.test(q)) return 1;
+  if (/(^|[\s'’])(huile|beurre|eau|caf[ée]|th[ée]|thon|poisson|oeufs?|œufs?|omelettes?|fromage)(?=$|[\s,.'’])/.test(q)) return 1;
   if (q.includes("pain") || q.includes("baguette") || q.includes("tabouna") || q.includes("mlawi")) return 48;
   if (q.includes("riz") || q.includes("rouz") || q.includes("semoule") || q.includes("couscous")) return 28;
   if (q.includes("p\xE2te") || q.includes("pate") || q.includes("makrouna") || q.includes("nwasser")) return 24;
@@ -4362,7 +4362,6 @@ app.post("/api/analyze-meal", rateLimiter(30, 60 * 1e3, "Trop de requ\xEAtes d\u
         try {
           return res.json(await analyzeMealText(ai, inputText, isArabicInput));
         } catch (err) {
-          if (err instanceof AnalysisFailure && err.code === "NO_FOOD_RECOGNIZED") throw err;
           console.error("Analyse texte IA en \xE9chec, analyse locale :", err.message);
         }
       }

@@ -60,6 +60,12 @@ describe('Conversion des composants IA', () => {
     expect(item.confidence).toBe('low');
   });
 
+  it('estime une omelette absente de la base à ~0 g de glucides (pas 15 g / 100 g)', () => {
+    const item = componentToItem({ name_fr: 'Omelette', estimated_weight_g: 120, confidence: 'high' }, 0, 'high');
+    expect(item.carbs_per_100g).toBe(1);
+    expect(item.confidence).toBe('low');
+  });
+
   it('conserve la confiance d’un aliment reconnu exactement', () => {
     const item = componentToItem({ name_fr: 'Couscous au poulet', estimated_weight_g: 300, confidence: 'high' }, 0, 'medium');
     expect(item.food_id).toBe('plat-new-couscous-poulet');
