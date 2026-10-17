@@ -1,20 +1,21 @@
 import { GoogleGenAI } from '@google/genai';
 import { getGeminiClient, callGemini } from './gemini';
-import { MistralClient, getMistralClient, getMistralModel, callMistral, mistralSupportsImage } from './mistral';
+import { RelayClient, getRelayClient, callRelay, relaySupportsImage } from './relay';
 
 /**
- * Fournisseurs d'IA configurés : Gemini en premier, Mistral en relais. Les analyses passent par
+ * Fournisseurs d'IA configurés : Gemini en premier, puis un relais compatible OpenAI (NVIDIA NIM par
+ * défaut). Les analyses passent par
  * generateJson(), qui essaie chaque fournisseur dans cet ordre.
  */
 export interface AiProviders {
   gemini: GoogleGenAI | null;
-  mistral: MistralClient | null;
+  relay: RelayClient | null;
 }
 
 /** Fournisseurs configurés (clés présentes), ou null si aucun : l'analyse IA est alors indisponible. */
 export function getAiProviders(): AiProviders | null {
-  const providers: AiProviders = { gemini: getGeminiClient(), mistral: getMistralClient() };
-  return providers.gemini || providers.mistral ? providers : null;
+  const providers: AiProviders = { gemini: getGeminiClient(), relay: getRelayClient() };
+  return providers.gemini || providers.relay ? providers : null;
 }
 
 /** Donnée à analyser : la description de l'utilisateur ou une image (jamais mêlée aux consignes). */
@@ -22,13 +23,13 @@ export type AiInput = { text: string } | { image: { mimeType: string; data: stri
 
 export interface AiResult<T> {
   data: T;
-  /** Fournisseur et modèle qui ont produit la réponse (ex. « mistral/mistral-small-latest ») */
+  /** Fournisseur et modèle qui ont produit la réponse (ex. « relay/meta/llama-3.2-90b-vision-instruct ») */
   model: string;
 }
 
 /**
  * Convertit un schéma de réponse au format Gemini (types en majuscules) en JSON Schema standard pour
- * Mistral. Le mode strict impose que chaque propriété soit listée dans « required » : une propriété
+ * le relais. Le mode strict impose que chaque propriété soit listée dans « required » : une propriété
  * facultative devient donc nullable, pour que le modèle puisse répondre null au lieu d'inventer une valeur.
  */
 export function toJsonSchema(schema: any, nullable = false): Record<string, unknown> {
@@ -49,7 +50,7 @@ export function toJsonSchema(schema: any, nullable = false): Record<string, unkn
 }
 
 /**
- * Analyse en JSON structuré : Gemini (modèle principal puis de repli), puis Mistral si Gemini échoue
+ * Analyse en JSON structuré : Gemini (modèle principal puis de repli), puis le relais si Gemini échoue
  * ou n'est pas configuré. Lève la dernière erreur si aucun fournisseur ne répond.
  */
 export async function generateJson<T>(
@@ -68,19 +69,15 @@ export async function generateJson<T>(
     }
   }
 
-  // Image dans un format que Mistral ne lit pas (HEIC) : pas de relais possible
-  const mistralCanRead = !('image' in input) || mistralSupportsImage(input.image.mimeType);
-  if (providers.mistral && mistralCanRead) {
+  // Image dans un format que le relais ne lit pas (HEIC) : pas de relais possible
+  const relayCanRead = !('image' in input) || relaySupportsImage(input.image.mimeType);
+  if (providers.relay && relayCanRead) {
     try {
-      const content =
-        'image' in input
-          ? [{ type: 'image_url' as const, image_url: `data:${input.image.mimeType};base64,${input.image.data}` }]
-          : input.text;
-      const raw = await callMistral(providers.mistral, content, toJsonSchema(responseSchema), systemInstruction);
-      return { data: JSON.parse(raw) as T, model: `mistral/${getMistralModel()}` };
+      const data = await callRelay(providers.relay, input, toJsonSchema(responseSchema), systemInstruction);
+      return { data: data as T, model: `relay/${providers.relay.model}` };
     } catch (err) {
       lastError = err;
-      console.warn('Mistral en échec:', (err as Error)?.message);
+      console.warn('Relais IA en échec:', (err as Error)?.message);
     }
   }
 
