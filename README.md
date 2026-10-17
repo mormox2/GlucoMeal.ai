@@ -202,7 +202,7 @@ GlucoMeal intègre un banc d'évaluation interne pour mesurer l'écart entre les
 | **Frontend UI** | React 19, TypeScript 5.8, Tailwind CSS v4, Motion, Lucide Icons, Recharts |
 | **PWA & Offline** | Service Worker (`sw.js`), Manifest Web App, IndexedDB / LocalStorage, Persistent Cache |
 | **Backend & API** | Node.js, Express, Vercel Serverless Function (`api/index.js`), esbuild |
-| **Moteur IA** | Google Gen AI SDK (`@google/genai`), modèle configurable (`GEMINI_MODEL`, défaut `gemini-2.5-flash`) avec repli facultatif (`GEMINI_FALLBACK_MODEL`) et délai maximal, puis Mistral AI en relais (`MISTRAL_API_KEY`, défaut `mistral-small-latest`) |
+| **Moteur IA** | Google Gen AI SDK (`@google/genai`), modèle configurable (`GEMINI_MODEL`, défaut `gemini-2.5-flash`) avec repli facultatif (`GEMINI_FALLBACK_MODEL`) et délai maximal, puis un relais compatible OpenAI (`AI_RELAY_API_KEY`, NVIDIA NIM par défaut) |
 | **Base de Données & Auth** | Supabase : Postgres avec Row Level Security, Auth (anonyme & e-mail), Realtime |
 | **Sécurité & Règles** | Limiteur de requêtes par IP, CORS restreint, en-têtes HTTP (CSP, HSTS, Permissions-Policy) dans `vercel.json`, politiques RLS (`supabase/migrations`) testées avec pgTAP |
 | **Scanner & Code-barres** | ZXing Browser (`@zxing/browser`, `@zxing/library`), Open Food Facts API |
@@ -218,11 +218,11 @@ GlucoMeal.ai/
 ├── api/                        # Fonction serverless Vercel
 │   └── index.js                # Généré par « npm run build:api » à partir de server.ts (ne pas modifier)
 ├── server/                     # Modules du backend
-│   ├── ai.ts                   # Chaîne de fournisseurs IA (Gemini puis Mistral), schémas, validation des images
+│   ├── ai.ts                   # Chaîne de fournisseurs IA (Gemini puis relais), schémas, validation des images
 │   ├── analysis.ts             # Analyse photo, texte/voix et étiquette (IA + calcul des glucides)
 │   ├── barcode.ts              # Recherche Open Food Facts
 │   ├── gemini.ts               # Client Gemini, modèle/repli/délai
-│   ├── mistral.ts              # Client Mistral (relais), modèle/délai
+│   ├── relay.ts                # Relais compatible OpenAI (NVIDIA NIM par défaut), modèle/délai
 │   ├── localParser.ts          # Analyse locale du texte quand l'IA est indisponible
 │   └── mealItems.ts            # Rapprochement avec la base, bornes de portion, confiance
 ├── supabase/                   # Projet Supabase
@@ -354,13 +354,15 @@ Cette commande compile le frontend Vite dans `/dist` puis régénère `api/index
 
 | Variable | Requis | Description |
 |---|---|---|
-| `GEMINI_API_KEY` | **Oui**, ou `MISTRAL_API_KEY` | Clé API Google Gemini, fournisseur principal (analyse photo, texte et étiquettes). |
+| `GEMINI_API_KEY` | **Oui**, ou `AI_RELAY_API_KEY` | Clé API Google Gemini, fournisseur principal (analyse photo, texte et étiquettes). |
 | `GEMINI_MODEL` | Non | Modèle Gemini principal (défaut `gemini-2.5-flash`). |
 | `GEMINI_FALLBACK_MODEL` | Non | Modèle de repli essayé si le principal échoue (aucun par défaut). |
 | `GEMINI_TIMEOUT_MS` | Non | Délai maximal d'un appel Gemini en ms (défaut `25000`). |
-| `MISTRAL_API_KEY` | Recommandé | Clé Mistral AI : relais quand Gemini est indisponible (quota gratuit épuisé, panne). Peut remplacer Gemini. |
-| `MISTRAL_MODEL` | Non | Modèle Mistral multimodal (défaut `mistral-small-latest`). |
-| `MISTRAL_TIMEOUT_MS` | Non | Délai maximal d'un appel Mistral en ms (défaut `25000`). |
+| `AI_RELAY_API_KEY` | Recommandé | Clé du relais IA compatible OpenAI, utilisé quand Gemini est indisponible (quota gratuit épuisé, panne). Par défaut NVIDIA NIM (clé `nvapi-…` sur build.nvidia.com, gratuite). Peut remplacer Gemini. |
+| `AI_RELAY_BASE_URL` | Non | URL de l'API (défaut `https://integrate.api.nvidia.com/v1` ; OpenRouter `https://openrouter.ai/api/v1`, Groq `https://api.groq.com/openai/v1`). |
+| `AI_RELAY_MODEL` | Non | Modèle capable de lire les images (défaut `meta/llama-3.2-90b-vision-instruct`). |
+| `AI_RELAY_JSON_MODE` | Non | `none` (défaut : schéma décrit dans les consignes), `json_object` ou `json_schema` si le service les accepte. |
+| `AI_RELAY_TIMEOUT_MS` | Non | Délai maximal d'un appel au relais en ms (défaut `25000`). |
 | `ALLOWED_ORIGINS` | Non | Origines autorisées par CORS, séparées par des virgules (défaut `https://glucomeal-ai.vercel.app` ; le même hôte est toujours autorisé). |
 | `TRUST_PROXY` | Non | Nombre de proxys de confiance pour l'IP client du limiteur (défaut `1` sur Vercel, désactivé sinon). |
 | `APP_URL` | Non | URL canonique de l'application (ex: `https://glucomeal.ai`). |
@@ -399,7 +401,7 @@ Utilisez un **jeton d'accès en lecture seule** (Nightscout > Admin Tools > rôl
 
 En cas d'échec (IA indisponible, aliment ou code-barres inconnu, glucides illisibles), `/api/analyze-meal` renvoie une erreur explicite (`{ error, code }`, HTTP 4xx/5xx) et **jamais** une estimation de glucides par défaut. Principaux codes : `TEXT_MISSING`, `TEXT_TOO_LONG` (plus de 500 caractères), `INVALID_IMAGE` (JPEG, PNG, WebP ou HEIC uniquement), `NO_FOOD_RECOGNIZED`, `CARBS_UNREADABLE`, `AI_ERROR`, `SERVER_ERROR` (sans détail interne).
 
-- **Fournisseurs** : Gemini (modèle principal puis de repli), puis Mistral AI si Gemini échoue ; chaque analyse indique le modèle utilisé (`ai_model`). Une photo HEIC n'est pas relayée (format non lu par Mistral). Sur le plan gratuit de Mistral, vérifiez dans la console les réglages d'utilisation des données pour l'entraînement.
+- **Fournisseurs** : Gemini (modèle principal puis de repli), puis le relais compatible OpenAI si Gemini échoue (NVIDIA NIM par défaut ; OpenRouter, Groq… par simple configuration). Chaque analyse indique le modèle utilisé (`ai_model`). Une photo HEIC n'est pas relayée. Changer de service de relais impose de mettre à jour la politique de confidentialité et le consentement (`CONSENT_VERSION`).
 - **Texte et voix** : la description est envoyée à l'IA comme donnée, séparée des consignes (protection contre l'injection de consignes). Si l'IA est indisponible, un analyseur local reconnaît les plats de la base ; il ne renvoie rien plutôt qu'une valeur inventée.
 - **CORS** : seules les origines autorisées (`ALLOWED_ORIGINS` et le même hôte) peuvent appeler l'API ; une requête préliminaire d'une autre origine reçoit 403.
 - **En-têtes** : les réponses de l'API sont `no-store` et interdites en iframe ; le site applique la CSP et les en-têtes définis dans `vercel.json`.
@@ -442,7 +444,7 @@ La base Supabase est verrouillée par des politiques Row Level Security définie
 
 ## 🔏 Confidentialité & Consentement
 
-- **Consentement explicite** (RGPD art. 9, loi tunisienne n° 2004-63) demandé avant toute utilisation : le traitement des données de santé et l'envoi des repas à Google Gemini (ou à Mistral AI en relais) sont obligatoires pour utiliser l'application ; la **sauvegarde cloud** et la **mesure d'audience** (Vercel Analytics) sont facultatives et désactivées par défaut.
+- **Consentement explicite** (RGPD art. 9, loi tunisienne n° 2004-63) demandé avant toute utilisation : le traitement des données de santé et l'envoi des repas à Google Gemini (ou à NVIDIA NIM en relais) sont obligatoires pour utiliser l'application ; la **sauvegarde cloud** et la **mesure d'audience** (Vercel Analytics) sont facultatives et désactivées par défaut.
 - Le consentement est versionné (`src/utils/consent.ts`) : il est redemandé à chaque changement substantiel de la politique.
 - **Profil > Confidentialité** : modifier ses choix, lire la politique, et **supprimer toutes ses données** (appareil, file d'attente hors-ligne, repas, profil, codes de partage et compte Supabase).
 - Les identifiants de capteurs (Nightscout, comptes CGM) restent sur l'appareil.

@@ -19,7 +19,7 @@ let baseUrl = '';
 
 beforeAll(async () => {
   process.env.VERCEL = '1'; // empêche le démarrage automatique du serveur Vite
-  process.env.MISTRAL_API_KEY = ''; // aucun relais réel : seul le Gemini simulé répond
+  process.env.AI_RELAY_API_KEY = ''; // aucun relais réel : seul le Gemini simulé répond
   const { app } = await import('../../server');
   server = app.listen(0);
   await new Promise<void>((resolve) => server.once('listening', () => resolve()));

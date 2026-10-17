@@ -31,7 +31,7 @@ const SECTIONS_FR: Section[] = [
     title: '3. Où vont vos données',
     body: [
       'Sur votre appareil (stockage du navigateur) : par défaut, toutes vos données y restent.',
-      'Analyse des repas : la photo ou la description est envoyée au service Google Gemini pour identifier les aliments et les portions. Si Gemini est indisponible, elle est envoyée à la place au service Mistral AI (société française, serveurs dans l’Union européenne). Elle n’est pas conservée par GlucoMeal après l’analyse.',
+      'Analyse des repas : la photo ou la description est envoyée au service Google Gemini pour identifier les aliments et les portions. Si Gemini est indisponible, elle est envoyée à la place au service NVIDIA NIM (NVIDIA Corporation, serveurs aux États-Unis). Elle n’est pas conservée par GlucoMeal après l’analyse.',
       'Sauvegarde cloud (facultative) : si vous l’activez ou créez un compte, vos données sont enregistrées dans une base Supabase hébergée dans l’Union européenne, accessibles uniquement par votre compte (et par un soignant que vous autorisez). Un code de partage expire au bout de 7 jours.',
       'Mesure d’audience (facultative) : Vercel Analytics, statistiques de visites anonymes, sans données de santé.',
     ],
@@ -69,7 +69,7 @@ const SECTIONS_AR: Section[] = [
   {
     title: '3. أين تذهب بياناتك',
     body: [
-      'على جهازك افتراضياً. تُرسل صورة الوجبة أو وصفها إلى خدمة Google Gemini للتحليل فقط، أو إلى خدمة Mistral AI (خوادم في الاتحاد الأوروبي) إذا تعذّر Gemini.',
+      'على جهازك افتراضياً. تُرسل صورة الوجبة أو وصفها إلى خدمة Google Gemini للتحليل فقط، أو إلى خدمة NVIDIA NIM (خوادم في الولايات المتحدة) إذا تعذّر Gemini.',
       'الحفظ السحابي (اختياري) على Supabase بخوادم في الاتحاد الأوروبي، متاح لحسابك فقط. قياس الزيارات (اختياري) عبر Vercel Analytics دون بيانات صحية.',
     ],
   },

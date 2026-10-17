@@ -3590,27 +3590,58 @@ async function callGemini(ai, input, responseSchema, systemInstruction) {
   throw lastError instanceof Error ? lastError : new Error("\xC9chec de l\u2019appel Gemini.");
 }
 
-// server/mistral.ts
-var MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions";
-function getMistralModel() {
-  return process.env.MISTRAL_MODEL || "mistral-small-latest";
+// server/relay.ts
+var DEFAULT_BASE_URL = "https://integrate.api.nvidia.com/v1";
+var DEFAULT_MODEL = "meta/llama-3.2-90b-vision-instruct";
+function getJsonMode() {
+  const mode = process.env.AI_RELAY_JSON_MODE;
+  return mode === "json_object" || mode === "json_schema" ? mode : "none";
 }
-function getMistralTimeoutMs() {
-  return Number(process.env.MISTRAL_TIMEOUT_MS) || 25e3;
+function getRelayTimeoutMs() {
+  return Number(process.env.AI_RELAY_TIMEOUT_MS) || 25e3;
 }
-function getMistralClient() {
-  return process.env.MISTRAL_API_KEY ? { apiKey: process.env.MISTRAL_API_KEY } : null;
+function getRelayClient() {
+  const apiKey = process.env.AI_RELAY_API_KEY;
+  if (!apiKey) return null;
+  return {
+    apiKey,
+    baseUrl: (process.env.AI_RELAY_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, ""),
+    model: process.env.AI_RELAY_MODEL || DEFAULT_MODEL
+  };
 }
-var MISTRAL_IMAGE_TYPES = /^image\/(jpeg|png|webp|gif)$/;
-function mistralSupportsImage(mimeType) {
-  return MISTRAL_IMAGE_TYPES.test(mimeType);
+var RELAY_IMAGE_TYPES = /^image\/(jpeg|png|webp)$/;
+function relaySupportsImage(mimeType) {
+  return RELAY_IMAGE_TYPES.test(mimeType);
 }
-async function callMistral(client, userContent, jsonSchema, systemInstruction) {
-  const messages = [
-    ...systemInstruction ? [{ role: "system", content: systemInstruction }] : [],
-    { role: "user", content: userContent }
+function extractJson(raw) {
+  const text = raw.trim();
+  try {
+    return JSON.parse(text);
+  } catch {
+    const start = text.indexOf("{");
+    const end = text.lastIndexOf("}");
+    if (start === -1 || end <= start) throw new Error("R\xE9ponse du mod\xE8le sans objet JSON.");
+    return JSON.parse(text.slice(start, end + 1));
+  }
+}
+async function callRelay(client, input, jsonSchema, systemInstruction = "") {
+  const instructions = `${systemInstruction}
+R\xE9ponds uniquement avec un objet JSON valide, sans texte autour, conforme \xE0 ce JSON Schema :
+${JSON.stringify(jsonSchema)}`;
+  const messages = "image" in input ? [
+    {
+      role: "user",
+      content: [
+        { type: "text", text: instructions },
+        { type: "image_url", image_url: { url: `data:${input.image.mimeType};base64,${input.image.data}` } }
+      ]
+    }
+  ] : [
+    { role: "system", content: instructions },
+    { role: "user", content: input.text }
   ];
-  const response = await fetch(MISTRAL_API_URL, {
+  const jsonMode = getJsonMode();
+  const response = await fetch(`${client.baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -3618,30 +3649,28 @@ async function callMistral(client, userContent, jsonSchema, systemInstruction) {
       Authorization: `Bearer ${client.apiKey}`
     },
     body: JSON.stringify({
-      model: getMistralModel(),
+      model: client.model,
       messages,
       temperature: 0.2,
-      response_format: {
-        type: "json_schema",
-        json_schema: { name: "glucomeal_analysis", schema: jsonSchema, strict: true }
-      }
+      max_tokens: 2048,
+      ...jsonMode === "json_object" ? { response_format: { type: "json_object" } } : {},
+      ...jsonMode === "json_schema" ? { response_format: { type: "json_schema", json_schema: { name: "glucomeal_analysis", schema: jsonSchema, strict: true } } } : {}
     }),
-    signal: AbortSignal.timeout(getMistralTimeoutMs())
+    signal: AbortSignal.timeout(getRelayTimeoutMs())
   });
   if (!response.ok) {
-    throw new Error(`Mistral HTTP ${response.status}`);
+    throw new Error(`Relais IA HTTP ${response.status}`);
   }
   const payload = await response.json();
   const content = payload?.choices?.[0]?.message?.content;
-  const raw = typeof content === "string" ? content.trim() : "";
-  if (!raw) throw new Error("R\xE9ponse vide du mod\xE8le.");
-  return raw;
+  if (typeof content !== "string" || !content.trim()) throw new Error("R\xE9ponse vide du mod\xE8le.");
+  return extractJson(content);
 }
 
 // server/ai.ts
 function getAiProviders() {
-  const providers = { gemini: getGeminiClient(), mistral: getMistralClient() };
-  return providers.gemini || providers.mistral ? providers : null;
+  const providers = { gemini: getGeminiClient(), relay: getRelayClient() };
+  return providers.gemini || providers.relay ? providers : null;
 }
 function toJsonSchema(schema, nullable = false) {
   const baseType = String(schema.type).toLowerCase();
@@ -3668,15 +3697,14 @@ async function generateJson(providers, input, responseSchema, systemInstruction)
       lastError = err;
     }
   }
-  const mistralCanRead = !("image" in input) || mistralSupportsImage(input.image.mimeType);
-  if (providers.mistral && mistralCanRead) {
+  const relayCanRead = !("image" in input) || relaySupportsImage(input.image.mimeType);
+  if (providers.relay && relayCanRead) {
     try {
-      const content = "image" in input ? [{ type: "image_url", image_url: `data:${input.image.mimeType};base64,${input.image.data}` }] : input.text;
-      const raw = await callMistral(providers.mistral, content, toJsonSchema(responseSchema), systemInstruction);
-      return { data: JSON.parse(raw), model: `mistral/${getMistralModel()}` };
+      const data = await callRelay(providers.relay, input, toJsonSchema(responseSchema), systemInstruction);
+      return { data, model: `relay/${providers.relay.model}` };
     } catch (err) {
       lastError = err;
-      console.warn("Mistral en \xE9chec:", err?.message);
+      console.warn("Relais IA en \xE9chec:", err?.message);
     }
   }
   throw lastError instanceof Error ? lastError : new Error("\xC9chec de l\u2019appel \xE0 l\u2019IA.");
