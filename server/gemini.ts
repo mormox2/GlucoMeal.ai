@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import type { AiInput, AiResult } from './ai';
 
 // Modèles configurables (les modèles Gemini sont régulièrement retirés : ne pas les figer dans le code)
 export function getGeminiModel(): string {
@@ -27,19 +28,20 @@ export function getGeminiClient(): GoogleGenAI | null {
  * configuré (GEMINI_FALLBACK_MODEL). Les consignes passent par systemInstruction : les données de
  * l'utilisateur (texte, image) restent séparées des instructions.
  */
-export async function generateJson<T>(
+export async function callGemini<T>(
   ai: GoogleGenAI,
-  contents: any,
+  input: AiInput,
   responseSchema: any,
   systemInstruction?: string
-): Promise<T> {
+): Promise<AiResult<T>> {
+  const part = 'image' in input ? { inlineData: input.image } : { text: input.text };
   const models = [getGeminiModel(), getGeminiFallbackModel()].filter((m): m is string => Boolean(m));
   let lastError: unknown;
   for (const model of models) {
     try {
       const response = await ai.models.generateContent({
         model,
-        contents,
+        contents: [{ role: 'user', parts: [part] }],
         config: {
           responseMimeType: 'application/json',
           responseSchema,
@@ -49,24 +51,11 @@ export async function generateJson<T>(
       });
       const raw = response.text?.trim();
       if (!raw) throw new Error('Réponse vide du modèle.');
-      return JSON.parse(raw) as T;
+      return { data: JSON.parse(raw) as T, model: `gemini/${model}` };
     } catch (err) {
       lastError = err;
       console.warn(`Gemini (${model}) en échec:`, (err as Error)?.message);
     }
   }
   throw lastError instanceof Error ? lastError : new Error('Échec de l’appel Gemini.');
-}
-
-const ACCEPTED_IMAGE_TYPES = /^image\/(jpeg|png|webp|heic|heif)$/;
-
-/**
- * Extrait le type et les données base64 d'une image envoyée en data URL. Renvoie null si le
- * format n'est pas une image acceptée.
- */
-export function parseImageDataUrl(image: unknown): { mimeType: string; data: string } | null {
-  if (typeof image !== 'string') return null;
-  const match = image.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/);
-  if (!match || !ACCEPTED_IMAGE_TYPES.test(match[1])) return null;
-  return { mimeType: match[1], data: match[2] };
 }

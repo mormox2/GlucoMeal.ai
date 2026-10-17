@@ -36,6 +36,8 @@ export interface MealAnalysis {
   total_carbs: number;
   overall_confidence: Confidence;
   confidence_score: number;
+  /** Fournisseur et modèle d'IA qui ont produit l'analyse (traçabilité), absent pour l'analyse locale */
+  ai_model?: string;
 }
 
 /**
