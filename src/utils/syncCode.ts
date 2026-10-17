@@ -1,6 +1,6 @@
 // Alphabet sans caractères ambigus (I, O, 0, 1) : 32 symboles = 5 bits par caractère
 const SYNC_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-// Doit rester identique à isValidSyncCode() dans firestore.rules
+// Doit rester identique à la contrainte CHECK de sync_codes.code (supabase/migrations)
 const SYNC_CODE_PATTERN = /^GLUCO(-[A-HJ-NP-Z2-9]{4}){4}$/;
 
 /**

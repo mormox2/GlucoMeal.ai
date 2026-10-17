@@ -8,7 +8,7 @@ import {
   validateTherapeuticProfile,
 } from './storage';
 import { loadPatientCustomPortions, savePatientCustomPortions } from './activeLearning';
-import { pushSyncCodeToFirestore, pullSyncCodeFromFirestore } from '../services/firebase';
+import { pushSyncCode, pullSyncCode } from '../services/supabase';
 import { normalizeSyncCode } from './syncCode';
 
 const STORAGE_KEYS = {
@@ -39,14 +39,14 @@ export function getLastSyncTime(): string | null {
 }
 
 /**
- * Pousse les données locales (profil sans secrets, repas, portions apprises) vers Cloud Firestore.
+ * Pousse les données locales (profil sans secrets, repas, portions apprises) vers le cloud (Supabase).
  * Il n'existe plus de repli vers un serveur tiers : les données de santé ne transitent que par
- * Firestore, protégé par des règles d'accès par compte.
+ * Supabase, protégé par des politiques d'accès par compte (RLS).
  */
 export async function pushDataToCloud(existingCode?: string): Promise<CloudSyncResult> {
   const syncCode = existingCode || getStoredSyncCode() || undefined;
   try {
-    const res = await pushSyncCodeToFirestore(syncCode, {
+    const res = await pushSyncCode(syncCode, {
       userProfile: loadUserProfile(),
       meals: loadSavedMeals(),
       learnedPortions: loadPatientCustomPortions(),
@@ -64,7 +64,7 @@ export async function pushDataToCloud(existingCode?: string): Promise<CloudSyncR
     return {
       success: false,
       syncCode: syncCode || '',
-      message: err?.message || 'Échec de connexion au cloud Firestore.',
+      message: err?.message || 'Échec de connexion au cloud.',
     };
   }
 }
@@ -80,12 +80,12 @@ export interface CloudPullResult {
 }
 
 /**
- * Récupère un dossier depuis un code de synchronisation Firestore.
+ * Récupère un dossier depuis un code de synchronisation.
  * Les repas et portions apprises sont restaurés ; le profil d'insuline reçu est seulement
  * renvoyé pour confirmation explicite (voir applyIncomingProfile).
  */
 export async function pullDataFromCloud(syncCode: string): Promise<CloudPullResult> {
-  const res = await pullSyncCodeFromFirestore(syncCode);
+  const res = await pullSyncCode(syncCode);
   if (!res.success || !res.record) {
     return { success: false, message: res.message };
   }

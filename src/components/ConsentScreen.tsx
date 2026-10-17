@@ -75,8 +75,8 @@ export const ConsentScreen: React.FC<ConsentScreenProps> = ({ onAccept, onDeclin
               {isAr ? 'الحفظ السحابي (اختياري)' : 'Sauvegarde cloud (facultatif)'}
             </strong>
             {isAr
-              ? 'حفظ بياناتي على Google Firebase للمزامنة بين الأجهزة.'
-              : 'Enregistrer mes données dans Google Firebase pour les retrouver sur mes autres appareils.'}
+              ? 'حفظ بياناتي على Supabase (خوادم في الاتحاد الأوروبي) للمزامنة بين الأجهزة.'
+              : 'Enregistrer mes données dans Supabase (serveurs dans l’Union européenne) pour les retrouver sur mes autres appareils.'}
           </span>
         </label>
 

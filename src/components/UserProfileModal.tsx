@@ -9,11 +9,9 @@ import {
   getMaxBolusUnits,
   isChildProfile,
 } from '../utils/storage';
-import { auth, logoutUser, deleteAllCloudData, clearLocalFirestoreCache } from '../services/firebase';
+import { getCurrentUser, onAuthChange, logoutUser, deleteAllCloudData, clearLocalCloudSession } from '../services/supabase';
 import { ConsentState, updateConsent } from '../utils/consent';
-import { getStoredSyncCode } from '../utils/cloudSync';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
-import { onAuthStateChanged } from 'firebase/auth';
 import { useLanguage } from '../i18n/LanguageContext';
 
 interface UserProfileModalProps {
@@ -60,26 +58,22 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     setIsDeleting(true);
     setDeleteError(null);
     try {
-      await deleteAllCloudData(getStoredSyncCode());
-    } catch (err: any) {
+      await deleteAllCloudData();
+    } catch {
       setIsDeleting(false);
       setDeleteError(
-        err?.code === 'auth/requires-recent-login'
-          ? language === 'ar'
-            ? 'لأسباب أمنية، سجّل الدخول من جديد ثم أعد المحاولة.'
-            : 'Par sécurité, reconnectez-vous puis relancez la suppression.'
-          : language === 'ar'
+        language === 'ar'
           ? 'تعذر حذف البيانات السحابية. تحقق من الاتصال وأعد المحاولة.'
           : 'Suppression des données cloud impossible. Vérifiez la connexion et réessayez.'
       );
       return;
     }
     deleteAllLocalData();
-    await clearLocalFirestoreCache();
+    await clearLocalCloudSession();
     window.location.reload();
   };
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(
-    () => auth.currentUser?.email || profile?.parentEmail || null
+    () => getCurrentUser()?.email || profile?.parentEmail || null
   );
 
   useEffect(() => {
@@ -87,12 +81,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     if (active) {
       setFormData(sanitizeUserProfile(active));
       setProfileIssues([]);
-      setCurrentUserEmail(auth.currentUser?.email || active?.parentEmail || null);
+      setCurrentUserEmail(getCurrentUser()?.email || active?.parentEmail || null);
     }
   }, [propProfile, currentProfile, isOpen]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthChange((user) => {
       const active = propProfile || currentProfile;
       setCurrentUserEmail(user?.email || active?.parentEmail || null);
     });
@@ -955,7 +949,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             </div>
           </div>
 
-          {/* Section 4: Statut du compte Firebase & Déconnexion */}
+          {/* Section 4: Statut du compte cloud & Déconnexion */}
           <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-sky-100 border border-sky-200 flex items-center justify-center shrink-0">
@@ -964,14 +958,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <div>
                 <span className="text-xs font-bold text-slate-800 block">
                   {currentUserEmail
-                    ? (language === 'ar' ? 'الحساب السحابي Firebase متصل' : 'Compte Cloud Firebase Connecté')
+                    ? (language === 'ar' ? 'الحساب السحابي متصل' : 'Compte cloud connecté')
                     : (language === 'ar' ? 'الوضع المحلي' : 'Mode local')}
                 </span>
                 <span className="text-[11px] text-slate-500 block truncate max-w-[220px] sm:max-w-xs">
                   {currentUserEmail
                     ? currentUserEmail
                     : consent?.cloudSync
-                      ? (language === 'ar' ? 'البيانات محفوظة على هذا الجهاز ومزامنة مع Firebase' : 'Données sur cet appareil, sauvegardées dans Firebase')
+                      ? (language === 'ar' ? 'البيانات محفوظة على هذا الجهاز ومزامنة مع السحابة' : 'Données sur cet appareil, sauvegardées dans le cloud')
                       : (language === 'ar' ? 'البيانات محفوظة على هذا الجهاز فقط' : 'Données sur cet appareil uniquement')}
                 </span>
               </div>
@@ -1000,7 +994,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               {language === 'ar' ? 'الخصوصية' : 'Confidentialité'}
             </span>
             <label className="flex items-center justify-between gap-3 text-[11px] text-slate-700">
-              <span>{language === 'ar' ? 'الحفظ السحابي (Google Firebase)' : 'Sauvegarde cloud (Google Firebase)'}</span>
+              <span>{language === 'ar' ? 'الحفظ السحابي (Supabase)' : 'Sauvegarde cloud (Supabase)'}</span>
               <input
                 type="checkbox"
                 checked={Boolean(consent?.cloudSync)}

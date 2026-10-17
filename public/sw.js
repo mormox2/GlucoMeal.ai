@@ -47,6 +47,12 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Les requêtes vers d'autres origines (API Supabase, polices…) passent directement par le réseau :
+  // les réponses authentifiées ne doivent jamais transiter par le cache de l'application
+  if (url.origin !== self.location.origin) {
+    return;
+  }
+
   // Network first with cache fallback for navigation, cache first for static assets
   if (request.mode === 'navigate') {
     event.respondWith(

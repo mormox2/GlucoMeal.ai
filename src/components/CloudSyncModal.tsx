@@ -22,11 +22,8 @@ import {
   pullDataFromCloud,
   applyIncomingProfile,
 } from '../utils/cloudSync';
-import {
-  ensureAuthenticatedUser,
-  syncProfileToFirestore,
-  syncBatchMealsToFirestore,
-} from '../services/firebase';
+import { ensureAuthenticatedUser } from '../services/supabase';
+import { queueMealsUpsert, queueProfileUpsert, flushSyncQueue } from '../utils/syncQueue';
 import { loadSavedMeals, loadUserProfile } from '../utils/storage';
 import { MealSlot, ProfileValidationIssue, UserProfileDT1 } from '../types';
 import { useLanguage } from '../i18n/LanguageContext';
@@ -90,16 +87,13 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
     setIsPushing(true);
     setStatusMessage(null);
     try {
-      // Synchronisation parallèle avec Firebase Firestore
+      // Sauvegarde du dossier complet dans le compte cloud, en plus du code de liaison
       await ensureAuthenticatedUser();
-      const profile = loadUserProfile();
-      const meals = loadSavedMeals();
-      await syncProfileToFirestore(profile);
-      if (meals.length > 0) {
-        await syncBatchMealsToFirestore(meals);
-      }
+      queueProfileUpsert(loadUserProfile());
+      queueMealsUpsert(loadSavedMeals());
+      await flushSyncQueue();
     } catch (err) {
-      console.warn('Sync Firestore non-bloquante:', err);
+      console.warn('Sauvegarde cloud non bloquante:', err);
     }
     const res = await pushDataToCloud(currentCode || undefined);
     setIsPushing(false);
@@ -108,8 +102,8 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
       setLastSync(res.lastUpdated || new Date().toISOString());
       setStatusMessage({
         text: isAr
-          ? 'تم حفظ البيانات بنجاح على سحابة فايربيس وتحديث رمز الربط!'
-          : 'Sauvegarde cloud Firebase Firestore & Code de liaison réussie !',
+          ? 'تم حفظ البيانات بنجاح في السحابة وتحديث رمز الربط!'
+          : 'Sauvegarde cloud & code de liaison réussis !',
         type: 'success',
       });
       if (onSyncComplete) onSyncComplete();
@@ -391,13 +385,13 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             </form>
           </div>
 
-          {/* Firebase Firestore Infrastructure Card */}
+          {/* Carte de l'infrastructure cloud (Supabase) */}
           <div className="p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/90 text-xs space-y-1.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 font-bold text-amber-950">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>
-                  {isAr ? 'سحابة Google Firebase Firestore نشطة' : 'Base Cloud Firebase Firestore Active'}
+                  {isAr ? 'سحابة Supabase نشطة' : 'Base cloud Supabase active'}
                 </span>
               </div>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-950 border border-amber-300">
@@ -410,8 +404,8 @@ export const CloudSyncModal: React.FC<CloudSyncModalProps> = ({
             </div>
             <p className="text-[11px] text-amber-900/80 leading-relaxed">
               {isAr
-                ? 'تستفيد وجباتك ومعاملات الإنسولين من التخزين المحلي الدائم (IndexedDB) والمزامنة السحابية مع جوجل فايربيس إذا وافقت عليها (البيانات متاحة لحسابك فقط).'
-                : "Vos repas et paramètres d'insuline bénéficient du cache hors-ligne persistant (IndexedDB) et, si vous l'avez acceptée, de la sauvegarde Google Firebase (accessible à votre seul compte)."}
+                ? 'تُحفظ وجباتك ومعاملات الإنسولين على هذا الجهاز أولاً، وتُرسل إلى السحابة (Supabase) عند توفر الاتصال إذا وافقت على ذلك (البيانات متاحة لحسابك فقط).'
+                : "Vos repas et paramètres d'insuline sont enregistrés d'abord sur cet appareil, puis envoyés dès que la connexion le permet vers la sauvegarde Supabase si vous l'avez acceptée (accessible à votre seul compte)."}
             </p>
           </div>
 
